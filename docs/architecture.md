@@ -286,7 +286,7 @@ OntoBricks separates configuration into several layers:
 | `src/shared/config/constants.py` | **Static constants and defaults** that rarely change and are shared across modules | App name/version, OWL namespaces, LLM defaults, wizard quick-templates |
 | `src/front/config/menu_config.json` | **Navbar + sidebar navigation** for the Jinja2 UI | Page labels, Bootstrap Icons (`icon`), menu structure; top-level icons must stay distinct (Registry `bi-boxes`, Domain `bi-box`, Ontology `bi-bezier2`, Mapping `bi-shuffle`, Knowledge Graph `bi-radar`) and match `breadcrumb.js` `_ROUTE_MAP` |
 | `src/back/objects/session/GlobalConfigService.py` | **Instance-level `GlobalConfigService`** — admin-editable settings stored in the registry (`global_config` JSONB, or `.global_config.json` on Volume-backed registries), shared across all user sessions | SQL Warehouse ID, default base URI, default class icon, UI branding (`ui_branding`) |
-| `src/back/objects/registry/permissions.py` | **`PermissionService`** — stores per-user permission levels in `.permissions.json` (app-wide) and per-domain overrides in `.domain_permissions.json` (per domain folder). Defines the role hierarchy: `admin > builder > editor > viewer > none`. | `CAN MANAGE` admin flag |
+| `src/back/objects/registry/PermissionService.py` | **`PermissionService`** — stores per-user permission levels in `.permissions.json` (app-wide) and per-domain overrides in `.domain_permissions.json` (per domain folder). Defines the role hierarchy: `admin > builder > editor > viewer > none`. | `CAN MANAGE` admin flag |
 
 **`src/shared/config/constants.py`** key contents:
 
@@ -501,10 +501,12 @@ src/
 │       │   ├── SessionManager.py       # Request-scoped session get/set/delete wrapper
 │       │   ├── DomainSession.py       # DomainSession (current OntoBricks domain payload)
 │       │   └── GlobalConfigService.py  # Instance-level GlobalConfigService
-│       └── registry/                   # Registry, permissions & scheduled builds
-│           ├── service.py              # RegistryService + RegistryCfg
-│           ├── permissions.py          # PermissionService (ADMIN / BUILDER / EDITOR / VIEWER / NONE + domain-level overrides)
-│           └── scheduler.py            # BuildScheduler (APScheduler-based)
+│               └── registry/                   # Registry, permissions & scheduled builds
+│           ├── RegistryService.py      # RegistryService + RegistryCfg at root
+│           ├── PermissionService.py    # roles and domain-level overrides
+│           ├── collab/                 # CommentService, ReviewService, EditLockService
+│           ├── schedule/               # BuildScheduler + task-type specs
+│           └── store/                  # RegistryStore ABC + Lakebase mixins
 │
 ├── api/                                # REST API layer (mounted into the main app)
 │   ├── external_app.py                 # External stateless API app factory (/api/v1/…)
@@ -697,7 +699,7 @@ Regression coverage: `tests/units/front/test_ontology_map_multi_select.py`
 
 ### Inherited outgoing relations
 
-Object properties are not copied onto subclasses. `OntologyClassModel.outgoing_relations_for_class`
+Object properties are not copied onto subclasses. `ClassModel.outgoing_relations_for_class`
 and the JS helper `outgoingRelationsForClass` walk `parent` at read time and
 return own + inherited outgoing relations (`inherited`, `inheritedFrom` = the
 declaring ancestor). Studio and Mapping graphs draw dashed subclass→range
@@ -760,7 +762,7 @@ Long-running operations use the **TaskManager** pattern (`src/back/core/task_man
 
 ### Scheduled Builds (BuildScheduler)
 
-The **BuildScheduler** (`src/back/objects/registry/scheduler.py`) provides per-domain scheduled triple store builds using APScheduler's `BackgroundScheduler`. Schedule definitions are persisted in `.global_config.json` on the UC Volume alongside other instance-level settings.
+The **BuildScheduler** (`src/back/objects/registry/schedule/BuildScheduler.py`) provides per-domain scheduled triple store builds using APScheduler's `BackgroundScheduler`. Schedule definitions are persisted in `.global_config.json` on the UC Volume alongside other instance-level settings.
 
 Each schedule entry contains:
 

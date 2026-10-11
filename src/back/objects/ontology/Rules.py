@@ -11,7 +11,7 @@ from typing import Any, Dict, List, Optional, Set
 from back.core.reasoning.rules.DecisionTableEngine import ASSIGN_CLASS
 from back.core.w3c.shacl.constants import QUALITY_CATEGORIES
 
-class OntologyRules:
+class Rules:
     """Validate SWRL, SPARQL, decision-table, aggregate, and SHACL shapes."""
 
     _SWRL_ATOM_RE = re.compile(r"(?:(\w+):)?([A-Za-z_]\w*)\s*\(([^)]*)\)")
@@ -47,7 +47,7 @@ class OntologyRules:
         """
 
         def _atoms(text: str):
-            for m in OntologyRules._SWRL_ATOM_RE.finditer(text or ""):
+            for m in Rules._SWRL_ATOM_RE.finditer(text or ""):
                 prefix = (m.group(1) or "").lower()
                 name = m.group(2)
                 args = [a.strip() for a in m.group(3).split(",") if a.strip()]
@@ -91,7 +91,7 @@ class OntologyRules:
     def _swrl_class_atoms(rule: Dict[str, Any]):
         """Yield ``(name, variable)`` for every unprefixed unary atom of *rule*."""
         for part in ("antecedent", "consequent"):
-            for m in OntologyRules._SWRL_ATOM_RE.finditer(rule.get(part, "") or ""):
+            for m in Rules._SWRL_ATOM_RE.finditer(rule.get(part, "") or ""):
                 if m.group(1):
                     continue
                 args = [a.strip() for a in m.group(3).split(",") if a.strip()]
@@ -101,14 +101,14 @@ class OntologyRules:
     @staticmethod
     def swrl_rule_classes(rule: Dict[str, Any]) -> Set[str]:
         """Lowercased local names of the classes a SWRL rule references."""
-        return {name.lower() for name, _ in OntologyRules._swrl_class_atoms(rule)}
+        return {name.lower() for name, _ in Rules._swrl_class_atoms(rule)}
 
     @staticmethod
     def class_lineage(classes: List[Dict[str, Any]], class_name: str) -> List[str]:
         """*class_name* followed by its ancestors, nearest first."""
-        from back.objects.ontology.OntologyClassModel import OntologyClassModel
+        from back.objects.ontology.ClassModel import ClassModel
 
-        return [class_name] + OntologyClassModel.ancestor_names(classes, class_name)
+        return [class_name] + ClassModel.ancestor_names(classes, class_name)
 
     @staticmethod
     def rules_for_class(
@@ -117,11 +117,11 @@ class OntologyRules:
         classes: List[Dict[str, Any]],
     ) -> List[Dict[str, Any]]:
         """SWRL rules whose class atoms cite *class_name* or one of its ancestors."""
-        lineage = {n.lower() for n in OntologyRules.class_lineage(classes, class_name)}
+        lineage = {n.lower() for n in Rules.class_lineage(classes, class_name)}
         return [
             r
             for r in swrl_rules or []
-            if isinstance(r, dict) and OntologyRules.swrl_rule_classes(r) & lineage
+            if isinstance(r, dict) and Rules.swrl_rule_classes(r) & lineage
         ]
 
     @staticmethod
@@ -131,7 +131,7 @@ class OntologyRules:
         """Variables typed by one of *class_names* in *rule*, in atom order."""
         wanted = {n.lower() for n in class_names}
         out: List[str] = []
-        for name, var in OntologyRules._swrl_class_atoms(rule):
+        for name, var in Rules._swrl_class_atoms(rule):
             if name.lower() in wanted and var.startswith("?") and var not in out:
                 out.append(var)
         return out
@@ -179,7 +179,7 @@ class OntologyRules:
             return False, ""
         if ":" in t and not t.lower().startswith("http"):
             prefix, local = t.split(":", 1)
-            if prefix.lower() in OntologyRules._SWRL_BUILTIN_PREFIXES:
+            if prefix.lower() in Rules._SWRL_BUILTIN_PREFIXES:
                 return False, ""
             return True, local
         return True, t
@@ -257,11 +257,11 @@ class OntologyRules:
             for _s, p, o in TRIPLE_PATTERN_RE.findall(part):
                 is_type = p == "a" or p.lower() == "rdf:type"
                 if is_type:
-                    ok, local = OntologyRules._ref_local_name(o)
+                    ok, local = Rules._ref_local_name(o)
                     if ok and local.lower() not in class_names:
                         errors.append(f"query references unknown entity '{local}'")
                 else:
-                    ok, local = OntologyRules._ref_local_name(p)
+                    ok, local = Rules._ref_local_name(p)
                     if ok and local.lower() not in property_names:
                         errors.append(
                             f"query references unknown relationship/property '{local}'"
@@ -277,15 +277,15 @@ class OntologyRules:
     ) -> List[str]:
         """Dispatch existence validation for any of the four rule-list types."""
         if key == "swrl_rules":
-            return OntologyRules.swrl_reference_errors(rule, class_names, property_names)
+            return Rules.swrl_reference_errors(rule, class_names, property_names)
         if key == "decision_tables":
-            return OntologyRules.decision_table_reference_errors(
+            return Rules.decision_table_reference_errors(
                 rule, class_names, property_names
             )
         if key == "sparql_rules":
-            return OntologyRules.sparql_reference_errors(rule, class_names, property_names)
+            return Rules.sparql_reference_errors(rule, class_names, property_names)
         if key == "aggregate_rules":
-            return OntologyRules.aggregate_reference_errors(
+            return Rules.aggregate_reference_errors(
                 rule, class_names, property_names
             )
         return []

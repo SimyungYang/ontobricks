@@ -817,7 +817,7 @@ class TestSchedulerResolveCredsLakebase:
     """
 
     def test_defaults_from_settings(self):
-        from back.objects.registry.scheduler import BuildScheduler
+        from back.objects.registry.schedule.BuildScheduler import BuildScheduler
 
         settings = _make_settings()
         host, token, cfg = BuildScheduler._resolve_creds(settings)
@@ -827,7 +827,7 @@ class TestSchedulerResolveCredsLakebase:
         assert cfg["lakebase_database"] == ""
 
     def test_lakebase_with_database_override(self):
-        from back.objects.registry.scheduler import BuildScheduler
+        from back.objects.registry.schedule.BuildScheduler import BuildScheduler
 
         settings = _make_settings(
             lakebase_schema="ontobricks_registry",
@@ -840,7 +840,7 @@ class TestSchedulerResolveCredsLakebase:
     def test_registry_volume_is_sentinel_default(self):
         """The registry UC Volume was removed in v0.9.0 — the scheduler
         always emits the sentinel volume name (documents live in Lakebase)."""
-        from back.objects.registry.scheduler import BuildScheduler
+        from back.objects.registry.schedule.BuildScheduler import BuildScheduler
 
         settings = _make_settings(
             registry_catalog="env_c",

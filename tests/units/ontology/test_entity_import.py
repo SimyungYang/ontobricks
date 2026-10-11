@@ -3,7 +3,7 @@
 import pytest
 
 from back.core.errors import ValidationError
-from back.objects.ontology.OntologyEntityImport import OntologyEntityImport
+from back.objects.ontology.EntityImport import EntityImport
 
 pytestmark = pytest.mark.unit
 
@@ -45,7 +45,7 @@ def target(domain_session):
 
 
 def _run(session, names, renames=None):
-    return OntologyEntityImport(session).import_entities(
+    return EntityImport(session).import_entities(
         _source(), names, renames or {}, source_domain="Sales", source_version="3"
     )
 
@@ -56,7 +56,7 @@ def _cls(session, name):
 
 class TestCatalog:
     def test_lists_entities_with_exists_flag_and_relationships_only(self, target):
-        cat = OntologyEntityImport.build_catalog(_source(), target.ontology)
+        cat = EntityImport.build_catalog(_source(), target.ontology)
         by_name = {e["name"]: e for e in cat["entities"]}
         assert set(by_name) == {"Person", "Customer", "Order", "Address"}
         assert by_name["Address"]["exists"] is True
@@ -87,9 +87,9 @@ class TestClassCopy:
             {"name": "status", "uri": f"{SRC}status", "type": "DatatypeProperty",
              "domain": "Address", "range": "string"}
         )
-        cat = OntologyEntityImport.build_catalog(source, {"classes": []})
+        cat = EntityImport.build_catalog(source, {"classes": []})
         assert next(e for e in cat["entities"] if e["name"] == "Order")["attributes"] == 1
-        OntologyEntityImport(target).import_entities(
+        EntityImport(target).import_entities(
             source, ["Order"], {}, source_domain="Sales", source_version="3"
         )
         attrs = _cls(target, "Order")["dataProperties"]

@@ -21,7 +21,7 @@ def _require_psycopg():
     return _rp()
 
 
-class LakebaseRegistryEditLocks:
+class EditLocks:
     """DRAFT single-editor lock (acquire, renew, release, list)."""
 
     def _ensure_domain_edit_locks_table(self) -> bool:

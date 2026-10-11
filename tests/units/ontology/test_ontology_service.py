@@ -8,10 +8,10 @@ from rdflib import RDFS, Graph, Literal, URIRef
 
 from back.core.errors import NotFoundError, ValidationError
 from back.objects.ontology import Ontology
-from back.objects.ontology.OntologyImport import OntologyImport
+from back.objects.ontology.Import import Import
 
 ontology_import_module = importlib.import_module(
-    "back.objects.ontology.OntologyImport"
+    "back.objects.ontology.Import"
 )
 
 
@@ -306,7 +306,7 @@ class TestApplyParsedOwl:
                 pass
 
         domain = StubDomain()
-        OntologyImport(domain).apply_parsed_owl_to_domain(
+        Import(domain).apply_parsed_owl_to_domain(
             {"label": "Test Ontology", "uri": "http://example.org/onto"},
             [],
             [],
@@ -327,7 +327,7 @@ class TestApplyParsedOwl:
                 pass
 
         domain = StubDomain()
-        OntologyImport(domain).apply_parsed_owl_to_domain(
+        Import(domain).apply_parsed_owl_to_domain(
             {
                 "label": "Test Ontology",
                 "label_lang": "en",

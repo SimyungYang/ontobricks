@@ -13,12 +13,12 @@ from rdflib.namespace import SKOS
 
 from back.core.errors import InfrastructureError, NotFoundError, ValidationError
 from back.core.w3c.owl import ConflictItem, ConflictReport
-from back.objects.ontology.OntologyImport import OntologyImport
-from back.objects.ontology.OntologyOwl import OntologyOwl
+from back.objects.ontology.Import import Import
+from back.objects.ontology.Owl import Owl
 
 pytestmark = pytest.mark.unit
 
-import_module = sys.modules[OntologyImport.__module__]
+import_module = sys.modules[Import.__module__]
 
 EX = "http://example.org/onto#"
 
@@ -102,7 +102,7 @@ def _prop(session, name):
 
 class TestIngestOwlFidelity:
     def test_ontology_header_label_and_language_win_over_domain_name(self, session):
-        OntologyImport(session).ingest_owl(OWL_TTL)
+        Import(session).ingest_owl(OWL_TTL)
         ont = session.ontology
         assert ont["name"] == "Sales Ontology"
         assert ont["label_lang"] == "fr"
@@ -110,14 +110,14 @@ class TestIngestOwlFidelity:
         assert ont["base_uri"] == EX
 
     def test_class_label_kept_separate_from_local_name(self, session):
-        OntologyImport(session).ingest_owl(OWL_TTL)
+        Import(session).ingest_owl(OWL_TTL)
         customer = _cls(session, "Customer")
         assert customer["label"] == "Client"
         assert customer["label_lang"] == "fr"
         assert customer["uri"] == f"{EX}Customer"
 
     def test_property_label_language_and_endpoint_iris_preserved(self, session):
-        OntologyImport(session).ingest_owl(OWL_TTL)
+        Import(session).ingest_owl(OWL_TTL)
         places = _prop(session, "places")
         assert places["label"] == "passe"
         assert places["label_lang"] == "fr"
@@ -125,13 +125,13 @@ class TestIngestOwlFidelity:
         assert places["range_uri"] == f"{EX}Order"
 
     def test_external_parent_iri_preserved(self, session):
-        OntologyImport(session).ingest_owl(OWL_TTL)
+        Import(session).ingest_owl(OWL_TTL)
         customer = _cls(session, "Customer")
         assert customer["parent"] == "Party"
         assert customer["parent_uri"] == "http://other.org/x#Party"
 
     def test_leftover_annotation_retained_in_rdf_extras(self, session):
-        OntologyImport(session).ingest_owl(OWL_TTL)
+        Import(session).ingest_owl(OWL_TTL)
         triples = session.ontology["rdf_extras"]["triples"]
         note = next(t for t in triples if t["p"] == str(SKOS.editorialNote))
         assert note["s"] == f"{EX}Customer"
@@ -139,9 +139,9 @@ class TestIngestOwlFidelity:
         assert note["lang"] == "en"
 
     def test_reexport_keeps_iris_language_tags_and_extras(self, session):
-        OntologyImport(session).ingest_owl(OWL_TTL)
+        Import(session).ingest_owl(OWL_TTL)
         ont = session.ontology
-        turtle = OntologyOwl.generate_owl(ont)
+        turtle = Owl.generate_owl(ont)
         g = Graph()
         g.parse(data=turtle, format="turtle")
         customer = URIRef(f"{EX}Customer")
@@ -150,25 +150,25 @@ class TestIngestOwlFidelity:
         assert (customer, SKOS.editorialNote, Literal("Review naming", lang="en")) in g
 
     def test_header_less_owl_falls_back_to_domain_name(self, session):
-        OntologyImport(session).ingest_owl(_without_ontology_header(OWL_TTL))
+        Import(session).ingest_owl(_without_ontology_header(OWL_TTL))
         assert session.ontology["name"] == "SalesDomain"
 
     def test_header_less_owl_uses_default_base_uri(self, session):
         from shared.config.constants import DEFAULT_BASE_URI
 
-        OntologyImport(session).ingest_owl(_without_ontology_header(OWL_TTL))
+        Import(session).ingest_owl(_without_ontology_header(OWL_TTL))
         assert session.ontology["base_uri"] == DEFAULT_BASE_URI
         assert {c["name"] for c in session.ontology["classes"]} == {"Customer", "Order"}
 
     def test_apply_parsed_owl_uses_domain_name_when_info_has_no_label(self, session):
-        name = OntologyImport(session).apply_parsed_owl_to_domain({}, [], [], [], [], [])
+        name = Import(session).apply_parsed_owl_to_domain({}, [], [], [], [], [])
         assert name == "SalesDomain"
         assert session.ontology["name"] == "SalesDomain"
         assert session.ontology["rdf_extras"] == {}
         assert session.ontology["groups"] == []
 
     def test_apply_parsed_owl_without_fallback_keeps_empty_name(self, session):
-        name = OntologyImport(session).apply_parsed_owl_to_domain(
+        name = Import(session).apply_parsed_owl_to_domain(
             {"uri": "http://u.org/o"}, [], [], [], [], [], name_fallback_to_domain=False
         )
         assert name == ""
@@ -177,14 +177,14 @@ class TestIngestOwlFidelity:
 
 class TestIngestOwlOutcomes:
     def test_import_outcome_reports_stats(self, session):
-        payload = OntologyImport(session).ingest_owl(OWL_TTL)
+        payload = Import(session).ingest_owl(OWL_TTL)
         assert payload["success"] is True
         assert payload["stats"]["classes"] == 2
         assert payload["stats"]["properties"] == 2
         assert payload["config"] is session.ontology
 
     def test_parse_outcome_exposes_resolved_label_and_namespace(self, session):
-        payload = OntologyImport(session).ingest_owl(OWL_TTL, outcome="parse")
+        payload = Import(session).ingest_owl(OWL_TTL, outcome="parse")
         info = payload["ontology"]["info"]
         assert info["label"] == "Sales Ontology"
         assert info["namespace"] == EX
@@ -192,14 +192,14 @@ class TestIngestOwlOutcomes:
         assert payload["stats"]["swrl_rules"] == 0
 
     def test_load_file_outcome_returns_session_ontology(self, session):
-        payload = OntologyImport(session).ingest_owl(OWL_TTL, outcome="load_file")
+        payload = Import(session).ingest_owl(OWL_TTL, outcome="load_file")
         assert payload["ontology"] is session.ontology
         assert payload["stats"]["axioms"] == 0
 
 
 class TestIngestOwlFallbacks:
     def test_rdfs_only_content_falls_back_to_rdfs_parser(self, session):
-        payload = OntologyImport(session).ingest_owl(RDFS_TTL)
+        payload = Import(session).ingest_owl(RDFS_TTL)
         names = {c["name"] for c in session.ontology["classes"]}
         assert names == {"Animal", "Dog"}
         assert _cls(session, "Dog")["parent"] == "Animal"
@@ -207,20 +207,20 @@ class TestIngestOwlFallbacks:
         assert session.ontology["constraints"] == []
 
     def test_rdfs_fallback_base_uri_is_vocabulary_namespace(self, session):
-        OntologyImport(session).ingest_owl(RDFS_TTL)
+        Import(session).ingest_owl(RDFS_TTL)
         assert session.ontology["base_uri"].startswith("http://example.org/v")
 
     def test_rdfs_parser_failure_is_swallowed(self, session, monkeypatch):
         def _boom(_content):
             raise RuntimeError("bad rdfs")
 
-        monkeypatch.setattr(OntologyOwl, "parse_rdfs", staticmethod(_boom))
-        payload = OntologyImport(session).ingest_owl(EMPTY_TTL)
+        monkeypatch.setattr(Owl, "parse_rdfs", staticmethod(_boom))
+        payload = Import(session).ingest_owl(EMPTY_TTL)
         assert payload["success"] is True
         assert payload["stats"]["classes"] == 0
 
     def test_shacl_content_routed_to_data_quality(self, session):
-        payload = OntologyImport(session).ingest_owl(SHACL_TTL)
+        payload = Import(session).ingest_owl(SHACL_TTL)
         assert payload["shacl"] is True
         assert payload["imported_count"] == 1
         assert payload["stats"] == {"classes": 0, "properties": 0, "shacl_shapes": 1}
@@ -235,16 +235,16 @@ class TestIngestOwlFallbacks:
 
 class TestTryImportAsShacl:
     def test_non_shacl_turtle_returns_none(self, session):
-        assert OntologyImport(session)._try_import_as_shacl(OWL_TTL) is None
+        assert Import(session)._try_import_as_shacl(OWL_TTL) is None
 
     def test_unparseable_content_returns_none(self, session):
-        assert OntologyImport(session)._try_import_as_shacl("not turtle {{{") is None
+        assert Import(session)._try_import_as_shacl("not turtle {{{") is None
 
     def test_node_shape_without_importable_shapes_returns_none(self, session, monkeypatch):
         from back.core.w3c import SHACLService
 
         monkeypatch.setattr(SHACLService, "import_shapes", lambda self, c: [])
-        assert OntologyImport(session)._try_import_as_shacl(SHACL_TTL) is None
+        assert Import(session)._try_import_as_shacl(SHACL_TTL) is None
 
     def test_same_id_shapes_replaced_and_new_ones_appended(self, session, monkeypatch):
         from back.core.w3c import SHACLService
@@ -258,7 +258,7 @@ class TestTryImportAsShacl:
             "import_shapes",
             lambda self, c: [{"id": "s1", "label": "new"}, {"id": "s2", "label": "added"}],
         )
-        payload = OntologyImport(session)._try_import_as_shacl(SHACL_TTL)
+        payload = Import(session)._try_import_as_shacl(SHACL_TTL)
         assert payload["imported_count"] == 2
         assert session.shacl_shapes == [
             {"id": "s1", "label": "new"},
@@ -267,13 +267,13 @@ class TestTryImportAsShacl:
         ]
 
     def test_reimporting_same_shacl_file_does_not_duplicate_shapes(self, session):
-        imp = OntologyImport(session)
+        imp = Import(session)
         imp._try_import_as_shacl(SHACL_TTL)
         imp._try_import_as_shacl(SHACL_TTL)
         assert len(session.shacl_shapes) == 1
 
     def test_rdfs_import_redirects_shacl_to_data_quality(self, session):
-        payload = OntologyImport(session).apply_parsed_rdfs_to_domain(SHACL_TTL)
+        payload = Import(session).apply_parsed_rdfs_to_domain(SHACL_TTL)
         assert payload["shacl"] is True
         assert len(session.shacl_shapes) == 1
 
@@ -282,7 +282,7 @@ class TestApplyParsedRdfs:
     def test_rdfs_import_resets_owl_fidelity_metadata(self, session):
         session.ontology["rdf_extras"] = {"triples": [{"s": "x"}]}
         session.ontology["label_lang"] = "fr"
-        payload = OntologyImport(session).apply_parsed_rdfs_to_domain(RDFS_TTL)
+        payload = Import(session).apply_parsed_rdfs_to_domain(RDFS_TTL)
         assert payload["stats"] == {"classes": 2, "properties": 1}
         assert session.ontology["rdf_extras"] == {}
         assert session.ontology["label_lang"] is None
@@ -296,39 +296,39 @@ class TestApplyParsedRdfs:
 
 class TestAnalyzeImport:
     def test_owl_analysis_does_not_mutate_session(self, session):
-        result = OntologyImport(session).analyze_import(OWL_TTL)
+        result = Import(session).analyze_import(OWL_TTL)
         assert result["success"] is True
         assert result["report"]["summary"]["new"] >= 4
         assert not session.ontology.get("classes")
 
     def test_owl_analysis_flags_name_conflict(self, session):
         session.ontology["classes"] = [{"name": "Customer", "uri": "http://mine.org#Customer"}]
-        report = OntologyImport(session).analyze_import(OWL_TTL)["report"]
+        report = Import(session).analyze_import(OWL_TTL)["report"]
         assert report["summary"]["conflicts"] == 1
 
     def test_owl_analysis_falls_back_to_rdfs(self, session):
-        report = OntologyImport(session).analyze_import(RDFS_TTL)["report"]
+        report = Import(session).analyze_import(RDFS_TTL)["report"]
         assert report["summary"]["new"] == 3
 
     def test_owl_analysis_tolerates_rdfs_parser_failure(self, session, monkeypatch):
         def _boom(_content):
             raise RuntimeError("bad rdfs")
 
-        monkeypatch.setattr(OntologyOwl, "parse_rdfs", staticmethod(_boom))
-        report = OntologyImport(session).analyze_import(EMPTY_TTL)["report"]
+        monkeypatch.setattr(Owl, "parse_rdfs", staticmethod(_boom))
+        report = Import(session).analyze_import(EMPTY_TTL)["report"]
         assert report["summary"]["new"] == 0
 
     def test_rdfs_analysis_reports_new_items(self, session):
-        report = OntologyImport(session).analyze_import(RDFS_TTL, format="rdfs")["report"]
+        report = Import(session).analyze_import(RDFS_TTL, format="rdfs")["report"]
         assert report["summary"]["new"] == 3
 
     def test_rdfs_analysis_rejects_shacl(self, session):
         with pytest.raises(ValidationError, match="SHACL"):
-            OntologyImport(session).analyze_import(SHACL_TTL, format="rdfs")
+            Import(session).analyze_import(SHACL_TTL, format="rdfs")
 
     def test_rdfs_analysis_rejects_empty_vocabulary(self, session):
         with pytest.raises(ValidationError, match="No classes or properties"):
-            OntologyImport(session).analyze_import(EMPTY_TTL, format="rdfs")
+            Import(session).analyze_import(EMPTY_TTL, format="rdfs")
 
 
 # ---------------------------------------------------------------------------
@@ -350,7 +350,7 @@ def existing(session):
 
 class TestMergeOwl:
     def test_new_items_appended_and_conflicts_skipped_by_default(self, existing):
-        payload = OntologyImport(existing).merge_parsed_owl_to_domain(OWL_TTL, {})
+        payload = Import(existing).merge_parsed_owl_to_domain(OWL_TTL, {})
         names = [c["name"] for c in existing.ontology["classes"]]
         assert names.count("Customer") == 1
         assert "Order" in names and "Region" in names
@@ -362,7 +362,7 @@ class TestMergeOwl:
         assert payload["message"] == "Merged: 3 new item(s) added"
 
     def test_overwrite_resolution_replaces_by_name(self, existing):
-        OntologyImport(existing).merge_parsed_owl_to_domain(
+        Import(existing).merge_parsed_owl_to_domain(
             OWL_TTL, {f"{EX}Customer": "overwrite"}
         )
         customers = [c for c in existing.ontology["classes"] if c["name"] == "Customer"]
@@ -371,7 +371,7 @@ class TestMergeOwl:
         assert customers[0]["label"] == "Client"
 
     def test_rename_resolution_adds_incoming_under_new_name(self, existing):
-        OntologyImport(existing).merge_parsed_owl_to_domain(
+        Import(existing).merge_parsed_owl_to_domain(
             OWL_TTL, {f"{EX}Customer": "rename:ImportedCustomer"}
         )
         names = [c["name"] for c in existing.ontology["classes"]]
@@ -380,14 +380,14 @@ class TestMergeOwl:
         assert _cls(existing, "ImportedCustomer")["label"] == "Client"
 
     def test_identical_reimport_adds_nothing(self, session):
-        OntologyImport(session).ingest_owl(OWL_TTL)
+        Import(session).ingest_owl(OWL_TTL)
         before = len(session.ontology["classes"])
-        payload = OntologyImport(session).merge_parsed_owl_to_domain(OWL_TTL, {})
+        payload = Import(session).merge_parsed_owl_to_domain(OWL_TTL, {})
         assert payload["stats"]["new"] == 0
         assert len(session.ontology["classes"]) == before
 
     def test_owl_merge_falls_back_to_rdfs(self, existing):
-        payload = OntologyImport(existing).merge_parsed_owl_to_domain(RDFS_TTL, {})
+        payload = Import(existing).merge_parsed_owl_to_domain(RDFS_TTL, {})
         names = {c["name"] for c in existing.ontology["classes"]}
         assert {"Animal", "Dog", "Customer", "Region"} <= names
         assert payload["stats"]["new"] == 3
@@ -396,15 +396,15 @@ class TestMergeOwl:
         def _boom(_content):
             raise RuntimeError("bad rdfs")
 
-        monkeypatch.setattr(OntologyOwl, "parse_rdfs", staticmethod(_boom))
-        payload = OntologyImport(existing).merge_parsed_owl_to_domain(EMPTY_TTL, {})
+        monkeypatch.setattr(Owl, "parse_rdfs", staticmethod(_boom))
+        payload = Import(existing).merge_parsed_owl_to_domain(EMPTY_TTL, {})
         assert payload["stats"]["new"] == 0
         assert len(existing.ontology["classes"]) == 2
 
 
 class TestMergeRdfs:
     def test_rdfs_merge_appends_new_vocabulary(self, existing):
-        payload = OntologyImport(existing).merge_parsed_owl_to_domain(
+        payload = Import(existing).merge_parsed_owl_to_domain(
             RDFS_TTL, {}, format="rdfs"
         )
         names = {c["name"] for c in existing.ontology["classes"]}
@@ -419,13 +419,13 @@ class TestMergeRdfs:
 
     def test_rdfs_merge_rejects_shacl(self, existing):
         with pytest.raises(ValidationError, match="SHACL"):
-            OntologyImport(existing).merge_parsed_owl_to_domain(
+            Import(existing).merge_parsed_owl_to_domain(
                 SHACL_TTL, {}, format="rdfs"
             )
 
     def test_rdfs_merge_rejects_empty_vocabulary(self, existing):
         with pytest.raises(ValidationError, match="No classes or properties"):
-            OntologyImport(existing).merge_parsed_owl_to_domain(
+            Import(existing).merge_parsed_owl_to_domain(
                 EMPTY_TTL, {}, format="rdfs"
             )
 
@@ -443,7 +443,7 @@ class TestApplyResolutions:
             entity_type="group", uri="", name="ghost", conflict_type="uri_conflict",
             incoming={"name": "Ghost"}, existing=None,
         )
-        result = OntologyImport._apply_resolutions(
+        result = Import._apply_resolutions(
             "group", [{"name": "Other"}], self._report(item), {"ghost": "overwrite"}
         )
         assert result == [{"name": "Other"}, {"name": "Ghost"}]
@@ -454,7 +454,7 @@ class TestApplyResolutions:
             incoming={"uri": "u:1", "name": "A", "label": "new"}, existing=None,
         )
         existing = [{"uri": "u:1", "name": "A", "label": "old"}, {"uri": "u:2", "name": "B"}]
-        result = OntologyImport._apply_resolutions(
+        result = Import._apply_resolutions(
             "class", existing, self._report(item), {"u:1": "overwrite"}
         )
         assert result[0]["label"] == "new"
@@ -465,7 +465,7 @@ class TestApplyResolutions:
             entity_type="property", uri="u:p", name="p", conflict_type="new",
             incoming={"uri": "u:p"}, existing=None,
         )
-        assert OntologyImport._apply_resolutions("class", [], self._report(item), {}) == []
+        assert Import._apply_resolutions("class", [], self._report(item), {}) == []
 
 
 # ---------------------------------------------------------------------------
@@ -505,7 +505,7 @@ class TestIndustryImport:
         monkeypatch.setitem(
             import_module._INDUSTRY_FETCH, kind, lambda keys: _industry_result({})
         )
-        payload = OntologyImport(session).import_industry_ontology(kind, ["A", "B"])
+        payload = Import(session).import_industry_ontology(kind, ["A", "B"])
         ont = session.ontology
         assert payload == {"success": True, "message": "ok", "stats": {"classes": 1}, "failed": []}
         assert ont["name"] == expected_name
@@ -523,7 +523,7 @@ class TestIndustryImport:
             return _industry_result({})
 
         monkeypatch.setitem(import_module._INDUSTRY_FETCH, "fhir", _fetch)
-        OntologyImport(session).import_industry_ontology("fhir", ["Patient"], version="R5")
+        Import(session).import_industry_ontology("fhir", ["Patient"], version="R5")
         assert captured["version"] == "R5"
         assert session.ontology["name"] == "HL7 FHIR R5"
         assert session.ontology["base_uri"] == "http://hl7.org/fhir/"
@@ -539,14 +539,14 @@ class TestIndustryImport:
             return _industry_result({"name": "FHIR custom", "base_uri": "http://f/"})
 
         monkeypatch.setitem(import_module._INDUSTRY_FETCH, "fhir", _fetch)
-        OntologyImport(session).import_industry_ontology("fhir", ["Patient"])
+        Import(session).import_industry_ontology("fhir", ["Patient"])
         assert captured["version"] == FhirImportService.DEFAULT_VERSION
         assert session.ontology["name"] == "FHIR custom"
         assert session.ontology["base_uri"] == "http://f/"
 
     def test_empty_selection_rejected(self, session):
         with pytest.raises(ValidationError, match="No FIBO domains selected"):
-            OntologyImport(session).import_industry_ontology("fibo", [])
+            Import(session).import_industry_ontology("fibo", [])
 
     def test_domain_errors_propagate_unchanged(self, session, monkeypatch):
         def _fetch(keys):
@@ -554,7 +554,7 @@ class TestIndustryImport:
 
         monkeypatch.setitem(import_module._INDUSTRY_FETCH, "iof", _fetch)
         with pytest.raises(NotFoundError):
-            OntologyImport(session).import_industry_ontology("iof", ["x"])
+            Import(session).import_industry_ontology("iof", ["x"])
 
     def test_unexpected_errors_wrapped_as_infrastructure_error(self, session, monkeypatch):
         def _fetch(keys):
@@ -562,5 +562,5 @@ class TestIndustryImport:
 
         monkeypatch.setitem(import_module._INDUSTRY_FETCH, "cdisc", _fetch)
         with pytest.raises(InfrastructureError, match="CDISC import failed"):
-            OntologyImport(session).import_industry_ontology("cdisc", ["x"])
+            Import(session).import_industry_ontology("cdisc", ["x"])
         assert not session.ontology.get("classes")

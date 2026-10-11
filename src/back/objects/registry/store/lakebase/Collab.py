@@ -22,7 +22,7 @@ def _require_psycopg():
     return _rp()
 
 
-class LakebaseRegistryCollab:
+class Collab:
     """Comments and tasks for a domain version."""
 
     def _ensure_collab_tables(self) -> bool:

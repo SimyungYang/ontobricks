@@ -20,7 +20,7 @@ from typing import Any, Dict
 from back.core.errors import ValidationError
 from back.core.logging import get_logger
 
-from back.objects.registry.scheduler_tasks.TaskContext import TaskContext
+from back.objects.registry.schedule.TaskContext import TaskContext
 
 logger = get_logger(__name__)
 

@@ -9,66 +9,66 @@ Ontology facade
    :undoc-members:
    :show-inheritance:
 
-OntologyClassModel class
-------------------------
+Class model
+-----------
 
-.. automodule:: back.objects.ontology.OntologyClassModel
+.. automodule:: back.objects.ontology.ClassModel
    :members:
    :undoc-members:
    :show-inheritance:
 
-OntologyEditor class
---------------------
+Editor
+------
 
-.. automodule:: back.objects.ontology.OntologyEditor
+.. automodule:: back.objects.ontology.Editor
    :members:
    :undoc-members:
    :show-inheritance:
 
-OntologyEntityImport class
---------------------------
+Entity import
+-------------
 
-.. automodule:: back.objects.ontology.OntologyEntityImport
+.. automodule:: back.objects.ontology.EntityImport
    :members:
    :undoc-members:
    :show-inheritance:
 
-OntologyImport class
---------------------
+Import
+------
 
-.. automodule:: back.objects.ontology.OntologyImport
+.. automodule:: back.objects.ontology.Import
    :members:
    :undoc-members:
    :show-inheritance:
 
-OntologyOwl class
------------------
+Owl
+---
 
-.. automodule:: back.objects.ontology.OntologyOwl
+.. automodule:: back.objects.ontology.Owl
    :members:
    :undoc-members:
    :show-inheritance:
 
-OntologyRules class
--------------------
+Rules
+-----
 
-.. automodule:: back.objects.ontology.OntologyRules
+.. automodule:: back.objects.ontology.Rules
    :members:
    :undoc-members:
    :show-inheritance:
 
-OntologyGroups class
---------------------
+Groups
+------
 
-.. automodule:: back.objects.ontology.OntologyGroups
+.. automodule:: back.objects.ontology.Groups
    :members:
    :undoc-members:
    :show-inheritance:
 
-OntologyJsonViews class
------------------------
+JSON views
+----------
 
-.. automodule:: back.objects.ontology.json_views
+.. automodule:: back.objects.ontology.JsonViews
    :members:
    :undoc-members:
    :show-inheritance:

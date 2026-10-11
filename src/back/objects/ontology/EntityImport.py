@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple
 
 from back.core.errors import ValidationError
 from back.core.logging import get_logger
-from back.objects.ontology.OntologyClassModel import OntologyClassModel
+from back.objects.ontology.ClassModel import ClassModel
 
 if TYPE_CHECKING:
     from back.objects.session.DomainSession import DomainSession
@@ -32,7 +32,7 @@ def _uri_base(base_uri: str) -> str:
 def _normalized(source: Dict[str, Any]) -> Dict[str, Any]:
     """Deep copy of *source* with top-level datatype properties folded into classes."""
     source = copy.deepcopy(source)
-    OntologyClassModel.sync_class_data_properties(source)
+    ClassModel.sync_class_data_properties(source)
     return source
 
 
@@ -44,7 +44,7 @@ def _relationships(ontology: Dict[str, Any]) -> List[Dict[str, Any]]:
     ]
 
 
-class OntologyEntityImport:
+class EntityImport:
     """Import a selection of entities from a source ontology into the session."""
 
     def __init__(self, session: "DomainSession") -> None:

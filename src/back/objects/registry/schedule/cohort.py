@@ -14,8 +14,8 @@ from typing import Any, Dict, List
 from back.core.errors import InfrastructureError, NotFoundError, ValidationError
 from back.core.logging import get_logger
 
-from back.objects.registry.scheduler_tasks.RunOutcome import RunOutcome
-from back.objects.registry.scheduler_tasks.TaskContext import TaskContext
+from back.objects.registry.schedule.RunOutcome import RunOutcome
+from back.objects.registry.schedule.TaskContext import TaskContext
 
 logger = get_logger(__name__)
 

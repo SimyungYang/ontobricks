@@ -13,7 +13,7 @@ from shared.config.constants import DEFAULT_BASE_URI
 
 logger = get_logger(__name__)
 
-class OntologyOwl:
+class Owl:
     """Generate/parse OWL Turtle and compute lightweight stats."""
 
     @staticmethod
@@ -38,8 +38,8 @@ class OntologyOwl:
     @staticmethod
     def postprocess_generated_owl(content: str) -> tuple:
         """Clean LLM output and compute stats in one step. Returns ``(turtle, stats)``."""
-        turtle = OntologyOwl.clean_owl_output(content)
-        stats = OntologyOwl.calculate_owl_stats(turtle)
+        turtle = Owl.clean_owl_output(content)
+        stats = Owl.calculate_owl_stats(turtle)
         return turtle, stats
 
     @staticmethod
@@ -163,7 +163,7 @@ class OntologyOwl:
             if len(words) <= 1:
                 return match.group(0)
             is_pascal = words[0] and words[0][0].isupper()
-            return prefix + OntologyOwl._turtle_to_camel(words, is_pascal)
+            return prefix + Owl._turtle_to_camel(words, is_pascal)
 
         pattern = r"(?<![a-zA-Z])(:)([a-zA-Z][a-zA-Z0-9]*(?:[_-][a-zA-Z][a-zA-Z0-9]*)+)"
         return re.sub(pattern, _fix_match, content)
@@ -237,7 +237,7 @@ class OntologyOwl:
                     if words:
                         is_pascal = words[0] and words[0][0].isupper()
                         result.append(":")
-                        result.append(OntologyOwl._turtle_to_camel(words, is_pascal))
+                        result.append(Owl._turtle_to_camel(words, is_pascal))
                         i = j
                     else:
                         result.append(line[i])
@@ -259,8 +259,8 @@ class OntologyOwl:
         - :first_name -> :firstName
         - :customer-id -> :customerId
         """
-        content = OntologyOwl._fix_snake_kebab_local_names(content)
-        return OntologyOwl._fix_spaced_local_names(content)
+        content = Owl._fix_snake_kebab_local_names(content)
+        return Owl._fix_spaced_local_names(content)
 
     @staticmethod
     def clean_owl_output(content: str) -> str:
@@ -295,7 +295,7 @@ class OntologyOwl:
         content = content.strip()
 
         # Fix any local names with spaces, underscores, or hyphens
-        content = OntologyOwl._fix_local_names(content)
+        content = Owl._fix_local_names(content)
 
         return content
 

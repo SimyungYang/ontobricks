@@ -390,7 +390,7 @@ class WorkspaceUiSettings:
         → ``ONTOBRICKS_EDIT_LOCK_TTL_S`` → built-in default) so the Settings UI
         shows the value actually in force. ``0`` means the lease is disabled.
         """
-        from back.objects.registry.lockmgt import EditLockService
+        from back.objects.registry.collab import EditLockService
 
         ttl_s = EditLockService._ttl_seconds(session_mgr, settings)
         return {"success": True, "edit_lock_ttl_s": ttl_s}

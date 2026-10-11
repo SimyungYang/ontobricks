@@ -1,19 +1,19 @@
 """Ontology domain: OWL/RDFS/SHACL and industry import."""
 
-from back.objects.ontology.json_views import (
-    OntologyJsonViews,
+from back.objects.ontology.JsonViews import (
+    JsonViews,
     get_ontology_classes,
     get_ontology_info,
     get_ontology_properties,
 )
 from back.objects.ontology.Ontology import IndustryKind, Ontology, QUALITY_CATEGORIES
-from back.objects.ontology.OntologyClassModel import OntologyClassModel
-from back.objects.ontology.OntologyEditor import OntologyEditor
-from back.objects.ontology.OntologyGroups import OntologyGroups
-from back.objects.ontology.OntologyImport import OntologyImport
-from back.objects.ontology.OntologyEntityImport import OntologyEntityImport
-from back.objects.ontology.OntologyOwl import OntologyOwl
-from back.objects.ontology.OntologyRules import OntologyRules
+from back.objects.ontology.ClassModel import ClassModel
+from back.objects.ontology.Editor import Editor
+from back.objects.ontology.Groups import Groups
+from back.objects.ontology.Import import Import
+from back.objects.ontology.EntityImport import EntityImport
+from back.objects.ontology.Owl import Owl
+from back.objects.ontology.Rules import Rules
 from back.objects.ontology.generate.GenerateDraft import (
     GenerateDraft,
     GenerateEntity,
@@ -28,14 +28,14 @@ from back.objects.ontology.generate import GenerateWorkflow
 __all__ = [
     "IndustryKind",
     "Ontology",
-    "OntologyClassModel",
-    "OntologyEditor",
-    "OntologyGroups",
-    "OntologyImport",
-    "OntologyEntityImport",
-    "OntologyJsonViews",
-    "OntologyOwl",
-    "OntologyRules",
+    "ClassModel",
+    "Editor",
+    "Groups",
+    "Import",
+    "EntityImport",
+    "JsonViews",
+    "Owl",
+    "Rules",
     "QUALITY_CATEGORIES",
     "DraftRevisionConflict",
     "DraftStaleError",

@@ -63,17 +63,17 @@ from back.core.databricks.lakebase.constants import APPLICATION_NAME_REGISTRY
 from back.core.errors import InfrastructureError
 from back.core.logging import get_logger
 
-from .LakebaseRegistryCollab import LakebaseRegistryCollab
-from .LakebaseRegistryDocuments import LakebaseRegistryDocuments
-from .LakebaseRegistryAnalytics import LakebaseRegistryAnalytics
-from .LakebaseRegistryBootstrap import LakebaseRegistryBootstrap
-from .LakebaseRegistryBuildRuns import LakebaseRegistryBuildRuns
-from .LakebaseRegistryGlobalConfig import LakebaseRegistryGlobalConfig
-from .LakebaseRegistryCatalog import LakebaseRegistryCatalog
-from .LakebaseRegistrySchedules import LakebaseRegistrySchedules
-from .LakebaseRegistryChangeEvents import LakebaseRegistryChangeEvents
-from .LakebaseRegistryReviewEvents import LakebaseRegistryReviewEvents
-from .LakebaseRegistryEditLocks import LakebaseRegistryEditLocks
+from .Collab import Collab
+from .Documents import Documents
+from .Analytics import Analytics
+from .Bootstrap import Bootstrap
+from .BuildRuns import BuildRuns
+from .GlobalConfig import GlobalConfig
+from .Catalog import Catalog
+from .Schedules import Schedules
+from .ChangeEvents import ChangeEvents
+from .ReviewEvents import ReviewEvents
+from .EditLocks import EditLocks
 from ..base import (
     RegistryStore,
     StoreError,
@@ -255,17 +255,17 @@ def reset_lakebase_triplet_cache() -> None:
 
 
 class LakebaseRegistryStore(
-    LakebaseRegistryDocuments,
-    LakebaseRegistryCollab,
-    LakebaseRegistryEditLocks,
-    LakebaseRegistryAnalytics,
-    LakebaseRegistryReviewEvents,
-    LakebaseRegistryChangeEvents,
-    LakebaseRegistryBuildRuns,
-    LakebaseRegistryCatalog,
-    LakebaseRegistrySchedules,
-    LakebaseRegistryBootstrap,
-    LakebaseRegistryGlobalConfig,
+    Documents,
+    Collab,
+    EditLocks,
+    Analytics,
+    ReviewEvents,
+    ChangeEvents,
+    BuildRuns,
+    Catalog,
+    Schedules,
+    Bootstrap,
+    GlobalConfig,
     RegistryStore,
 ):
     """Postgres-backed registry store. Optional backend.

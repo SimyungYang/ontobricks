@@ -19,8 +19,8 @@ from typing import Any, Callable, Dict, List, Optional
 from back.core.errors import ValidationError
 
 from . import analytics, build, cache_refresh, cohort, reasoning
-from back.objects.registry.scheduler_tasks.RunOutcome import RunOutcome
-from back.objects.registry.scheduler_tasks.TaskContext import (
+from back.objects.registry.schedule.RunOutcome import RunOutcome
+from back.objects.registry.schedule.TaskContext import (
     TaskContext,
     load_domain_headless,
 )
@@ -158,7 +158,13 @@ def task_type_catalog() -> List[Dict[str, Any]]:
     ]
 
 
+from back.objects.registry.schedule.BuildScheduler import (  # noqa: E402
+    BuildScheduler,
+    get_scheduler,
+)
+
 __all__ = [
+    "BuildScheduler",
     "RunOutcome",
     "TASK_ANALYTICS",
     "TASK_BUILD",
@@ -168,6 +174,7 @@ __all__ = [
     "TASK_TYPES",
     "TaskContext",
     "TaskTypeSpec",
+    "get_scheduler",
     "get_task_type",
     "load_domain_headless",
     "task_type_catalog",

@@ -49,7 +49,7 @@ class ScheduleSettings:
         per-type columns from the backend registry instead of hardcoding
         the list a second time.
         """
-        from back.objects.registry.scheduler_tasks import task_type_catalog
+        from back.objects.registry.schedule import task_type_catalog
 
         _, host, token, registry_cfg = SettingsService._resolve_context(
             session_mgr, settings

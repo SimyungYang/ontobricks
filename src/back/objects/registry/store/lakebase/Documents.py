@@ -23,7 +23,7 @@ def _require_psycopg():
     return _rp()
 
 
-class LakebaseRegistryDocuments:
+class Documents:
     """Parse-only document corpus CRUD (no UC Volume)."""
 
     def _ensure_domain_documents_table(self) -> bool:

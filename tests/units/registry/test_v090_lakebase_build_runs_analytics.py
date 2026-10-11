@@ -1,7 +1,7 @@
 """Real SQL of the build-run trace and graph-analytics mixins.
 
-:class:`LakebaseRegistryBuildRuns` (append-only build trace, last-build
-stamp, analytics roll-up) and :class:`LakebaseRegistryAnalytics` (cached
+:class:`BuildRuns` (append-only build trace, last-build
+stamp, analytics roll-up) and :class:`Analytics` (cached
 graph metrics + capped run history) driven through a scripted cursor.
 """
 

@@ -8,8 +8,8 @@ from back.core.errors import InfrastructureError, ValidationError
 from back.core.graphdb import get_graphdb
 from back.core.graphdb.GraphDBFactory import GraphDBFactory
 
-from back.objects.registry.scheduler_tasks.RunOutcome import RunOutcome
-from back.objects.registry.scheduler_tasks.TaskContext import TaskContext
+from back.objects.registry.schedule.RunOutcome import RunOutcome
+from back.objects.registry.schedule.TaskContext import TaskContext
 
 _SUPPORTED_BACKENDS = {"lakebase", "databricks"}
 

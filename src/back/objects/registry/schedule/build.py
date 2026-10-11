@@ -18,8 +18,8 @@ from back.core.errors import InfrastructureError, ValidationError
 from back.core.logging import get_logger
 from shared.config.constants import DEFAULT_GRAPH_NAME
 
-from back.objects.registry.scheduler_tasks.RunOutcome import RunOutcome
-from back.objects.registry.scheduler_tasks.TaskContext import TaskContext
+from back.objects.registry.schedule.RunOutcome import RunOutcome
+from back.objects.registry.schedule.TaskContext import TaskContext
 
 logger = get_logger(__name__)
 

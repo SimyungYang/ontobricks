@@ -1,4 +1,4 @@
-"""Real SQL of :class:`LakebaseRegistryBootstrap` against a scripted cursor.
+"""Real SQL of :class:`Bootstrap` against a scripted cursor.
 
 Covers the initialise probe reasons, the permission diagnostic, the
 idempotent initialise/upgrade path (registry row upserted, never

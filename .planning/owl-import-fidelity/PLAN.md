@@ -14,7 +14,7 @@ and appends leftover triples whose subject still exists. Consumed studio
 predicates (`rdf:type`, `rdfs:label/comment/subClassOf/domain/range`,
 `skos:altLabel`, `ontobricks:*`) are never leftover.
 
-**Tech Stack:** rdflib, `OntologyParser` / `OntologyGenerator` / `OntologyImport`,
+**Tech Stack:** rdflib, `OntologyParser` / `OntologyGenerator` / `Import`,
 pytest (`uv run --frozen pytest`).
 
 ## Global Constraints
@@ -42,7 +42,7 @@ pytest (`uv run --frozen pytest`).
 - Create (fixture string in the test file; no extra asset required)
 
 **Interfaces:**
-- Consumes: `OntologyOwl.parse_owl`, `OntologyOwl.generate_owl`
+- Consumes: `Owl.parse_owl`, `Owl.generate_owl`
 - Produces: failing assertions that later tasks turn green one by one
 
 - [ ] **Step 1: Write the failing test**
@@ -55,7 +55,7 @@ import pytest
 from rdflib import DCTERMS, OWL, RDF, RDFS, Graph, Literal, URIRef
 from rdflib.namespace import SKOS, XSD, Namespace
 
-from back.objects.ontology.OntologyOwl import OntologyOwl
+from back.objects.ontology.Owl import Owl
 
 PROV = Namespace("http://www.w3.org/ns/prov#")
 EX = Namespace("http://example.org/onto#")
@@ -92,9 +92,9 @@ ex:hasName a owl:DatatypeProperty ;
 
 def _roundtrip() -> Graph:
     info, classes, properties, constraints, swrl, axioms, expressions, groups = (
-        OntologyOwl.parse_owl(ISSUE_194_TTL, extract_advanced=True)
+        Owl.parse_owl(ISSUE_194_TTL, extract_advanced=True)
     )
-    turtle = OntologyOwl.generate_owl(
+    turtle = Owl.generate_owl(
         {
             "base_uri": info.get("namespace") or info.get("uri"),
             "name": info.get("label") or info.get("name") or "",
@@ -179,7 +179,7 @@ Leave the test failing. Later tasks turn individual asserts green.
   `get_classes`, `get_properties`)
 - Modify: `src/back/core/w3c/owl/OntologyGenerator.py` (`generate`, `_add_class`,
   `_add_property`)
-- Modify: `src/back/objects/ontology/OntologyImport.py`
+- Modify: `src/back/objects/ontology/Import.py`
   (`apply_parsed_owl_to_domain`)
 - Test: `tests/units/ontology/test_owl_import_fidelity.py` (header label/lang)
 - Test: `tests/units/ontology/test_owl_parser.py` (existing label assertions)
@@ -203,7 +203,7 @@ def test_ontology_label_keeps_language_tag():
     assert info["label_lang"] == "en"
 ```
 
-Add a unit on `OntologyImport.apply_parsed_owl_to_domain` with a stub domain
+Add a unit on `Import.apply_parsed_owl_to_domain` with a stub domain
 (follow existing tests in `tests/units/ontology/test_ontology_service.py`) that
 `ontology["name"] == "Test Ontology"` when `ontology_info` has `label` and no
 `name`.
@@ -258,7 +258,7 @@ self.graph.add((class_uri, RDFS.label, Literal(label, lang=lang or None)))
 
 Same for ontology header in `generate()` using `ontology_name` + optional
 `self.label_lang` passed from `data` (add optional `label_lang` on
-`OntologyGenerator.__init__`, default `None`; `OntologyOwl.generate_owl`
+`OntologyGenerator.__init__`, default `None`; `Owl.generate_owl`
 forwards `data.get("label_lang")`).
 
 - [ ] **Step 6: Re-run tests**
@@ -368,9 +368,9 @@ Expected: `rdfs:subClassOf` other-onto **passes**; SKOS/DCTERMS/PROV still fail.
 - Modify: `src/back/core/w3c/owl/__init__.py` (export the class)
 - Modify: `src/back/core/w3c/owl/OntologyParser.py` (call extract after classes/properties)
 - Modify: `src/back/core/w3c/owl/OntologyGenerator.py` (bind prefixes + add triples)
-- Modify: `src/back/objects/ontology/OntologyOwl.py` (`parse_owl` attaches extras
+- Modify: `src/back/objects/ontology/Owl.py` (`parse_owl` attaches extras
   onto `ontology_info["rdf_extras"]`; `generate_owl` forwards `data["rdf_extras"]`)
-- Modify: `src/back/objects/ontology/OntologyImport.py` (persist
+- Modify: `src/back/objects/ontology/Import.py` (persist
   `ontology["rdf_extras"]`)
 - Test: `tests/units/ontology/test_owl_rdf_extras.py`
 - Test: `tests/units/ontology/test_owl_import_fidelity.py` (should go green)
@@ -482,7 +482,7 @@ Avoid double-walking if expensive: `parse_owl` already called `get_classes`;
 have `parse_owl` pass those lists into extras extract instead of calling
 `get_rdf_extras()` independently.
 
-In `OntologyOwl.parse_owl`, after building the tuple:
+In `Owl.parse_owl`, after building the tuple:
 
 ```python
 rdf_extras = OntologyRdfExtras().extract(
@@ -508,7 +508,7 @@ gains extras; for this slice OWL path only is required.
 - [ ] **Step 6: Wire generator**
 
 `OntologyGenerator.__init__` takes `rdf_extras: dict | None = None`.
-`OntologyOwl.generate_owl` passes `data.get("rdf_extras")`.
+`Owl.generate_owl` passes `data.get("rdf_extras")`.
 
 At end of `generate()`, before serialize:
 
@@ -532,7 +532,7 @@ Expected: PASS.
 **Files:**
 - Modify: `src/back/objects/ontology/Ontology.py` (`generate_owl` wrapper — pass
   `rdf_extras` from `s.ontology`)
-- Modify: `src/back/objects/ontology/OntologyOwl.py` if the domain `generate_owl`
+- Modify: `src/back/objects/ontology/Owl.py` if the domain `generate_owl`
   does not already pass the full ontology dict
 - Test: extend `tests/units/ontology/test_owl_import_fidelity.py` with a parse →
   dict → `generate_owl(domain_ontology_dict)` path (no Flask session required)
@@ -543,7 +543,7 @@ Expected: PASS.
 
 - [ ] **Step 1: Trace `Ontology.generate_owl`**
 
-Confirm `src/back/objects/ontology/Ontology.py` / `OntologyOwl.generate_owl`
+Confirm `src/back/objects/ontology/Ontology.py` / `Owl.generate_owl`
 receives the domain ontology dict. If it only forwards `base_uri/name/classes/properties`,
 add `rdf_extras` and `label_lang`.
 
@@ -551,10 +551,10 @@ add `rdf_extras` and `label_lang`.
 
 ```python
 def test_generate_owl_reads_rdf_extras_from_config():
-    info, classes, properties, *_rest = OntologyOwl.parse_owl(
+    info, classes, properties, *_rest = Owl.parse_owl(
         ISSUE_194_TTL, extract_advanced=True
     )
-    turtle = OntologyOwl.generate_owl({
+    turtle = Owl.generate_owl({
         "base_uri": info["namespace"],
         "name": info["label"],
         "label_lang": info.get("label_lang"),

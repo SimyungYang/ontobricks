@@ -22,7 +22,7 @@ def _require_psycopg():
     return _rp()
 
 
-class LakebaseRegistryReviewEvents:
+class ReviewEvents:
     """Review/validation audit rows for a domain version."""
 
     def _ensure_review_events_table(self) -> bool:

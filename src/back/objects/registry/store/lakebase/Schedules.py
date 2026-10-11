@@ -26,7 +26,7 @@ def _require_psycopg():
     return _rp()
 
 
-class LakebaseRegistrySchedules:
+class Schedules:
     """Scheduled tasks, history, and legacy cohort import."""
 
     def load_schedules(self) -> Dict[str, Dict[str, Any]]:

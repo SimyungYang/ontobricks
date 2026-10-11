@@ -13,13 +13,13 @@ from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Set, Tupl
 
 from back.core.w3c.shacl.constants import QUALITY_CATEGORIES
 from shared.config.constants import DEFAULT_BASE_URI
-from back.objects.ontology.OntologyClassModel import OntologyClassModel
-from back.objects.ontology.OntologyEditor import OntologyEditor
-from back.objects.ontology.OntologyEntityImport import OntologyEntityImport
-from back.objects.ontology.OntologyGroups import OntologyGroups
-from back.objects.ontology.OntologyImport import IndustryKind, OntologyImport
-from back.objects.ontology.OntologyOwl import OntologyOwl
-from back.objects.ontology.OntologyRules import OntologyRules
+from back.objects.ontology.ClassModel import ClassModel
+from back.objects.ontology.Editor import Editor
+from back.objects.ontology.EntityImport import EntityImport
+from back.objects.ontology.Groups import Groups
+from back.objects.ontology.Import import IndustryKind, Import
+from back.objects.ontology.Owl import Owl
+from back.objects.ontology.Rules import Rules
 
 if TYPE_CHECKING:
     from agents.agent_auto_icon_assign.engine import (
@@ -166,23 +166,23 @@ class Ontology:
 
     @staticmethod
     def ensure_uris(config: Dict[str, Any]) -> Dict[str, Any]:
-        return OntologyClassModel.ensure_uris(config)
+        return ClassModel.ensure_uris(config)
 
     @staticmethod
     def prune_orphaned_datatype_properties(config: Dict[str, Any]) -> int:
-        return OntologyClassModel.prune_orphaned_datatype_properties(config)
+        return ClassModel.prune_orphaned_datatype_properties(config)
 
     @staticmethod
     def sync_class_data_properties(config: Dict[str, Any]) -> None:
-        return OntologyClassModel.sync_class_data_properties(config)
+        return ClassModel.sync_class_data_properties(config)
 
     @staticmethod
     def finalize_class_attributes(config: Dict[str, Any]) -> None:
-        return OntologyClassModel.finalize_class_attributes(config)
+        return ClassModel.finalize_class_attributes(config)
 
     @staticmethod
     def get_ontology_stats(config: Dict[str, Any]) -> Dict[str, int]:
-        return OntologyOwl.get_ontology_stats(config)
+        return Owl.get_ontology_stats(config)
 
     @staticmethod
     def normalize_property_domain_range(
@@ -190,21 +190,21 @@ class Ontology:
         *,
         on_replace: Optional[Callable[[Dict[str, Any], str, Any, Any], None]] = None,
     ) -> bool:
-        return OntologyClassModel.normalize_property_domain_range(ontology_config, on_replace=on_replace)
+        return ClassModel.normalize_property_domain_range(ontology_config, on_replace=on_replace)
 
     def prune_mappings_to_ontology_uris(
         self,
         class_uris: Set[str],
         property_uris: Set[str],
     ) -> Dict[str, int]:
-        return OntologyEditor(self._domain).prune_mappings_to_ontology_uris(class_uris, property_uris)
+        return Editor(self._domain).prune_mappings_to_ontology_uris(class_uris, property_uris)
 
     @staticmethod
     def _diff_by_uri(
         old_list: Optional[List[Dict[str, Any]]],
         new_list: Optional[List[Dict[str, Any]]],
     ) -> Tuple[list, list, list]:
-        return OntologyEditor._diff_by_uri(old_list, new_list)
+        return Editor._diff_by_uri(old_list, new_list)
 
     def _record_ontology_diff(
         self,
@@ -215,33 +215,33 @@ class Ontology:
         *,
         source: str = "user",
     ) -> None:
-        return OntologyEditor(self._domain)._record_ontology_diff(old_classes, new_classes, old_props, new_props, source=source)
+        return Editor(self._domain)._record_ontology_diff(old_classes, new_classes, old_props, new_props, source=source)
 
     def save_ontology_config_from_editor(
         self, raw_body: Dict[str, Any]
     ) -> Dict[str, Any]:
-        return OntologyEditor(self._domain).save_ontology_config_from_editor(raw_body)
+        return Editor(self._domain).save_ontology_config_from_editor(raw_body)
 
     def _sync_design_layout_with_ontology(self) -> None:
-        return OntologyEditor(self._domain)._sync_design_layout_with_ontology()
+        return Editor(self._domain)._sync_design_layout_with_ontology()
 
     def delete_class_by_uri(self, class_uri: Optional[str]) -> Dict[str, Any]:
-        return OntologyEditor(self._domain).delete_class_by_uri(class_uri)
+        return Editor(self._domain).delete_class_by_uri(class_uri)
 
     def delete_property_by_uri(self, property_uri: Optional[str]) -> Dict[str, Any]:
-        return OntologyEditor(self._domain).delete_property_by_uri(property_uri)
+        return Editor(self._domain).delete_property_by_uri(property_uri)
 
     def add_class(self, data: Dict[str, Any]) -> Dict[str, Any]:
-        return OntologyEditor(self._domain).add_class(data)
+        return Editor(self._domain).add_class(data)
 
     def update_class(self, data: Dict[str, Any]) -> Dict[str, Any]:
-        return OntologyEditor(self._domain).update_class(data)
+        return Editor(self._domain).update_class(data)
 
     def add_property(self, data: Dict[str, Any]) -> Dict[str, Any]:
-        return OntologyEditor(self._domain).add_property(data)
+        return Editor(self._domain).add_property(data)
 
     def update_property(self, data: Dict[str, Any]) -> Dict[str, Any]:
-        return OntologyEditor(self._domain).update_property(data)
+        return Editor(self._domain).update_property(data)
 
     def ingest_owl(
         self,
@@ -250,16 +250,16 @@ class Ontology:
         name_fallback_to_domain: bool = True,
         outcome: str = "import",
     ) -> Dict[str, Any]:
-        return OntologyImport(self._domain).ingest_owl(owl_content, name_fallback_to_domain=name_fallback_to_domain, outcome=outcome)
+        return Import(self._domain).ingest_owl(owl_content, name_fallback_to_domain=name_fallback_to_domain, outcome=outcome)
 
     def apply_parsed_rdfs_to_domain(
         self,
         rdfs_content: str,
     ) -> Dict[str, Any]:
-        return OntologyImport(self._domain).apply_parsed_rdfs_to_domain(rdfs_content)
+        return Import(self._domain).apply_parsed_rdfs_to_domain(rdfs_content)
 
     def _try_import_as_shacl(self, content: str) -> Optional[Dict[str, Any]]:
-        return OntologyImport(self._domain)._try_import_as_shacl(content)
+        return Import(self._domain)._try_import_as_shacl(content)
 
     def analyze_import(
         self,
@@ -267,7 +267,7 @@ class Ontology:
         *,
         format: str = "owl",
     ) -> Dict[str, Any]:
-        return OntologyImport(self._domain).analyze_import(owl_content, format=format)
+        return Import(self._domain).analyze_import(owl_content, format=format)
 
     def merge_parsed_owl_to_domain(
         self,
@@ -277,14 +277,14 @@ class Ontology:
         format: str = "owl",
         name_fallback_to_domain: bool = True,
     ) -> Dict[str, Any]:
-        return OntologyImport(self._domain).merge_parsed_owl_to_domain(owl_content, resolutions, format=format, name_fallback_to_domain=name_fallback_to_domain)
+        return Import(self._domain).merge_parsed_owl_to_domain(owl_content, resolutions, format=format, name_fallback_to_domain=name_fallback_to_domain)
 
     def _merge_rdfs(
         self,
         rdfs_content: str,
         resolutions: Dict[str, str],
     ) -> Dict[str, Any]:
-        return OntologyImport(self._domain)._merge_rdfs(rdfs_content, resolutions)
+        return Import(self._domain)._merge_rdfs(rdfs_content, resolutions)
 
     @staticmethod
     def _apply_resolutions(
@@ -293,12 +293,12 @@ class Ontology:
         report: ConflictReport,
         resolutions: Dict[str, str],
     ) -> list:
-        return OntologyImport._apply_resolutions(entity_type, existing, report, resolutions)
+        return Import._apply_resolutions(entity_type, existing, report, resolutions)
 
     def rename_relationship_references(
         self, old_name: str, new_name: str
     ) -> Dict[str, int]:
-        return OntologyEditor(self._domain).rename_relationship_references(old_name, new_name)
+        return Editor(self._domain).rename_relationship_references(old_name, new_name)
 
     def apply_agent_ontology_changes(
         self,
@@ -359,11 +359,11 @@ class Ontology:
 
     @staticmethod
     def validate_swrl_rule(rule: Dict[str, Any]) -> List[str]:
-        return OntologyRules.validate_swrl_rule(rule)
+        return Rules.validate_swrl_rule(rule)
 
-    _SWRL_ATOM_RE = OntologyRules._SWRL_ATOM_RE
+    _SWRL_ATOM_RE = Rules._SWRL_ATOM_RE
 
-    _SWRL_BUILTIN_PREFIXES = OntologyRules._SWRL_BUILTIN_PREFIXES
+    _SWRL_BUILTIN_PREFIXES = Rules._SWRL_BUILTIN_PREFIXES
 
     @staticmethod
     def swrl_reference_errors(
@@ -371,29 +371,29 @@ class Ontology:
         class_names: Set[str],
         property_names: Set[str],
     ) -> List[str]:
-        return OntologyRules.swrl_reference_errors(rule, class_names, property_names)
+        return Rules.swrl_reference_errors(rule, class_names, property_names)
 
     @staticmethod
     def _ref_local_name(term: str):
-        return OntologyRules._ref_local_name(term)
+        return Rules._ref_local_name(term)
 
     @staticmethod
     def decision_table_reference_errors(
         rule: Dict[str, Any], class_names: Set[str], property_names: Set[str]
     ) -> List[str]:
-        return OntologyRules.decision_table_reference_errors(rule, class_names, property_names)
+        return Rules.decision_table_reference_errors(rule, class_names, property_names)
 
     @staticmethod
     def aggregate_reference_errors(
         rule: Dict[str, Any], class_names: Set[str], property_names: Set[str]
     ) -> List[str]:
-        return OntologyRules.aggregate_reference_errors(rule, class_names, property_names)
+        return Rules.aggregate_reference_errors(rule, class_names, property_names)
 
     @staticmethod
     def sparql_reference_errors(
         rule: Dict[str, Any], class_names: Set[str], property_names: Set[str]
     ) -> List[str]:
-        return OntologyRules.sparql_reference_errors(rule, class_names, property_names)
+        return Rules.sparql_reference_errors(rule, class_names, property_names)
 
     @staticmethod
     def rule_reference_errors(
@@ -402,7 +402,7 @@ class Ontology:
         class_names: Set[str],
         property_names: Set[str],
     ) -> List[str]:
-        return OntologyRules.rule_reference_errors(key, rule, class_names, property_names)
+        return Rules.rule_reference_errors(key, rule, class_names, property_names)
 
     @staticmethod
     def merge_icon_suggestions(
@@ -421,35 +421,35 @@ class Ontology:
 
     @staticmethod
     def postprocess_generated_owl(content: str) -> tuple:
-        return OntologyOwl.postprocess_generated_owl(content)
+        return Owl.postprocess_generated_owl(content)
 
     @staticmethod
     def build_class_from_data(
         data: Dict[str, Any], existing: Dict[str, Any] = None
     ) -> Dict[str, Any]:
-        return OntologyClassModel.build_class_from_data(data, existing)
+        return ClassModel.build_class_from_data(data, existing)
 
     @staticmethod
     def build_property_from_data(
         data: Dict[str, Any], existing: Dict[str, Any] = None
     ) -> Dict[str, Any]:
-        return OntologyClassModel.build_property_from_data(data, existing)
+        return ClassModel.build_property_from_data(data, existing)
 
     @staticmethod
     def validate_constraint(constraint: Dict[str, Any]) -> Optional[str]:
-        return OntologyRules.validate_constraint(constraint)
+        return Rules.validate_constraint(constraint)
 
     @staticmethod
     def validate_shape(shape: Dict[str, Any]) -> Optional[str]:
-        return OntologyRules.validate_shape(shape)
+        return Rules.validate_shape(shape)
 
     @staticmethod
     def validate_classes(classes: List[Dict[str, Any]]) -> tuple:
-        return OntologyClassModel.validate_classes(classes)
+        return ClassModel.validate_classes(classes)
 
     @staticmethod
     def generate_shacl(shapes: list, base_uri: str = "") -> str:
-        return OntologyRules.generate_shacl(shapes, base_uri)
+        return Rules.generate_shacl(shapes, base_uri)
 
     @staticmethod
     def generate_owl(
@@ -460,15 +460,15 @@ class Ontology:
         expressions=None,
         groups=None,
     ):
-        return OntologyOwl.generate_owl(data, constraints, swrl_rules, axioms, expressions, groups)
+        return Owl.generate_owl(data, constraints, swrl_rules, axioms, expressions, groups)
 
     @staticmethod
     def parse_owl(content, extract_advanced=True):
-        return OntologyOwl.parse_owl(content, extract_advanced)
+        return Owl.parse_owl(content, extract_advanced)
 
     @staticmethod
     def parse_rdfs(content):
-        return OntologyOwl.parse_rdfs(content)
+        return Owl.parse_rdfs(content)
 
     def import_industry_ontology(
         self,
@@ -476,7 +476,7 @@ class Ontology:
         domain_keys: List[str],
         version: Optional[str] = None,
     ) -> Dict[str, Any]:
-        return OntologyImport(self._domain).import_industry_ontology(kind, domain_keys, version)
+        return Import(self._domain).import_industry_ontology(kind, domain_keys, version)
 
     def import_entities_from_domain(
         self,
@@ -487,7 +487,7 @@ class Ontology:
         source_domain: str,
         source_version: str,
     ) -> Dict[str, Any]:
-        return OntologyEntityImport(self._domain).import_entities(source, names, renames, source_domain=source_domain, source_version=source_version)
+        return EntityImport(self._domain).import_entities(source, names, renames, source_domain=source_domain, source_version=source_version)
 
     def apply_parsed_owl_to_domain(
         self,
@@ -502,7 +502,7 @@ class Ontology:
         groups: list = None,
         name_fallback_to_domain: bool = True,
     ) -> str:
-        return OntologyImport(self._domain).apply_parsed_owl_to_domain(ontology_info, classes, properties, constraints, swrl_rules, axioms, expressions, groups=groups, name_fallback_to_domain=name_fallback_to_domain)
+        return Import(self._domain).apply_parsed_owl_to_domain(ontology_info, classes, properties, constraints, swrl_rules, axioms, expressions, groups=groups, name_fallback_to_domain=name_fallback_to_domain)
 
     def build_import_owl_success_payload(
         self,
@@ -510,7 +510,7 @@ class Ontology:
         properties: list,
         constraints: list,
     ) -> Dict[str, Any]:
-        return OntologyImport(self._domain).build_import_owl_success_payload(classes, properties, constraints)
+        return Import(self._domain).build_import_owl_success_payload(classes, properties, constraints)
 
     def build_parse_owl_success_payload(
         self,
@@ -523,7 +523,7 @@ class Ontology:
         expressions: list = None,
         resolved_name: str = "",
     ) -> Dict[str, Any]:
-        return OntologyImport(self._domain).build_parse_owl_success_payload(ontology_info, classes, properties, constraints, swrl_rules, axioms, expressions, resolved_name)
+        return Import(self._domain).build_parse_owl_success_payload(ontology_info, classes, properties, constraints, swrl_rules, axioms, expressions, resolved_name)
 
     def build_load_owl_file_success_payload(
         self,
@@ -534,48 +534,48 @@ class Ontology:
         axioms: list,
         expressions: list = None,
     ) -> Dict[str, Any]:
-        return OntologyImport(self._domain).build_load_owl_file_success_payload(classes, properties, constraints, swrl_rules, axioms, expressions)
+        return Import(self._domain).build_load_owl_file_success_payload(classes, properties, constraints, swrl_rules, axioms, expressions)
 
     @staticmethod
     def _turtle_to_camel(words: list, is_pascal: bool) -> str:
-        return OntologyOwl._turtle_to_camel(words, is_pascal)
+        return Owl._turtle_to_camel(words, is_pascal)
 
     @staticmethod
     def _fix_snake_kebab_local_names(content: str) -> str:
-        return OntologyOwl._fix_snake_kebab_local_names(content)
+        return Owl._fix_snake_kebab_local_names(content)
 
     @staticmethod
     def _fix_spaced_local_names(content: str) -> str:
-        return OntologyOwl._fix_spaced_local_names(content)
+        return Owl._fix_spaced_local_names(content)
 
     @staticmethod
     def _fix_local_names(content: str) -> str:
-        return OntologyOwl._fix_local_names(content)
+        return Owl._fix_local_names(content)
 
     @staticmethod
     def clean_owl_output(content: str) -> str:
-        return OntologyOwl.clean_owl_output(content)
+        return Owl.clean_owl_output(content)
 
     def save_group(self, group: Dict, index: int = -1) -> List[Dict]:
-        return OntologyGroups(self._domain).save_group(group, index)
+        return Groups(self._domain).save_group(group, index)
 
     def delete_group(self, *, index: int = -1, name: str = "") -> List[Dict]:
-        return OntologyGroups(self._domain).delete_group(index=index, name=name)
+        return Groups(self._domain).delete_group(index=index, name=name)
 
     def update_group_members(
         self, group_name: str, *, add: List[str] = None, remove: List[str] = None
     ) -> List[Dict]:
-        return OntologyGroups(self._domain).update_group_members(group_name, add=add, remove=remove)
+        return Groups(self._domain).update_group_members(group_name, add=add, remove=remove)
 
     @staticmethod
     def _enforce_exclusive_membership(
         groups: List[Dict], authoritative_group_name: str
     ) -> None:
-        return OntologyGroups._enforce_exclusive_membership(groups, authoritative_group_name)
+        return Groups._enforce_exclusive_membership(groups, authoritative_group_name)
 
     def _sync_class_group_field(self, groups: List[Dict]) -> None:
-        return OntologyGroups(self._domain)._sync_class_group_field(groups)
+        return Groups(self._domain)._sync_class_group_field(groups)
 
     @staticmethod
     def calculate_owl_stats(owl_content: str) -> Dict:
-        return OntologyOwl.calculate_owl_stats(owl_content)
+        return Owl.calculate_owl_stats(owl_content)

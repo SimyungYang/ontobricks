@@ -109,7 +109,7 @@ are case-sensitive (`Person` and `person` are different).
 - Turtle export binds a lowercase sanitized ontology-name prefix plus
   `ontobricks:`.
 
-Implementation: `OntologyClassModel.ensure_uris`,
+Implementation: `ClassModel.ensure_uris`,
 `OntologyGenerator._effective_uri`.
 
 ---
@@ -318,10 +318,10 @@ Implementation: `OntologyRdfExtras` (`CONSUMED_PREDICATES` +
 
 | Concern | Primary types |
 |---|---|
-| Session / CRUD | `back.objects.ontology.Ontology`, `OntologyEditor`, `OntologyClassModel` |
+| Session / CRUD | `back.objects.ontology.Ontology`, `Editor`, `ClassModel` |
 | Parse / generate OWL | `back.core.w3c.owl.OntologyParser`, `OntologyGenerator`, `OntologyRdfExtras` |
-| Import apply | `back.objects.ontology.OntologyOwl`, `OntologyImport` |
-| Groups | `back.objects.ontology.OntologyGroups` |
+| Import apply | `back.objects.ontology.Owl`, `Import` |
+| Groups | `back.objects.ontology.Groups` |
 | Instance URIs (R2RML) | `back.core.w3c.r2rml.R2RMLGenerator` |
 | Local ID from URI | `back.objects.digitaltwin.TwinResolve.extract_local_id` |
 | Namespace constants | `shared.config.constants.ONTOBRICKS_NS`, `DEFAULT_BASE_URI` |

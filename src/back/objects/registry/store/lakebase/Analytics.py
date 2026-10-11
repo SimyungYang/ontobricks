@@ -21,7 +21,7 @@ def _require_psycopg():
     return _rp()
 
 
-class LakebaseRegistryAnalytics:
+class Analytics:
     """Cached graph metrics plus append-only analytics run rows."""
 
     _GRAPH_ANALYTICS_RUNS_CAP = 100

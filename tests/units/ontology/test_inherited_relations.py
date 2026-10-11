@@ -1,6 +1,6 @@
 """Outgoing relation inheritance (domain-side, read-time)."""
 
-from back.objects.ontology.OntologyClassModel import OntologyClassModel
+from back.objects.ontology.ClassModel import ClassModel
 
 
 def _config():
@@ -40,7 +40,7 @@ def _config():
 
 
 def test_own_relation_is_not_marked_inherited():
-    rels = OntologyClassModel.outgoing_relations_for_class(_config(), "Personne")
+    rels = ClassModel.outgoing_relations_for_class(_config(), "Personne")
     names = {r["name"]: r for r in rels}
     assert "habiteA" in names
     assert names["habiteA"]["inherited"] is False
@@ -49,7 +49,7 @@ def test_own_relation_is_not_marked_inherited():
 
 
 def test_subclass_inherits_parent_object_property():
-    rels = OntologyClassModel.outgoing_relations_for_class(_config(), "Employe")
+    rels = ClassModel.outgoing_relations_for_class(_config(), "Employe")
     by_name = {r["name"]: r for r in rels}
     assert by_name["habiteA"]["inherited"] is True
     assert by_name["habiteA"]["inheritedFrom"] == "Personne"
@@ -57,7 +57,7 @@ def test_subclass_inherits_parent_object_property():
 
 
 def test_grandchild_inherits_from_declaring_class():
-    rels = OntologyClassModel.outgoing_relations_for_class(_config(), "Manager")
+    rels = ClassModel.outgoing_relations_for_class(_config(), "Manager")
     habite = next(r for r in rels if r["name"] == "habiteA")
     assert habite["inheritedFrom"] == "Personne"
     knows = next(r for r in rels if r["name"] == "knows")
@@ -65,16 +65,16 @@ def test_grandchild_inherits_from_declaring_class():
 
 
 def test_parent_cycle_does_not_loop():
-    rels = OntologyClassModel.outgoing_relations_for_class(_config(), "CycleA")
+    rels = ClassModel.outgoing_relations_for_class(_config(), "CycleA")
     assert rels == []
 
 
 def test_missing_parent_is_skipped():
-    rels = OntologyClassModel.outgoing_relations_for_class(_config(), "Orphan")
+    rels = ClassModel.outgoing_relations_for_class(_config(), "Orphan")
     assert rels == []
 
 
 def test_does_not_mutate_config_properties():
     cfg = _config()
-    OntologyClassModel.outgoing_relations_for_class(cfg, "Employe")
+    ClassModel.outgoing_relations_for_class(cfg, "Employe")
     assert "inherited" not in cfg["properties"][0]

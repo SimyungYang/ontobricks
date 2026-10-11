@@ -7,7 +7,7 @@ from typing import Any, Dict, List
 from back.objects.domain.payload import resolve_domain_slice
 
 
-class OntologyJsonViews:
+class JsonViews:
     """Slice ontology classes/properties from a domain JSON dict."""
 
     @staticmethod
@@ -63,6 +63,6 @@ class OntologyJsonViews:
         ]
 
 
-get_ontology_info = OntologyJsonViews.get_ontology_info
-get_ontology_classes = OntologyJsonViews.get_ontology_classes
-get_ontology_properties = OntologyJsonViews.get_ontology_properties
+get_ontology_info = JsonViews.get_ontology_info
+get_ontology_classes = JsonViews.get_ontology_classes
+get_ontology_properties = JsonViews.get_ontology_properties

@@ -15,7 +15,7 @@ from back.core.errors import (
 )
 from back.objects.domain.settings.ScheduleSettings import ScheduleSettings
 from back.objects.domain.settings.SettingsService import SettingsService
-from back.objects.registry.scheduler_tasks import TASK_BUILD, TASK_CACHE_REFRESH
+from back.objects.registry.schedule import TASK_BUILD, TASK_CACHE_REFRESH
 
 pytestmark = pytest.mark.unit
 

@@ -1,4 +1,4 @@
-"""Real SQL of :class:`LakebaseRegistryCollab` and :class:`LakebaseRegistryEditLocks`.
+"""Real SQL of :class:`Collab` and :class:`EditLocks`.
 
 Comments/tasks CRUD plus the single-editor DRAFT lock: atomic acquire with
 same-holder refresh, admin take-over, stale-lease reclaim, holder-scoped

@@ -99,9 +99,9 @@ def test_admin_passes_the_gate(gcs, monkeypatch, method, args, store_call):
     perm = MagicMock()
     perm.is_admin.return_value = True
     monkeypatch.setattr(_ss, "permission_service", perm)
-    import back.objects.registry.lockmgt as lockmgt
+    import back.objects.registry.collab as collab
 
-    monkeypatch.setattr(lockmgt.EditLockService, "_ttl_seconds", staticmethod(lambda sm, st: 0))
+    monkeypatch.setattr(collab.EditLockService, "_ttl_seconds", staticmethod(lambda sm, st: 0))
 
     result = getattr(WorkspaceUiSettings, method)(*args, "admin@x", "utok", MagicMock(), MagicMock())
 
@@ -406,9 +406,9 @@ class TestDataAssetsImportLimit:
 
 class TestEditLockTtl:
     def test_get_mirrors_edit_lock_service(self, monkeypatch):
-        import back.objects.registry.lockmgt as lockmgt
+        import back.objects.registry.collab as collab
 
-        monkeypatch.setattr(lockmgt.EditLockService, "_ttl_seconds", staticmethod(lambda sm, st: 600))
+        monkeypatch.setattr(collab.EditLockService, "_ttl_seconds", staticmethod(lambda sm, st: 600))
         assert WorkspaceUiSettings.get_edit_lock_ttl_result(MagicMock(), MagicMock()) == {
             "success": True,
             "edit_lock_ttl_s": 600,

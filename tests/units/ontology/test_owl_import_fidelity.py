@@ -5,7 +5,7 @@ import pytest
 from rdflib import DCTERMS, OWL, RDF, RDFS, Graph, Literal, URIRef
 from rdflib.namespace import SKOS, XSD, Namespace
 
-from back.objects.ontology.OntologyOwl import OntologyOwl
+from back.objects.ontology.Owl import Owl
 
 PROV = Namespace("http://www.w3.org/ns/prov#")
 EX = Namespace("http://example.org/onto#")
@@ -42,9 +42,9 @@ ex:hasName a owl:DatatypeProperty ;
 
 def _roundtrip() -> Graph:
     info, classes, properties, constraints, swrl, axioms, expressions, groups = (
-        OntologyOwl.parse_owl(ISSUE_194_TTL, extract_advanced=True)
+        Owl.parse_owl(ISSUE_194_TTL, extract_advanced=True)
     )
-    turtle = OntologyOwl.generate_owl(
+    turtle = Owl.generate_owl(
         {
             "base_uri": info.get("namespace") or info.get("uri"),
             "name": info.get("label") or info.get("name") or "",
@@ -66,10 +66,10 @@ def _roundtrip() -> Graph:
 
 @pytest.mark.unit
 def test_generate_owl_reads_rdf_extras_from_config():
-    info, classes, properties, *_rest = OntologyOwl.parse_owl(
+    info, classes, properties, *_rest = Owl.parse_owl(
         ISSUE_194_TTL, extract_advanced=True
     )
-    turtle = OntologyOwl.generate_owl(
+    turtle = Owl.generate_owl(
         {
             "base_uri": info["namespace"],
             "name": info["label"],

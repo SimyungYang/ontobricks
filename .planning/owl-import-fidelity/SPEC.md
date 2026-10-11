@@ -51,7 +51,7 @@ parser/generator unit tests) stay green. Classes created in Designer with no
 ### 4.1 Header (`label` vs `name`)
 
 `OntologyParser.get_ontology_info()` already returns `label`.
-`OntologyImport.apply_parsed_owl_to_domain` must use
+`Import.apply_parsed_owl_to_domain` must use
 `ontology_info.get("label")` (then `name`) before falling back to the domain
 name. Persist `ontology["name"]` from the file label when present.
 
@@ -129,7 +129,7 @@ properties. Generator emits `Literal(value, lang=...)` when set. Default
 
 ```
 Turtle → OntologyParser (info, classes, properties, constraints, …, rdf_extras)
-      → OntologyImport.apply_parsed_owl_to_domain (persist rdf_extras)
+      → Import.apply_parsed_owl_to_domain (persist rdf_extras)
       → OntologyGenerator.generate (IRIs + rdf_extras)
       → Turtle
 ```

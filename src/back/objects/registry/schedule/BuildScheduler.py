@@ -7,7 +7,7 @@ materialisations, graph analytics, and inference — on APScheduler's
 
 The scheduler itself knows nothing about what any given job *does*: a
 schedule carries a ``task_type`` that selects a
-:class:`~back.objects.registry.scheduler_tasks.TaskTypeSpec`, plus a
+:class:`~back.objects.registry.schedule.TaskTypeSpec`, plus a
 free-form ``config`` dict that the spec validates. Adding a job kind
 means adding a spec, not touching this module.
 
@@ -49,8 +49,10 @@ from apscheduler.triggers.interval import IntervalTrigger
 from back.core.errors import InfrastructureError, ValidationError
 from back.core.logging import get_logger
 
-from .scheduler_tasks import RunOutcome, TaskContext, get_task_type
-from .store.base import parse_schedule_key, schedule_key
+from .RunOutcome import RunOutcome
+from .TaskContext import TaskContext
+from . import get_task_type
+from back.objects.registry.store.base import parse_schedule_key, schedule_key
 
 logger = get_logger(__name__)
 

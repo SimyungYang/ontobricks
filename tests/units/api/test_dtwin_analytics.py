@@ -88,7 +88,7 @@ def test_the_scheduler_gates_on_the_same_preflight(monkeypatch):
 
     import back.core.graph_analysis as graph_analysis
     from back.core.errors import ValidationError
-    from back.objects.registry.scheduler_tasks import analytics
+    from back.objects.registry.schedule import analytics
 
     monkeypatch.setattr(
         graph_analysis,

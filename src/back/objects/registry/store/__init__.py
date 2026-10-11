@@ -3,7 +3,7 @@
 The :class:`RegistryStore` ABC is the single seam between the registry
 services (:mod:`back.objects.registry.RegistryService`,
 :mod:`back.objects.registry.PermissionService`,
-:mod:`back.objects.registry.scheduler`,
+:mod:`back.objects.registry.schedule.BuildScheduler`,
 :mod:`back.objects.session.GlobalConfigService`) and the underlying
 Lakebase Postgres storage.
 

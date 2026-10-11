@@ -17,10 +17,26 @@ Permissions
    :undoc-members:
    :show-inheritance:
 
+Comments
+--------
+
+.. automodule:: back.objects.registry.collab.CommentService
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+Review
+------
+
+.. automodule:: back.objects.registry.collab.ReviewService
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 Edit Lock (single-editor)
 --------------------------
 
-.. automodule:: back.objects.registry.lockmgt.EditLockService
+.. automodule:: back.objects.registry.collab.EditLockService
    :members:
    :undoc-members:
    :show-inheritance:
@@ -28,7 +44,7 @@ Edit Lock (single-editor)
 Build Scheduler
 ---------------
 
-.. automodule:: back.objects.registry.scheduler
+.. automodule:: back.objects.registry.schedule.BuildScheduler
    :members:
    :undoc-members:
    :show-inheritance:

@@ -9,8 +9,8 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, Tuple
 
 from back.core.errors import NotFoundError, ValidationError
 from back.core.logging import get_logger
-from back.objects.ontology.OntologyClassModel import OntologyClassModel
-from back.objects.ontology.OntologyOwl import OntologyOwl
+from back.objects.ontology.ClassModel import ClassModel
+from back.objects.ontology.Owl import Owl
 
 if TYPE_CHECKING:
     from back.objects.session.DomainSession import DomainSession
@@ -18,7 +18,7 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
-class OntologyEditor:
+class Editor:
     """Persist ontology edits against the current domain session."""
 
     def __init__(self, session: "DomainSession") -> None:
@@ -125,7 +125,7 @@ class OntologyEditor:
         old_classes = list(s.get_classes())
         old_props = list(s.get_properties())
         ontology_config = raw_body.get("config", raw_body)
-        ontology_config = OntologyClassModel.ensure_uris(ontology_config)
+        ontology_config = ClassModel.ensure_uris(ontology_config)
 
         def _on_replace(prop: Dict[str, Any], field: str, old: Any, new: Any) -> None:
             logger.debug(
@@ -136,7 +136,7 @@ class OntologyEditor:
                 new,
             )
 
-        OntologyClassModel.normalize_property_domain_range(
+        ClassModel.normalize_property_domain_range(
             ontology_config, on_replace=_on_replace
         )
 
@@ -144,7 +144,7 @@ class OntologyEditor:
         # its class. Without this the mirror in ``properties`` survives and
         # ``sync_class_data_properties`` resurrects the attribute on the next
         # load (the "deleted attribute keeps coming back" bug).
-        orphaned_props = OntologyClassModel.prune_orphaned_datatype_properties(ontology_config)
+        orphaned_props = ClassModel.prune_orphaned_datatype_properties(ontology_config)
         if orphaned_props:
             logger.info(
                 "Pruned %d orphaned datatype property(ies) removed in the editor",
@@ -237,7 +237,7 @@ class OntologyEditor:
         return {
             "success": True,
             "message": "Ontology saved",
-            "stats": OntologyOwl.get_ontology_stats(ontology_config),
+            "stats": Owl.get_ontology_stats(ontology_config),
             "mappings_cleaned": {
                 "entity_mappings_removed": removed_entity,
                 "relationship_mappings_removed": removed_rel,
@@ -450,7 +450,7 @@ class OntologyEditor:
         """Build a class from *data*, append if unique URI and name, clear cache and save."""
         s = self._domain
         classes = list(s.get_classes())
-        new_class = OntologyClassModel.build_class_from_data(data)
+        new_class = ClassModel.build_class_from_data(data)
         if any(c.get("uri") == new_class["uri"] for c in classes):
             raise ValidationError("Class with this URI already exists")
         if any(c.get("name") == new_class["name"] for c in classes):
@@ -478,7 +478,7 @@ class OntologyEditor:
                     if any(c.get("name") == new_name for j, c in enumerate(classes) if j != i):
                         raise ValidationError("Class with this name already exists")
                 old_cls = dict(cls)
-                classes[i] = OntologyClassModel.build_class_from_data(data, cls)
+                classes[i] = ClassModel.build_class_from_data(data, cls)
                 s.ontology["classes"] = classes
                 s.clear_generated_content()
                 meta = s.diff_meta(old_cls, classes[i])
@@ -497,7 +497,7 @@ class OntologyEditor:
         """Build a property from *data*, append if unique URI and name, clear cache and save."""
         s = self._domain
         properties = list(s.get_properties())
-        new_property = OntologyClassModel.build_property_from_data(data)
+        new_property = ClassModel.build_property_from_data(data)
         if any(p.get("uri") == new_property["uri"] for p in properties):
             raise ValidationError("Property with this URI already exists")
         if any(p.get("name") == new_property["name"] for p in properties):
@@ -526,7 +526,7 @@ class OntologyEditor:
                     if any(p.get("name") == new_name for j, p in enumerate(properties) if j != i):
                         raise ValidationError("Property with this name already exists")
                 old_prop = dict(prop)
-                properties[i] = OntologyClassModel.build_property_from_data(data, prop)
+                properties[i] = ClassModel.build_property_from_data(data, prop)
                 s.ontology["properties"] = properties
                 s.clear_generated_content()
                 meta = s.diff_meta(old_prop, properties[i])

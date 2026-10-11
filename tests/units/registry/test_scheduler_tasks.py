@@ -18,7 +18,7 @@ import pytest
 from back.core.errors import InfrastructureError, ValidationError
 from back.core.task_manager.TaskStatus import TaskStatus
 from back.objects.digitaltwin import DigitalTwin
-from back.objects.registry.scheduler_tasks import (
+from back.objects.registry.schedule import (
     TASK_TYPES,
     RunOutcome,
     get_task_type,
@@ -176,7 +176,7 @@ def _ctx(**over):
 
 class TestAnalyticsExecutor:
     def test_it_delegates_to_run_metrics_task(self):
-        from back.objects.registry.scheduler_tasks import analytics
+        from back.objects.registry.schedule import analytics
 
         ctx = _ctx()
         with patch(
@@ -191,7 +191,7 @@ class TestAnalyticsExecutor:
         assert kwargs["top_n"] == 25
 
     def test_a_blocked_domain_never_submits_the_job(self):
-        from back.objects.registry.scheduler_tasks import analytics
+        from back.objects.registry.schedule import analytics
 
         with patch(
             "back.core.graph_analysis.analytics_job_status",
@@ -206,7 +206,7 @@ class TestAnalyticsExecutor:
 
 class TestReasoningExecutor:
     def test_the_config_becomes_inference_options(self):
-        from back.objects.registry.scheduler_tasks import reasoning
+        from back.objects.registry.schedule import reasoning
 
         ctx = _ctx(
             task_type="reasoning",
@@ -229,7 +229,7 @@ class TestReasoningExecutor:
         assert run_inference.call_args[1]["build_kind"] == "scheduled"
 
     def test_an_invalid_config_stops_before_the_delegate(self):
-        from back.objects.registry.scheduler_tasks import reasoning
+        from back.objects.registry.schedule import reasoning
 
         ctx = _ctx(
             task_type="reasoning",
@@ -243,7 +243,7 @@ class TestReasoningExecutor:
 
 class TestCacheRefreshExecutor:
     def test_lakebase_rebuilds_the_selected_graph(self):
-        from back.objects.registry.scheduler_tasks import cache_refresh
+        from back.objects.registry.schedule import cache_refresh
 
         store = MagicMock(supports_adjacency=True)
         ctx = _ctx(
@@ -266,7 +266,7 @@ class TestCacheRefreshExecutor:
         assert outcome.count == 0
 
     def test_databricks_uses_a_write_capable_store(self):
-        from back.objects.registry.scheduler_tasks import cache_refresh
+        from back.objects.registry.schedule import cache_refresh
 
         store = MagicMock(supports_adjacency=True)
         ctx = _ctx(
@@ -287,7 +287,7 @@ class TestCacheRefreshExecutor:
 
     @pytest.mark.parametrize("backend", ["neo4j", "none", "unexpected"])
     def test_unsupported_backends_fail_before_rebuild(self, backend):
-        from back.objects.registry.scheduler_tasks import cache_refresh
+        from back.objects.registry.schedule import cache_refresh
 
         ctx = _ctx(task_type="cache_refresh", domain=object())
         with patch.object(
@@ -301,7 +301,7 @@ class TestCacheRefreshExecutor:
         get_store.assert_not_called()
 
     def test_a_missing_store_fails(self):
-        from back.objects.registry.scheduler_tasks import cache_refresh
+        from back.objects.registry.schedule import cache_refresh
 
         ctx = _ctx(
             task_type="cache_refresh",
@@ -318,7 +318,7 @@ class TestCacheRefreshExecutor:
                 cache_refresh.run(ctx)
 
     def test_a_store_without_adjacency_support_never_rebuilds(self):
-        from back.objects.registry.scheduler_tasks import cache_refresh
+        from back.objects.registry.schedule import cache_refresh
 
         store = MagicMock(supports_adjacency=False)
         ctx = _ctx(
@@ -356,7 +356,7 @@ class TestOutcomeFromTask:
         return tm
 
     def test_a_completed_task_yields_its_count_and_detail(self):
-        from back.objects.registry.scheduler import _outcome_from_task
+        from back.objects.registry.schedule.BuildScheduler import _outcome_from_task
 
         tm = self._tm(
             TaskStatus.COMPLETED,
@@ -370,7 +370,7 @@ class TestOutcomeFromTask:
         assert outcome.detail == {"node_count": 314, "duration_ms": 900}
 
     def test_a_failed_task_surfaces_its_error(self):
-        from back.objects.registry.scheduler import _outcome_from_task
+        from back.objects.registry.schedule.BuildScheduler import _outcome_from_task
 
         tm = self._tm(TaskStatus.FAILED, error="warehouse unreachable")
         outcome = _outcome_from_task(tm, "task-1", get_task_type("reasoning"))
@@ -379,7 +379,7 @@ class TestOutcomeFromTask:
         assert outcome.message == "warehouse unreachable"
 
     def test_a_vanished_task_is_an_error_not_a_crash(self):
-        from back.objects.registry.scheduler import _outcome_from_task
+        from back.objects.registry.schedule.BuildScheduler import _outcome_from_task
 
         tm = MagicMock()
         tm.get_task.return_value = None
@@ -398,8 +398,12 @@ class _Harness:
     """Drives ``_run_scheduled_task`` with every collaborator stubbed."""
 
     def __init__(self, monkeypatch, spec_run, *, delegates=False, on_finish=None):
-        from back.objects.registry import scheduler as sched_mod
-        from back.objects.registry.scheduler_tasks import TaskTypeSpec
+        import importlib
+
+        sched_mod = importlib.import_module(
+            "back.objects.registry.schedule.BuildScheduler"
+        )
+        from back.objects.registry.schedule import TaskTypeSpec
 
         self.module = sched_mod
         self.status_calls = []

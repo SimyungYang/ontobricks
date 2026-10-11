@@ -22,7 +22,7 @@ def _require_psycopg():
     return _rp()
 
 
-class LakebaseRegistryChangeEvents:
+class ChangeEvents:
     """Ontology/mapping change audit rows."""
 
     def _ensure_change_events_table(self) -> bool:

@@ -22,7 +22,7 @@ def _require_psycopg():
     return _rp()
 
 
-class LakebaseRegistryBuildRuns:
+class BuildRuns:
     """Append-only Knowledge Graph build-run trace."""
 
     def _ensure_build_runs_table(self) -> bool:

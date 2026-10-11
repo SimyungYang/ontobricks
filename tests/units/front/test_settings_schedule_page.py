@@ -39,7 +39,7 @@ class TestTheTypeSelector:
         assert f'value="{task_type}"' in template
 
     def test_the_radios_match_the_backend_registry(self, template):
-        from back.objects.registry.scheduler_tasks import TASK_TYPES
+        from back.objects.registry.schedule import TASK_TYPES
 
         for key in TASK_TYPES:
             assert f'value="{key}"' in template, f"no radio for '{key}'"
@@ -53,7 +53,7 @@ class TestPerTypeFieldGroups:
         assert 'id="scheduleOutputUc"' in template
 
     def test_reasoning_offers_all_six_phases(self, template):
-        from back.objects.registry.scheduler_tasks.reasoning import PHASES
+        from back.objects.registry.schedule.reasoning import PHASES
 
         for phase in PHASES:
             assert f'data-phase="{phase}"' in template, f"no toggle for '{phase}'"
@@ -74,7 +74,7 @@ class TestPerTypeFieldGroups:
 
 class TestTheScriptIsTypeDriven:
     def test_the_descriptor_covers_every_backend_type(self, script):
-        from back.objects.registry.scheduler_tasks import TASK_TYPES
+        from back.objects.registry.schedule import TASK_TYPES
 
         descriptors = script.split("const TYPES = {")[1].split("\n    };")[0]
         for key in TASK_TYPES:

@@ -25,7 +25,7 @@ from back.objects.registry.PermissionService import (
     ROLE_VIEWER,
     ROLE_NONE,
 )
-from back.objects.registry.ReviewService import (
+from back.objects.registry.collab.ReviewService import (
     ACTION_APPROVED,
     ACTION_CHANGES_REQUESTED,
     ACTION_PUBLISHED,
@@ -34,7 +34,7 @@ from back.objects.registry.ReviewService import (
     ReviewService,
 )
 
-_mod = importlib.import_module("back.objects.registry.ReviewService")
+_mod = importlib.import_module("back.objects.registry.collab.ReviewService")
 
 
 def _request(email="alice@acme.com"):

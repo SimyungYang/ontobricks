@@ -88,7 +88,7 @@ The Lakeflow side is driven through a thin
 The build pipeline orchestrates the full sequence in
 :py:meth:`back.objects.digitaltwin.build._build_pipeline._BuildPipeline._apply_via_synced_pipeline`
 and the scheduler mirrors it in
-``back.objects.registry.scheduler._apply_synced_pipeline``.
+``back.objects.registry.schedule.build._apply_synced_pipeline``.
 
 Synced table manager
 ~~~~~~~~~~~~~~~~~~~~

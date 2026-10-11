@@ -25,7 +25,7 @@ def _require_psycopg():
     return _rp()
 
 
-class LakebaseRegistryCatalog:
+class Catalog:
     """Domain folders, versions, and per-domain permissions."""
 
     def list_domain_folders(self) -> Tuple[bool, List[str], str]:

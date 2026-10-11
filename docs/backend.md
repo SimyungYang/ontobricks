@@ -1608,7 +1608,7 @@ diff is wasted work. `_refresh_snapshot` is also skipped (Lakeflow is the
 truth).
 
 The scheduler mirrors this logic via `_apply_synced_pipeline` in
-`back/objects/registry/scheduler.py`.
+`back/objects/registry/schedule/BuildScheduler.py`.
 
 #### Read paths
 

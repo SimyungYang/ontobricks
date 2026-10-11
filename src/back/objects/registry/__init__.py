@@ -62,26 +62,30 @@ def __getattr__(name: str):
     so importing them eagerly here would create a fragile import cycle.
     """
     if name == "ReviewService":
-        from back.objects.registry.ReviewService import (
+        from back.objects.registry.collab.ReviewService import (
             ReviewService as _ReviewService,
         )
 
         globals()["ReviewService"] = _ReviewService
         return _ReviewService
     if name == "CommentService":
-        from back.objects.registry.CommentService import (
+        from back.objects.registry.collab.CommentService import (
             CommentService as _CommentService,
         )
 
         globals()["CommentService"] = _CommentService
         return _CommentService
     if name == "BuildScheduler":
-        from back.objects.registry.scheduler import BuildScheduler as _BuildScheduler
+        from back.objects.registry.schedule.BuildScheduler import (
+            BuildScheduler as _BuildScheduler,
+        )
 
         globals()["BuildScheduler"] = _BuildScheduler
         return _BuildScheduler
     if name == "get_scheduler":
-        from back.objects.registry.scheduler import get_scheduler as _get_scheduler
+        from back.objects.registry.schedule.BuildScheduler import (
+            get_scheduler as _get_scheduler,
+        )
 
         globals()["get_scheduler"] = _get_scheduler
         return _get_scheduler

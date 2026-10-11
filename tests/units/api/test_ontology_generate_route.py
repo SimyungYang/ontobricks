@@ -7,7 +7,7 @@ import pytest
 from rdflib import Graph, Literal, URIRef
 from rdflib.namespace import SKOS
 
-from back.objects.ontology.OntologyOwl import OntologyOwl
+from back.objects.ontology.Owl import Owl
 
 pytestmark = pytest.mark.unit
 
@@ -32,7 +32,7 @@ async def test_generate_owl_uses_session_extras_missing_from_payload(monkeypatch
         ex:Customer a owl:Class ;
             skos:definition "A customer preserved from import."@en .
     """
-    info, classes, properties, *_ = OntologyOwl.parse_owl(
+    info, classes, properties, *_ = Owl.parse_owl(
         source, extract_advanced=True
     )
     domain = SimpleNamespace(

@@ -1,7 +1,7 @@
 """Real SQL of the review/validation and change-audit mixins.
 
-:class:`LakebaseRegistryReviewEvents` records lifecycle transitions;
-:class:`LakebaseRegistryChangeEvents` records ontology/mapping edits with
+:class:`ReviewEvents` records lifecycle transitions;
+:class:`ChangeEvents` records ontology/mapping edits with
 before→after payloads in ``meta``. Both are driven through a scripted cursor.
 """
 

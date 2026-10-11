@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from typing import Any, Callable, Dict, List, Optional
 
-class OntologyClassModel:
+class ClassModel:
     """URI hygiene, class/property builders, completeness checks."""
 
     @staticmethod
@@ -142,7 +142,7 @@ class OntologyClassModel:
         """Sync datatype properties onto classes and propagate inheritance."""
         from back.core.w3c.owl.OntologyParser import OntologyParser
 
-        OntologyClassModel.sync_class_data_properties(config)
+        ClassModel.sync_class_data_properties(config)
         classes = config.get("classes", [])
         if classes:
             OntologyParser._propagate_inherited_properties(classes)
@@ -181,7 +181,7 @@ class OntologyClassModel:
         if ptype in ("ObjectProperty",):
             return True
         range_val = (prop.get("range") or "").lower()
-        return range_val not in OntologyClassModel._PRIMITIVE_RANGES
+        return range_val not in ClassModel._PRIMITIVE_RANGES
 
     @staticmethod
     def outgoing_relations_for_class(
@@ -194,13 +194,13 @@ class OntologyClassModel:
         """
         classes = config.get("classes") or []
         properties = config.get("properties") or []
-        declaring = {class_name, *OntologyClassModel.ancestor_names(classes, class_name)}
+        declaring = {class_name, *ClassModel.ancestor_names(classes, class_name)}
         out: List[Dict[str, Any]] = []
         for prop in properties:
             domain = prop.get("domain") or ""
             if domain not in declaring:
                 continue
-            if not OntologyClassModel._is_object_property(prop):
+            if not ClassModel._is_object_property(prop):
                 continue
             if not prop.get("range"):
                 continue

@@ -10,8 +10,8 @@ from back.core.reasoning.swrl.SWRLSQLTranslator import SWRLSQLTranslator
 from back.core.w3c.owl.OntologyGenerator import OntologyGenerator
 from back.core.w3c.owl.OntologyParser import OntologyParser
 from back.objects.digitaltwin import NodeBusinessRuleService, NodeContextService
-from back.objects.ontology import OntologyRules
-from back.objects.ontology.OntologyClassModel import OntologyClassModel
+from back.objects.ontology import Rules
+from back.objects.ontology.ClassModel import ClassModel
 
 pytestmark = pytest.mark.unit
 
@@ -52,25 +52,25 @@ CLASSES = [
 
 
 def test_swrl_rule_classes_lists_unary_unprefixed_atoms():
-    assert OntologyRules.swrl_rule_classes(VIP_RULE) == {"customer", "order", "vip"}
-    assert OntologyRules.swrl_rule_classes(ORDER_RULE) == {"order", "bigorder"}
+    assert Rules.swrl_rule_classes(VIP_RULE) == {"customer", "order", "vip"}
+    assert Rules.swrl_rule_classes(ORDER_RULE) == {"order", "bigorder"}
 
 
 def test_rules_for_class_includes_ancestor_rules():
     rules = [VIP_RULE, ORDER_RULE, PERSON_RULE]
-    names = [r["name"] for r in OntologyRules.rules_for_class("Customer", rules, CLASSES)]
+    names = [r["name"] for r in Rules.rules_for_class("Customer", rules, CLASSES)]
     assert names == ["VipCustomer", "PersonRule"]
 
 
 def test_rules_for_class_matches_consequent_only_class():
-    names = [r["name"] for r in OntologyRules.rules_for_class("VIP", [VIP_RULE], [])]
+    names = [r["name"] for r in Rules.rules_for_class("VIP", [VIP_RULE], [])]
     assert names == ["VipCustomer"]
 
 
 def test_focus_variables_follow_lineage():
-    assert OntologyRules.swrl_focus_variables(VIP_RULE, ["Customer", "Person"]) == ["?c"]
-    assert OntologyRules.swrl_focus_variables(PERSON_RULE, ["Customer", "Person"]) == ["?p"]
-    assert OntologyRules.swrl_focus_variables(ORDER_RULE, ["Customer"]) == []
+    assert Rules.swrl_focus_variables(VIP_RULE, ["Customer", "Person"]) == ["?c"]
+    assert Rules.swrl_focus_variables(PERSON_RULE, ["Customer", "Person"]) == ["?p"]
+    assert Rules.swrl_focus_variables(ORDER_RULE, ["Customer"]) == []
 
 
 # ---------------------------------------------------------------------------
@@ -79,7 +79,7 @@ def test_focus_variables_follow_lineage():
 
 def test_class_model_preserves_business_rules_on_partial_update():
     existing = {"name": "Customer", "business_rules": [{"name": "VipCustomer"}]}
-    built = OntologyClassModel.build_class_from_data({"label": "C"}, existing)
+    built = ClassModel.build_class_from_data({"label": "C"}, existing)
     assert built["business_rules"] == [{"name": "VipCustomer"}]
 
 
@@ -100,9 +100,9 @@ def test_rename_and_drop_cascade():
         {"name": "A", "business_rules": [{"name": "R1"}, {"name": "R2"}]},
         {"name": "B", "business_rules": [{"name": "R1"}]},
     ]
-    assert OntologyRules.rename_business_rule_refs(classes, "R1", "R9") == 2
+    assert Rules.rename_business_rule_refs(classes, "R1", "R9") == 2
     assert classes[1]["business_rules"] == [{"name": "R9"}]
-    assert OntologyRules.drop_business_rule_refs(classes, "R9") == 2
+    assert Rules.drop_business_rule_refs(classes, "R9") == 2
     assert classes[0]["business_rules"] == [{"name": "R2"}]
     assert classes[1]["business_rules"] == []
 

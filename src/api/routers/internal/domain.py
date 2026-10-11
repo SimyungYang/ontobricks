@@ -239,7 +239,7 @@ async def close_domain(
     the caller is only a viewer the release is a harmless no-op (the lock is
     keyed by holder e-mail).
     """
-    from back.objects.registry.lockmgt import EditLockService
+    from back.objects.registry.collab import EditLockService
 
     EditLockService.release_for_session(request, session_mgr, settings)
     domain = get_domain(session_mgr)
@@ -497,7 +497,7 @@ async def load_domain_from_uc(
     lock after the load to avoid a needless release/re-acquire when reopening
     the same version.)
     """
-    from back.objects.registry.lockmgt import EditLockService
+    from back.objects.registry.collab import EditLockService
 
     data = await request.json()
     domain_name = data.get("domain", data.get("project"))
@@ -687,7 +687,7 @@ async def set_version_status(
         and result.get("success")
         and new_status.upper() != "DRAFT"
     ):
-        from back.objects.registry.lockmgt import EditLockService
+        from back.objects.registry.collab import EditLockService
 
         EditLockService.force_release(
             session_mgr, settings, domain_name, version
@@ -712,7 +712,7 @@ async def get_edit_lock(
     acquired_at, is_self, is_admin, can_take_over}``. A non-forcing acquire
     is performed so the editor keeps the lock across page reloads.
     """
-    from back.objects.registry.lockmgt import EditLockService
+    from back.objects.registry.collab import EditLockService
 
     return EditLockService.status(request, session_mgr, settings)
 
@@ -724,7 +724,7 @@ async def acquire_edit_lock(
     settings: Settings = Depends(get_settings),
 ):
     """(Re)acquire the lock. ``force`` (admin-only) is the "Take over" action."""
-    from back.objects.registry.lockmgt import EditLockService
+    from back.objects.registry.collab import EditLockService
 
     try:
         data = await request.json()
@@ -743,7 +743,7 @@ async def release_edit_lock(
     settings: Settings = Depends(get_settings),
 ):
     """Release the current user's lock (the "Close" button)."""
-    from back.objects.registry.lockmgt import EditLockService
+    from back.objects.registry.collab import EditLockService
 
     return EditLockService.release(request, session_mgr, settings)
 
@@ -759,7 +759,7 @@ async def renew_edit_lock(
     Returns ``{success, renewed}``; ``renewed=false`` tells the client its
     editing session expired (the stale lease was reclaimed by another user).
     """
-    from back.objects.registry.lockmgt import EditLockService
+    from back.objects.registry.collab import EditLockService
 
     return EditLockService.renew(request, session_mgr, settings)
 

@@ -1,22 +1,22 @@
-"""LLM Turtle cleanup helpers on :class:`OntologyOwl` (release 0.9.0 extract)."""
+"""LLM Turtle cleanup helpers on :class:`Owl` (release 0.9.0 extract)."""
 
 import pytest
 
 from back.objects.ontology.Ontology import Ontology
-from back.objects.ontology.OntologyOwl import OntologyOwl
+from back.objects.ontology.Owl import Owl
 
 pytestmark = pytest.mark.unit
 
 
 class TestTurtleToCamel:
     def test_empty_word_list_yields_empty_string(self):
-        assert OntologyOwl._turtle_to_camel([], is_pascal=True) == ""
+        assert Owl._turtle_to_camel([], is_pascal=True) == ""
 
     def test_camel_case_skips_empty_words(self):
-        assert OntologyOwl._turtle_to_camel(["First", "", "name"], is_pascal=False) == "firstName"
+        assert Owl._turtle_to_camel(["First", "", "name"], is_pascal=False) == "firstName"
 
     def test_pascal_case_joins_capitalized_words(self):
-        assert OntologyOwl._turtle_to_camel(["street", "address"], is_pascal=True) == "StreetAddress"
+        assert Owl._turtle_to_camel(["street", "address"], is_pascal=True) == "StreetAddress"
 
 
 class TestSnakeKebabFix:
@@ -31,7 +31,7 @@ class TestSnakeKebabFix:
         ],
     )
     def test_converts_only_bare_local_names(self, source, expected):
-        assert OntologyOwl._fix_snake_kebab_local_names(source) == expected
+        assert Owl._fix_snake_kebab_local_names(source) == expected
 
 
 class TestSpacedFix:
@@ -46,7 +46,7 @@ class TestSpacedFix:
         ],
     )
     def test_joins_space_separated_words(self, source, expected):
-        assert OntologyOwl._fix_spaced_local_names(source) == expected
+        assert Owl._fix_spaced_local_names(source) == expected
 
     @pytest.mark.parametrize(
         "line",
@@ -60,13 +60,13 @@ class TestSpacedFix:
         ],
     )
     def test_leaves_comments_directives_and_non_names_unchanged(self, line):
-        assert OntologyOwl._fix_spaced_local_names(line) == line
+        assert Owl._fix_spaced_local_names(line) == line
 
     def test_word_followed_by_another_bare_name_is_not_merged(self):
-        assert OntologyOwl._fix_spaced_local_names(":Order date :foo .") == ":Order date :foo ."
+        assert Owl._fix_spaced_local_names(":Order date :foo .") == ":Order date :foo ."
 
     def test_trailing_spaces_kept(self):
-        assert OntologyOwl._fix_spaced_local_names(":Order   ") == ":Order   "
+        assert Owl._fix_spaced_local_names(":Order   ") == ":Order   "
 
     @pytest.mark.parametrize(
         "line",
@@ -77,12 +77,12 @@ class TestSpacedFix:
         ],
     )
     def test_existing_camel_case_names_are_preserved(self, line):
-        assert OntologyOwl._fix_spaced_local_names(line) == line
+        assert Owl._fix_spaced_local_names(line) == line
 
 
 class TestFixLocalNames:
     def test_snake_case_name_becomes_camel_case(self):
-        assert OntologyOwl._fix_local_names(":first_name a owl:DatatypeProperty .") == (
+        assert Owl._fix_local_names(":first_name a owl:DatatypeProperty .") == (
             ":firstName a owl:DatatypeProperty ."
         )
 
@@ -90,42 +90,42 @@ class TestFixLocalNames:
 class TestCleanOwlOutput:
     def test_extracts_fenced_turtle_block_and_drops_prose(self):
         content = "Here you go:\n```turtle\n@prefix : <http://x#> .\n:street address a owl:Class .\n```\nbye"
-        assert OntologyOwl.clean_owl_output(content) == (
+        assert Owl.clean_owl_output(content) == (
             "@prefix : <http://x#> .\n:streetAddress a owl:Class ."
         )
 
     def test_unlabelled_fence_without_closing_newline(self):
-        assert OntologyOwl.clean_owl_output("```\n@prefix : <http://x#> .\n:A a owl:Class .") == (
+        assert Owl.clean_owl_output("```\n@prefix : <http://x#> .\n:A a owl:Class .") == (
             "@prefix : <http://x#> .\n:A a owl:Class ."
         )
 
     def test_fence_with_closing_marker_is_stripped(self):
         content = "```\n@prefix : <http://x#> .\n:A a owl:Class .\n```"
-        assert OntologyOwl.clean_owl_output(content) == "@prefix : <http://x#> .\n:A a owl:Class ."
+        assert Owl.clean_owl_output(content) == "@prefix : <http://x#> .\n:A a owl:Class ."
 
     def test_unknown_language_fence_is_stripped(self):
         content = "```owl\n@prefix : <http://x#> .\n:A a owl:Class .\n```"
-        assert OntologyOwl.clean_owl_output(content) == "@prefix : <http://x#> .\n:A a owl:Class ."
+        assert Owl.clean_owl_output(content) == "@prefix : <http://x#> .\n:A a owl:Class ."
 
     def test_preamble_before_prefix_removed(self):
         content = "Sure! here\n@prefix : <http://x#> .\n:A a owl:Class ."
-        assert OntologyOwl.clean_owl_output(content) == "@prefix : <http://x#> .\n:A a owl:Class ."
+        assert Owl.clean_owl_output(content) == "@prefix : <http://x#> .\n:A a owl:Class ."
 
     def test_preamble_before_base_removed(self):
         content = "text\n@base <http://x/> .\n@prefix : <http://x#> ."
-        assert OntologyOwl.clean_owl_output(content).startswith("@base")
+        assert Owl.clean_owl_output(content).startswith("@base")
 
 
 class TestOwlStats:
     def test_counts_both_declaration_styles(self):
-        stats = OntologyOwl.calculate_owl_stats(
+        stats = Owl.calculate_owl_stats(
             "a owl:Class rdf:type owl:Class a owl:ObjectProperty "
             "rdf:type owl:DatatypeProperty"
         )
         assert stats == {"classes": 2, "properties": 1, "dataProperties": 1}
 
     def test_invalid_input_returns_zero_stats(self):
-        assert OntologyOwl.calculate_owl_stats(None) == {
+        assert Owl.calculate_owl_stats(None) == {
             "classes": 0, "properties": 0, "dataProperties": 0,
         }
 

@@ -64,9 +64,10 @@ scope:
 ### Subpackage Patterns (reference)
 
 **`back/objects/registry/`** — service + scheduler + permissions + pluggable store (reference pattern for multi-concern domain areas):
-- `RegistryService.py` — owns all CRUD; delegates persistence to a `RegistryStore`. Constructor receives `RegistryCfg` (dataclass).
-- `permissions.py` — `PermissionService` encapsulates permission checks. Role constants are module-level.
-- `scheduler.py` — `BuildScheduler` wraps APScheduler. Module-level `get_scheduler()` returns singleton.
+- `RegistryService.py` — owns all CRUD; delegates persistence to a `RegistryStore`. Constructor receives `RegistryCfg` (dataclass). Entry-point class stays at the package root.
+- `PermissionService.py` — encapsulates permission checks. Role constants are module-level.
+- `collab/` — `CommentService`, `ReviewService`, `EditLockService` (single-editor DRAFT lock).
+- `schedule/` — `BuildScheduler` wraps APScheduler; task-type specs live beside it. Module-level `get_scheduler()` returns the singleton.
 - `store/` — backend abstraction. Single concrete store, built via `RegistryFactory.from_cfg(...)`:
   - `store/lakebase/LakebaseRegistryStore.py` — domains/versions/permissions/schedules/global config in Lakebase Postgres (autoscaling only). Domain-scoped binary artefacts (the `documents/` uploads imported by the ontology designer) **must still go to the UC Volume** via `VolumeFileService` — the store handles JSON-shaped data only.
 - Lakebase coordinates (host/db/schema) and the Volume triplet come from the Databricks App config — never hard-coded in code; user-visible only through **Settings → Registry**.

@@ -28,11 +28,11 @@ SHACL evaluators), and adds CI ratchets so the codebase cannot regress.
 |---|---|---|---|
 | 1 | FastAPI types in `back/objects/` | `session/SessionManager.py:10` (`Request`, `get_session_manager` dependency), `session/FileSessionMiddleware.py` (Starlette middleware) | `.cursor/07`, `.coding_rules §1` |
 | 2 | FastAPI router living under `back/` | `back/fastapi/graphql_routes.py` (`APIRouter`, 642 LOC, 13 functions + 3 models) | `.coding_rules §1` |
-| 3 | Error envelopes instead of `OntoBricksError` | 41 `{"success": False}`: `agents/tools/planner.py` (19), `registry/lockmgt/EditLockService.py` (6), `store/lakebase/LakebaseRegistryBootstrap.py` (4), PGE generators, `GraphEngineLakebaseSettings.py` | `.coding_rules §4` |
+| 3 | Error envelopes instead of `OntoBricksError` | 41 `{"success": False}`: `agents/tools/planner.py` (19), `registry/collab/EditLockService.py` (6), `store/lakebase/Bootstrap.py` (4), PGE generators, `GraphEngineLakebaseSettings.py` | `.coding_rules §4` |
 | 4 | Broad exception handling | 746 `except Exception`, 39 of which swallow (`pass` / `return None/[]/{}`). Top: `Domain.py` (35), `health.py` (26), `_build_pipeline.py` (20), `internal/dtwin.py` (20) | `.coding_rules §4` |
 | 5 | Fat route handlers | 97 handlers > 30 LOC, 38 > 60 LOC. Worst: `domains.py::get_domain_design_status` (172), `internal/dtwin.py::dtwin_assistant_chat_stream` (167), `digitaltwin.py::dt_triples_find` (131) | `.coding_rules §1` ("routes are thin") |
 | 6 | Multiple public classes per file | 29 files (list in Part C, phase 1) | `.cursor/07 §Class-First` |
-| 7 | Filename ≠ class name | 33 single-class files (e.g. `registry/scheduler.py` → `BuildScheduler`, `external/pitfalls/runner.py` → `OntologyPatternToolkit`, `store/factory.py` → `RegistryFactory`, every `agents/*/engine.py` → `AgentResult`) | `.coding_rules §3` |
+| 7 | Filename ≠ class name | 33 single-class files (e.g. `registry/schedule/BuildScheduler.py` → `BuildScheduler`, `external/pitfalls/runner.py` → `OntologyPatternToolkit`, `store/factory.py` → `RegistryFactory`, every `agents/*/engine.py` → `AgentResult`) | `.coding_rules §3` |
 | 8 | Loose module functions in `back/`, `agents/`, `shared/` | 55 non-route modules with ≥ 3 public functions (e.g. `shared/fastapi/health.py` 32 funcs / 1668 LOC, `graphdb/delta/_table_naming.py` 21, `delta/materialize.py` 18, `lakebase/_companion_ddl.py` 21) | `.coding_rules §2` |
 | 9 | Ad-hoc background task | `api/routers/internal/dtwin.py:2243` `asyncio.create_task(...)` (verify whether streaming justifies it; otherwise `TaskManager`) | `.coding_rules §5` |
 | 10 | Module singletons via `global` | 10 sites (`GraphDBFactory`, `AgentClient`, `query_limits`, `LakebaseAuth`, `scheduler`, `registry_cache`, `mcp http_client`…) | `.coding_rules §2` (searchability / testability) |
@@ -160,7 +160,7 @@ that each move breaks (shown as *patches*).
 `pitfalls/runner.py → OntologyPatternToolkit.py`,
 `store/factory.py → RegistryFactory.py`,
 `store/lakebase/store.py → LakebaseRegistryStore.py`,
-`version_status.py → VersionStatusCache.py`, `json_views.py → OntologyJsonViews.py`,
+`version_status.py → VersionStatusCache.py`, `json_views.py → JsonViews.py`,
 `shared/fastapi/{csrf,timing,ui_branding}.py → CSRFMiddleware.py, …`, etc.
 
 **Layering fixes:** move `back/fastapi/graphql_routes.py` →

@@ -444,3 +444,123 @@ Modified files:
 
 Tests: `uv run --frozen pytest -q -m "not scenario"` → 8939 passed, 326 skipped,
 6 deselected, 1 xfailed, 40 warnings in 55.94s
+
+================================================================================
+## Regroup registry collab and schedule into topic sub-packages
+================================================================================
+
+Context: `back/objects/registry/` still mixed comments, review, the edit lock,
+and the scheduler at the package root after the digitaltwin/settings splits.
+Three or more modules share those topics (`.cursor/07 §Package Organisation 5`).
+Entry-point classes (`RegistryService`, `RegistryCfg`, `PermissionService`) stay
+at the root. No shims: every import, patch target, Sphinx automodule, doc path
+and baseline key was rewritten. `scheduler.py` is now `BuildScheduler.py` so
+the filename matches the class.
+
+Changes:
+1. src/back/objects/registry/collab/
+   CommentService, ReviewService, and EditLockService (was lockmgt/).
+2. src/back/objects/registry/schedule/
+   scheduler_tasks/ renamed; BuildScheduler.py moved in from scheduler.py.
+3. src/back/objects/registry/__init__.py
+   Lazy imports for ReviewService / CommentService / BuildScheduler updated.
+4. Callers in src/api, src/shared, src/back/objects/domain/settings, and tests/
+   import and patch paths rewritten; no leftover lockmgt or scheduler_tasks.
+5. docs/architecture.md, docs/backend.md, docs/sphinx/api/app.objects.registry.rst,
+   .cursor/07-project-conventions.mdc — package tree and Sphinx automodules.
+6. tests/units/architecture/baseline.json
+   Ratchet dropped the BuildScheduler filename-mismatch entry.
+
+Modified files:
+- src/back/objects/registry/collab/** (new package)
+- src/back/objects/registry/schedule/** (renamed from scheduler_tasks + BuildScheduler)
+- src/back/objects/registry/__init__.py, store/__init__.py
+- src/api/routers/internal/{comments,review,domain,home,settings}.py
+- src/shared/fastapi/main.py
+- src/back/objects/domain/settings/{ScheduleSettings,WorkspaceUiSettings}.py
+- tests/units/registry/*, tests/units/api/test_edit_lock_endpoints.py,
+  tests/units/api/test_dtwin_analytics.py, tests/units/settings/test_v090_settings_*,
+  tests/units/architecture/baseline.json, tests/units/core/test_lakebase_flat_store.py,
+  tests/units/front/test_settings_schedule_page.py
+- docs/architecture.md, docs/backend.md, docs/sphinx/api/*.rst
+- .cursor/07-project-conventions.mdc
+- changelogs/v0.9.0/benoitcayladbx_2026-10-11.log
+
+Tests: `uv run --frozen pytest -q -m "not scenario"` → 8939 passed, 326 skipped,
+6 deselected, 1 xfailed, 40 warnings in 95.24s
+
+================================================================================
+## Drop the redundant LakebaseRegistry prefix from Lakebase store mixins
+================================================================================
+
+Context: every mixin under `back/objects/registry/store/lakebase/` was named
+`LakebaseRegistry<Topic>`, which only repeats the package path. Files and
+classes are renamed to the topic alone (Rename Class); filenames still match
+their class (`.cursor/07 §Class-First Policy`). `LakebaseRegistryStore` keeps
+its name as the package's public entry point. No shims; every importer, test
+docstring, and baseline key was rewritten.
+
+Changes:
+1. src/back/objects/registry/store/lakebase/
+   Analytics, Bootstrap, BuildRuns, Catalog, ChangeEvents, Collab, Documents,
+   EditLocks, GlobalConfig, ReviewEvents, Schedules (were LakebaseRegistry*).
+2. src/back/objects/registry/store/lakebase/__init__.py, store.py
+   Imports, base-class list, and submodule docstring updated.
+3. tests/units/registry/test_v090_lakebase_*.py, test_mcp_policy_column.py
+   Class references updated.
+4. tests/units/architecture/baseline.json
+   Method-size keys follow the renamed files (no new entries).
+5. .planning/class-per-file-refactor/PLAN.md — path reference updated.
+
+Modified files:
+- src/back/objects/registry/store/lakebase/*.py (11 renames + __init__.py, store.py)
+- tests/units/registry/test_v090_lakebase_{audit,bootstrap,build_runs_analytics,catalog,collab_locks,documents,schedules}.py
+- tests/units/registry/test_mcp_policy_column.py
+- tests/units/architecture/baseline.json
+- .planning/class-per-file-refactor/PLAN.md
+- changelogs/v0.9.0/benoitcayladbx_2026-10-11.log
+
+Tests: `uv run --frozen pytest -q -m "not scenario"` → 8939 passed, 326 skipped,
+6 deselected, 1 xfailed, 40 warnings in 80.88s
+
+================================================================================
+## Drop the redundant Ontology prefix from ontology collaborators
+================================================================================
+
+Context: every collaborator under `back/objects/ontology/` was named
+`Ontology<Topic>`, which only repeats the package path. Files and classes are
+renamed to the topic alone (Rename Class); filenames still match their class.
+The package entry-point `Ontology` keeps its name (`.cursor/07 §Package
+Organisation 5`). Explorer's `TwinOntologyGroups` is a different class and was
+left alone. No shims.
+
+Changes:
+1. src/back/objects/ontology/
+   ClassModel, Editor, EntityImport, Import, Owl, Rules, Groups, JsonViews
+   (were Ontology*; json_views.py now JsonViews.py).
+2. src/back/objects/ontology/__init__.py, Ontology.py
+   Re-exports and facade imports updated.
+3. Callers in src/api/routers/internal/ontology.py, NodeBusinessRuleService,
+   and ontology/dtwin tests rewritten.
+4. docs/sphinx/api/app.objects.ontology.rst, docs/architecture.md,
+   docs/advanced_features.md — automodule paths and class names.
+5. tests/units/architecture/baseline.json
+   Method-size keys follow the renamed files; JsonViews.py dropped from the
+   filename-mismatch list (name now matches the class).
+
+Modified files:
+- src/back/objects/ontology/{ClassModel,Editor,EntityImport,Import,Owl,Rules,Groups,JsonViews}.py
+- src/back/objects/ontology/__init__.py, Ontology.py
+- src/api/routers/internal/ontology.py
+- src/back/objects/digitaltwin/node/NodeBusinessRuleService.py
+- tests/units/ontology/test_{ontology_service,entity_import,inherited_relations,owl_import_fidelity,v090_ontology_*}.py
+- tests/units/api/test_ontology_generate_route.py
+- tests/units/dtwin/test_entity_business_rules.py
+- tests/units/architecture/baseline.json
+- docs/sphinx/api/app.objects.ontology.rst, docs/architecture.md, docs/advanced_features.md
+- .planning/owl-import-fidelity/{PLAN,SPEC}.md, .planning/class-per-file-refactor/PLAN.md
+- changelogs/v0.9.0/benoitcayladbx_2026-10-11.log
+
+Tests: `uv run --frozen pytest -q -m "not scenario"` → 8939 passed, 326 skipped,
+6 deselected, 1 xfailed, 40 warnings in 77.86s
+

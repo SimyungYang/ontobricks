@@ -1,4 +1,4 @@
-"""Real SQL of :class:`LakebaseRegistrySchedules` against a scripted cursor.
+"""Real SQL of :class:`Schedules` against a scripted cursor.
 
 Complements ``test_schedule_store.py`` with the failure paths and the
 legacy cohort import edge cases (key fallback, malformed keys, migration

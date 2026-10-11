@@ -1,4 +1,4 @@
-"""Real SQL of the Lakebase Knowledge Store (:class:`LakebaseRegistryDocuments`).
+"""Real SQL of the Lakebase Knowledge Store (:class:`Documents`).
 
 Documents moved from UC Volumes to the ``domain_documents`` table in 0.9.0;
 the parsed corpus is carried forward across versions (text only, never the

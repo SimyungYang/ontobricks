@@ -20,7 +20,7 @@ from back.core.errors import (
 )
 from back.objects.session import SessionManager, get_session_manager
 from shared.config.settings import get_settings, Settings
-from back.objects.ontology import Ontology, OntologyRules
+from back.objects.ontology import Ontology, Rules
 from back.objects.ontology.generate import GenerateWorkflow
 from back.objects.session import get_domain
 from back.core.task_manager import get_task_manager
@@ -898,7 +898,7 @@ async def save_swrl_rule(
 
         domain.swrl_rules = rules
         if is_update:
-            OntologyRules.rename_business_rule_refs(
+            Rules.rename_business_rule_refs(
                 domain.get_classes(), old.get("name", ""), rule.get("name", "")
             )
         domain.record_change(
@@ -936,7 +936,7 @@ async def delete_swrl_rule(
         if removed_name and not any(
             isinstance(r, dict) and r.get("name") == removed_name for r in rules
         ):
-            OntologyRules.drop_business_rule_refs(domain.get_classes(), removed_name)
+            Rules.drop_business_rule_refs(domain.get_classes(), removed_name)
         domain.record_change(
             "swrl_removed", entity_type="swrl",
             entity_ref=removed_name, summary=removed_name,
@@ -1812,11 +1812,11 @@ async def entity_import_catalog(
 ):
     """Entities and relationships of another domain, flagged against the current one."""
     with map_route_errors("Loading entity import catalog failed", logger):
-        from back.objects.ontology import OntologyEntityImport
+        from back.objects.ontology import EntityImport
 
         domain = get_domain(session_mgr)
         source, version = await _load_source_ontology(domain, settings, domain_name)
-        catalog = OntologyEntityImport.build_catalog(source, domain.ontology)
+        catalog = EntityImport.build_catalog(source, domain.ontology)
         return {"success": True, "domain": domain_name, "version": version, **catalog}
 
 

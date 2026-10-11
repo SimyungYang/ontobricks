@@ -20,7 +20,7 @@ from back.core.logging import get_logger
 from back.objects.digitaltwin.DigitalTwin import DigitalTwin
 from back.objects.digitaltwin.models import DomainSnapshot
 from back.objects.digitaltwin.build.TwinInferredMaterialize import TwinInferredMaterialize
-from back.objects.ontology.OntologyRules import OntologyRules
+from back.objects.ontology.Rules import Rules
 
 logger = get_logger(__name__)
 
@@ -113,8 +113,8 @@ class NodeBusinessRuleService:
             )
 
         rule = next(r for r in swrl_rules if r.get("name") == requested)
-        lineage = OntologyRules.class_lineage(domain.get_classes() or [], class_name)
-        focus_vars = OntologyRules.swrl_focus_variables(rule, lineage)
+        lineage = Rules.class_lineage(domain.get_classes() or [], class_name)
+        focus_vars = Rules.swrl_focus_variables(rule, lineage)
         if not focus_vars:
             raise ValidationError(
                 f"Business rule {requested!r} has no variable typed by {class_name!r}"

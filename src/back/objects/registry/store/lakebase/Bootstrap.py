@@ -26,7 +26,7 @@ def _require_psycopg():
     return _rp()
 
 
-class LakebaseRegistryBootstrap:
+class Bootstrap:
     """Schema bootstrap, USAGE diagnostics, and app GRANTs."""
 
     def is_initialized(self) -> bool:

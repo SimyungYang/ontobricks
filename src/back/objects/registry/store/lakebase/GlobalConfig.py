@@ -27,7 +27,7 @@ def _require_psycopg():
     return _rp()
 
 
-class LakebaseRegistryGlobalConfig:
+class GlobalConfig:
     """Warehouse and engine JSON blob; strips legacy schedule keys."""
 
     def load_global_config(self) -> Dict[str, Any]:

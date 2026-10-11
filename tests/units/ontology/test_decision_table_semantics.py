@@ -2,7 +2,7 @@
 
 from back.core.reasoning.rules.DecisionTableEngine import DecisionTableEngine
 from back.core.reasoning.constants import RDF_TYPE
-from back.objects.ontology.OntologyRules import OntologyRules
+from back.objects.ontology.Rules import Rules
 
 BASE = "http://test.org/ontology#"
 DATA = "http://test.org/ontology/"
@@ -145,7 +145,7 @@ class TestAssignEntity:
 
     def test_reference_errors_flag_unknown_assigned_class(self):
         dt = _table(output_column={"property": "", "action": "assign_class", "value": "Ghost"})
-        errors = OntologyRules.decision_table_reference_errors(
+        errors = Rules.decision_table_reference_errors(
             dt, {"customer", "highrisk"}, {"income", "country", "risktier"}
         )
         assert any("Ghost" in e for e in errors)

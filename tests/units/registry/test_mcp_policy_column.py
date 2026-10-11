@@ -17,10 +17,10 @@ ROOT = Path(__file__).resolve().parents[3]
 SCHEMA_SQL = ROOT / "src/back/objects/registry/store/lakebase/schema.sql"
 STORE_PY = ROOT / "src/back/objects/registry/store/lakebase/store.py"
 CATALOG_PY = (
-    ROOT / "src/back/objects/registry/store/lakebase/LakebaseRegistryCatalog.py"
+    ROOT / "src/back/objects/registry/store/lakebase/Catalog.py"
 )
 BOOTSTRAP_PY = (
-    ROOT / "src/back/objects/registry/store/lakebase/LakebaseRegistryBootstrap.py"
+    ROOT / "src/back/objects/registry/store/lakebase/Bootstrap.py"
 )
 MIGRATION = ROOT / "scripts/migrations/upgrade_0.7_to_0.8.sql"
 BOOTSTRAP = ROOT / "scripts/bootstrap/lakebase-perms.sh"

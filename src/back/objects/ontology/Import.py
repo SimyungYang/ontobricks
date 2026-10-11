@@ -17,8 +17,8 @@ from back.core.industry import (
 from back.core.logging import get_logger
 from back.core.w3c.owl import ConflictReport, OntologyConflictDetector
 from shared.config.constants import DEFAULT_BASE_URI
-from back.objects.ontology.OntologyClassModel import OntologyClassModel
-from back.objects.ontology.OntologyOwl import OntologyOwl
+from back.objects.ontology.ClassModel import ClassModel
+from back.objects.ontology.Owl import Owl
 
 if TYPE_CHECKING:
     from back.objects.session.DomainSession import DomainSession
@@ -49,7 +49,7 @@ _INDUSTRY_FETCH = {
 }
 
 
-class OntologyImport:
+class Import:
     """Parse and merge vocabularies into the current domain session."""
 
     def __init__(self, session: "DomainSession") -> None:
@@ -70,7 +70,7 @@ class OntologyImport:
         - ``"parse"`` → :meth:`build_parse_owl_success_payload`
         - ``"load_file"`` → :meth:`build_load_owl_file_success_payload`
         """
-        result = OntologyOwl.parse_owl(owl_content, extract_advanced=True)
+        result = Owl.parse_owl(owl_content, extract_advanced=True)
         (
             ontology_info,
             classes,
@@ -89,7 +89,7 @@ class OntologyImport:
             if shacl is not None:
                 return shacl
             try:
-                rdfs_info, rdfs_classes, rdfs_props = OntologyOwl.parse_rdfs(owl_content)
+                rdfs_info, rdfs_classes, rdfs_props = Owl.parse_rdfs(owl_content)
                 if rdfs_classes or rdfs_props:
                     logger.info(
                         "ingest_owl: OWL parse empty — falling back to RDFS/SKOS parser "
@@ -152,7 +152,7 @@ class OntologyImport:
         if shacl_result is not None:
             return shacl_result
 
-        ontology_info, classes, properties = OntologyOwl.parse_rdfs(rdfs_content)
+        ontology_info, classes, properties = Owl.parse_rdfs(rdfs_content)
         self._domain.ontology.update(
             {
                 "name": ontology_info.get("label", "Imported Vocabulary"),
@@ -166,7 +166,7 @@ class OntologyImport:
                 "comment_lang": None,
             }
         )
-        OntologyClassModel.sync_class_data_properties(self._domain.ontology)
+        ClassModel.sync_class_data_properties(self._domain.ontology)
         self._domain.save()
         return {
             "success": True,
@@ -247,7 +247,7 @@ class OntologyImport:
                     "It has been automatically imported into Data Quality. "
                     "Use the Data Quality tab to view the imported shapes."
                 )
-            ontology_info, classes, properties = OntologyOwl.parse_rdfs(owl_content)
+            ontology_info, classes, properties = Owl.parse_rdfs(owl_content)
             logger.debug(
                 "analyze_import: RDFS parsed — classes=%d properties=%d",
                 len(classes), len(properties),
@@ -269,7 +269,7 @@ class OntologyImport:
             }
         else:
             logger.debug("analyze_import: parsing as OWL")
-            result = OntologyOwl.parse_owl(owl_content, extract_advanced=True)
+            result = Owl.parse_owl(owl_content, extract_advanced=True)
             (
                 _ontology_info,
                 classes,
@@ -289,7 +289,7 @@ class OntologyImport:
             # Auto-fallback: OWL parser found nothing → try RDFS/SKOS
             if not classes and not properties:
                 try:
-                    rdfs_info, rdfs_classes, rdfs_props = OntologyOwl.parse_rdfs(owl_content)
+                    rdfs_info, rdfs_classes, rdfs_props = Owl.parse_rdfs(owl_content)
                     if rdfs_classes or rdfs_props:
                         logger.info(
                             "analyze_import: OWL parse empty — falling back to RDFS/SKOS "
@@ -361,7 +361,7 @@ class OntologyImport:
             "merge_parsed_owl_to_domain: format=owl content_len=%d resolutions=%d key(s)",
             len(owl_content), len(resolutions),
         )
-        result = OntologyOwl.parse_owl(owl_content, extract_advanced=True)
+        result = Owl.parse_owl(owl_content, extract_advanced=True)
         (
             ontology_info,
             classes,
@@ -376,7 +376,7 @@ class OntologyImport:
         # Auto-fallback: OWL parser found nothing → try RDFS/SKOS
         if not classes and not properties:
             try:
-                rdfs_info, rdfs_classes, rdfs_props = OntologyOwl.parse_rdfs(owl_content)
+                rdfs_info, rdfs_classes, rdfs_props = Owl.parse_rdfs(owl_content)
                 if rdfs_classes or rdfs_props:
                     logger.info(
                         "merge_parsed_owl_to_domain: OWL parse empty — falling back to RDFS/SKOS "
@@ -435,8 +435,8 @@ class OntologyImport:
             "expression", ont.get("expressions") or [], report, resolutions
         )
 
-        OntologyClassModel.sync_class_data_properties(ont)
-        OntologyClassModel.finalize_class_attributes(ont)
+        ClassModel.sync_class_data_properties(ont)
+        ClassModel.finalize_class_attributes(ont)
         self._domain.clear_generated_content()
         self._domain.save()
 
@@ -479,7 +479,7 @@ class OntologyImport:
                 "It has been automatically imported into Data Quality. "
                 "Use the Data Quality tab to view the imported shapes."
             )
-        ontology_info, classes, properties = OntologyOwl.parse_rdfs(rdfs_content)
+        ontology_info, classes, properties = Owl.parse_rdfs(rdfs_content)
         logger.debug(
             "_merge_rdfs: parsed — classes=%d properties=%d",
             len(classes), len(properties),
@@ -735,8 +735,8 @@ class OntologyImport:
                 "groups": groups or [],
             }
         )
-        OntologyClassModel.sync_class_data_properties(self._domain.ontology)
-        OntologyClassModel.finalize_class_attributes(self._domain.ontology)
+        ClassModel.sync_class_data_properties(self._domain.ontology)
+        ClassModel.finalize_class_attributes(self._domain.ontology)
         self._domain.save()
         return resolved_name
 

@@ -13,7 +13,7 @@ from back.core.errors import ValidationError
 if TYPE_CHECKING:
     from back.objects.session.DomainSession import DomainSession
 
-class OntologyGroups:
+class Groups:
     """owl:unionOf-style entity groups on the domain session."""
 
     def __init__(self, session: "DomainSession") -> None:

@@ -8,7 +8,7 @@ import pytest
 
 from back.core.errors import ValidationError
 from back.objects.ontology.Ontology import Ontology
-from back.objects.ontology.OntologyGroups import OntologyGroups
+from back.objects.ontology.Groups import Groups
 
 pytestmark = pytest.mark.unit
 
@@ -40,7 +40,7 @@ def _actions(session):
 
 class TestSaveGroup:
     def test_create_appends_group_and_syncs_class_field(self, session):
-        groups = OntologyGroups(session).save_group(_group("Sales", ["Customer", "Order"]))
+        groups = Groups(session).save_group(_group("Sales", ["Customer", "Order"]))
         assert [g["name"] for g in groups] == ["Sales"]
         assert _class_groups(session) == {
             "Customer": "Sales", "Order": "Sales", "Invoice": "", "Region": "",
@@ -49,17 +49,17 @@ class TestSaveGroup:
 
     def test_name_is_required(self, session):
         with pytest.raises(ValidationError, match="Group name is required"):
-            OntologyGroups(session).save_group({"name": "   ", "members": ["Order"]})
+            Groups(session).save_group({"name": "   ", "members": ["Order"]})
 
     def test_duplicate_name_rejected_on_create(self, session):
-        svc = OntologyGroups(session)
+        svc = Groups(session)
         svc.save_group(_group("Sales", ["Customer"]))
         with pytest.raises(ValidationError, match="already exists"):
             svc.save_group(_group("Sales", ["Order"]))
         assert _members(session) == {"Sales": ["Customer"]}
 
     def test_update_by_index_replaces_group_and_records_diff(self, session):
-        svc = OntologyGroups(session)
+        svc = Groups(session)
         svc.save_group(_group("Sales", ["Customer"], color="red"))
         svc.save_group(_group("Sales", ["Customer", "Invoice"], color="blue"), index=0)
         assert _members(session) == {"Sales": ["Customer", "Invoice"]}
@@ -68,14 +68,14 @@ class TestSaveGroup:
         assert event["meta"]["before"]["color"] == "red"
 
     def test_new_group_steals_members_from_other_groups(self, session):
-        svc = OntologyGroups(session)
+        svc = Groups(session)
         svc.save_group(_group("Sales", ["Customer", "Order"]))
         svc.save_group(_group("Billing", ["Order", "Invoice"]))
         assert _members(session) == {"Sales": ["Customer"], "Billing": ["Order", "Invoice"]}
         assert _class_groups(session)["Order"] == "Billing"
 
     def test_out_of_range_index_creates_instead_of_updating(self, session):
-        svc = OntologyGroups(session)
+        svc = Groups(session)
         svc.save_group(_group("Sales", ["Customer"]))
         svc.save_group(_group("Geo", ["Region"]), index=5)
         assert [g["name"] for g in session.groups] == ["Sales", "Geo"]
@@ -83,7 +83,7 @@ class TestSaveGroup:
 
 class TestDeleteGroup:
     def test_delete_by_index_clears_class_group_field(self, session):
-        svc = OntologyGroups(session)
+        svc = Groups(session)
         svc.save_group(_group("Sales", ["Customer"]))
         svc.save_group(_group("Geo", ["Region"]))
         groups = svc.delete_group(index=0)
@@ -94,14 +94,14 @@ class TestDeleteGroup:
         assert (event["action"], event["entity_ref"]) == ("group_removed", "Sales")
 
     def test_delete_by_name(self, session):
-        svc = OntologyGroups(session)
+        svc = Groups(session)
         svc.save_group(_group("Sales", ["Customer"]))
         svc.delete_group(name="Sales")
         assert session.groups == []
         assert all(v == "" for v in _class_groups(session).values())
 
     def test_delete_unknown_name_is_a_noop_but_audited(self, session):
-        svc = OntologyGroups(session)
+        svc = Groups(session)
         svc.save_group(_group("Sales", ["Customer"]))
         svc.delete_group(name="Ghost")
         assert _members(session) == {"Sales": ["Customer"]}
@@ -109,18 +109,18 @@ class TestDeleteGroup:
 
     def test_index_without_name_falls_back_to_index_ref(self, session):
         session.ontology["groups"] = [{"members": ["Order"]}]
-        OntologyGroups(session).delete_group(index=0)
+        Groups(session).delete_group(index=0)
         assert session.groups == []
         assert session._data["change_log"][-1]["entity_ref"] == "0"
 
     def test_missing_identifier_rejected(self, session):
         with pytest.raises(ValidationError, match="Provide index or name"):
-            OntologyGroups(session).delete_group()
+            Groups(session).delete_group()
 
 
 class TestUpdateGroupMembers:
     def test_add_and_remove_members(self, session):
-        svc = OntologyGroups(session)
+        svc = Groups(session)
         svc.save_group(_group("Sales", ["Customer", "Order"]))
         svc.update_group_members("Sales", add=["Invoice", "Invoice", ""], remove=["Order"])
         assert _members(session) == {"Sales": ["Customer", "Invoice"]}
@@ -129,7 +129,7 @@ class TestUpdateGroupMembers:
         }
 
     def test_moving_member_removes_it_from_previous_group(self, session):
-        svc = OntologyGroups(session)
+        svc = Groups(session)
         svc.save_group(_group("Sales", ["Customer", "Order"]))
         svc.save_group(_group("Billing", ["Invoice"]))
         svc.update_group_members("Billing", add=["Order"])
@@ -137,7 +137,7 @@ class TestUpdateGroupMembers:
         assert _class_groups(session)["Order"] == "Billing"
 
     def test_moving_several_members_at_once_keeps_membership_exclusive(self, session):
-        svc = OntologyGroups(session)
+        svc = Groups(session)
         svc.save_group(_group("Sales", ["Customer", "Order", "Invoice"]))
         svc.save_group(_group("Geo", ["Region"]))
         svc.update_group_members("Geo", add=["Customer", "Order"])
@@ -146,24 +146,24 @@ class TestUpdateGroupMembers:
         assert _members(session) == {"Sales": ["Invoice"], "Geo": ["Region", "Customer", "Order"]}
 
     def test_existing_member_not_duplicated(self, session):
-        svc = OntologyGroups(session)
+        svc = Groups(session)
         svc.save_group(_group("Sales", ["Customer"]))
         svc.update_group_members("Sales", add=["Customer"])
         assert _members(session) == {"Sales": ["Customer"]}
 
     def test_group_name_required(self, session):
         with pytest.raises(ValidationError, match="Group name is required"):
-            OntologyGroups(session).update_group_members("", add=["Order"])
+            Groups(session).update_group_members("", add=["Order"])
 
     def test_unknown_group_rejected(self, session):
         with pytest.raises(ValidationError, match="not found"):
-            OntologyGroups(session).update_group_members("Ghost", add=["Order"])
+            Groups(session).update_group_members("Ghost", add=["Order"])
 
 
 class TestHelpers:
     def test_exclusive_membership_ignores_unknown_authority(self):
         groups = [_group("A", ["x"]), _group("B", ["x"])]
-        OntologyGroups._enforce_exclusive_membership(groups, "Missing")
+        Groups._enforce_exclusive_membership(groups, "Missing")
         assert groups == [_group("A", ["x"]), _group("B", ["x"])]
 
 

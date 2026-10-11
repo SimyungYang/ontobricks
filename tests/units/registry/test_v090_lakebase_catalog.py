@@ -1,4 +1,4 @@
-"""Real SQL of :class:`LakebaseRegistryCatalog` against a scripted cursor.
+"""Real SQL of :class:`Catalog` against a scripted cursor.
 
 Covers domain/version CRUD, the guarded (Draft-only) version deletion, the
 lifecycle status update, permissions replacement, and the lazy column
