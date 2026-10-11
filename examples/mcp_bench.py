@@ -94,15 +94,7 @@ def run_question(
     opt_tools: bool = True,
 ) -> QuestionResult:
     result = QuestionResult(question=question)
-    tools_oi = tools_to_openai(tools_raw) if opt_tools else [
-        {"type": "function", "function": {
-            "name": t["name"],
-            "description": next(
-                (l for l in t.get("description","").splitlines() if l.strip()), ""
-            )[:200],
-            "parameters": t.get("inputSchema", {"type":"object","properties":{}}),
-        }} for t in tools_raw
-    ]
+    tools_oi = tools_to_openai(tools_raw, curated=opt_tools)
     messages: list[dict[str, Any]] = [
         {"role": "system", "content": build_system_prompt(domain, graphql_schema)},
         {"role": "user",   "content": question},

@@ -234,10 +234,10 @@ class DatabricksLLM:
 
 # ── OPT 1: tools → OpenAI format with curated descriptions ───────────────────
 
-def tools_to_openai(mcp_tools: list[dict]) -> list[dict]:
+def tools_to_openai(mcp_tools: list[dict], curated: bool = True) -> list[dict]:
     result = []
     for t in mcp_tools:
-        desc = _TOOL_DESCRIPTIONS.get(t["name"]) or (
+        desc = (curated and _TOOL_DESCRIPTIONS.get(t["name"])) or (
             next((l for l in t.get("description", "").splitlines() if l.strip()), "")[:200]
         )
         result.append({
@@ -407,9 +407,10 @@ def ask(
     domain: Optional[str] = None,
     graphql_schema: Optional[str] = None,
     compress: bool = True,
+    opt_tools: bool = True,
 ) -> str:
     """Run a question through the optimized agent loop."""
-    tools_oi = tools_to_openai(tools_raw)
+    tools_oi = tools_to_openai(tools_raw, curated=opt_tools)
     messages: list[dict] = [
         {"role": "system", "content": build_system_prompt(domain, graphql_schema)},
         {"role": "user",   "content": question},
@@ -489,7 +490,7 @@ def main() -> None:
         print(f"Domain '{args.domain}' warmed (schema {len(schema or '')} chars)")
 
     if args.list:
-        for t in tools_to_openai(tools):
+        for t in tools_to_openai(tools, curated=args.opt_tools):
             print(f"  {t['function']['name']:35} {t['function']['description'][:70]}")
         mcp.close()
         return
@@ -507,7 +508,7 @@ def main() -> None:
             print(f"\n{'─'*70}\n{q}\n{'─'*70}")
             print(ask(q, mcp, llm, tools,
                       domain=args.domain, graphql_schema=schema,
-                      compress=args.compress))
+                      compress=args.compress, opt_tools=args.opt_tools))
     finally:
         mcp.close()
         llm.close()

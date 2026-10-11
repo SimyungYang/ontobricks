@@ -564,3 +564,49 @@ Modified files:
 Tests: `uv run --frozen pytest -q -m "not scenario"` → 8939 passed, 326 skipped,
 6 deselected, 1 xfailed, 40 warnings in 77.86s
 
+
+================================================================================
+## Merge PR #193 (MCP client examples) and add tests for it
+================================================================================
+
+Context:
+PR #193 (generic MCP client, benchmark harness, client optimization guide) was
+squash-merged into 0.9.0 as 24732739. The two example scripts had no tests.
+Writing them showed that `mcp_client.py --no-opt-tools` was parsed but never
+used: the curated tool descriptions (OPT 1) could not be switched off, while
+`mcp_bench.py` kept its own copy of the fallback logic.
+
+Changes:
+1. examples/mcp_client.py
+   `tools_to_openai(..., curated=True)` switch; `ask(..., opt_tools=True)` and
+   the CLI (`--no-opt-tools`, also for `--list`) honour it.
+2. examples/mcp_bench.py
+   Baseline tool descriptions come from `tools_to_openai(curated=False)`
+   instead of a duplicated inline fallback.
+3. tests/units/examples/ (new: conftest.py, _fakes.py, 2 test files, 55 tests)
+   - test_mcp_client_example.py: curated descriptions must cover exactly the
+     server's `@mcp.tool` functions (drift guard) and the size tables only name
+     real tools; domain warm-up and system prompt; entity-block summarization
+     run against the server's real `_format_graphql_response` output (keeps the
+     matching entity, tie order, zero-score guard, per-section summaries);
+     result caps; agent loop (reasoning blocks stripped, compression and OPT 1
+     switches, 12-round limit); MCP streamable-HTTP parsing (SSE and JSON,
+     session id reuse, JSON-RPC errors, initialize warning) via
+     httpx.MockTransport; Databricks LLM request shape; CLI token retrieval.
+   - test_mcp_bench_example.py: per-round tokens and tool timings, raw size
+     measured before compression, baseline switches reach the LLM request,
+     error and max-round capture, tool stats and report hints.
+
+Modified files:
+- examples/mcp_client.py
+- examples/mcp_bench.py
+- tests/units/examples/__init__.py (new)
+- tests/units/examples/conftest.py (new)
+- tests/units/examples/_fakes.py (new)
+- tests/units/examples/test_mcp_client_example.py (new)
+- tests/units/examples/test_mcp_bench_example.py (new)
+- changelogs/v0.9.0/benoitcayladbx_2026-10-11.log
+
+Tests: `uv run --frozen pytest -q -m "not scenario"` → 8994 passed, 326 skipped,
+6 deselected, 1 xfailed (pre-existing), 40 warnings in 79.59s. The two OPT 1
+switch tests fail on the merged scripts and pass with the fix.
