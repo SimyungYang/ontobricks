@@ -227,12 +227,33 @@ def test_initialize_applies_ddl_and_upserts_registry_row():
 
 
 def test_initialize_reports_failure():
-    db = FakeDB().on("CREATE", raises=RuntimeError("perm"), once=False)
+    db = FakeDB().on(
+        "INSERT INTO \"ontobricks_registry\".registries",
+        raises=RuntimeError("perm"),
+        once=False,
+    )
 
-    ok, msg = make_store(db).initialize()
+    ok, msg = make_store(db, registry_id=None).initialize()
 
     assert ok is False
     assert msg == "Failed to initialise Lakebase registry: perm"
+
+
+def test_initialize_continues_when_ddl_fails_as_non_owner():
+    """App SP is DML-only: schema.sql owner errors must not block pinning the row."""
+    db = FakeDB().on(
+        "CREATE SCHEMA IF NOT EXISTS",
+        raises=RuntimeError("must be owner of table registries"),
+        once=False,
+    )
+    db.on("INSERT INTO \"ontobricks_registry\".registries", rows=[("reg-9",)])
+    store = make_store(db, registry_id=None)
+
+    ok, msg = store.initialize()
+
+    assert ok is True
+    assert store._registry_id == "reg-9"
+    assert "lakebase.example/databricks_postgres" in msg
 
 
 # ---------------------------------------------------------------------------

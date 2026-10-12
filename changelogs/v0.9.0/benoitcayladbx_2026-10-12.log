@@ -1,0 +1,26 @@
+================================================================================
+## Keep Initialize DML running when the app SP cannot apply DDL
+================================================================================
+
+Context:
+Reliance (0.8.1) cannot Initialize because Lakebase tables are owned by a
+provisioning service principal. schema.sql raises "must be owner of table"
+and that failure aborted the DML that pins catalog/schema/volume, returning
+502. Document reads in 0.9.0 go through the Lakebase Knowledge Store, so the
+OntoBricksRegistry volume fallback on generate is not required here.
+
+Changes:
+
+1. src/back/objects/registry/store/lakebase/Bootstrap.py
+   Treat `_apply_ddl()` as non-fatal; log a warning and still upsert the
+   registry row. DML failures still fail Initialize.
+2. tests/units/registry/test_v090_lakebase_bootstrap.py
+   Cover the non-owner DDL path and keep Initialize failing only on DML.
+
+Modified files:
+- src/back/objects/registry/store/lakebase/Bootstrap.py
+- tests/units/registry/test_v090_lakebase_bootstrap.py
+- changelogs/v0.9.0/benoitcayladbx_2026-10-12.log
+
+Tests: `uv run --frozen pytest -q -m "not scenario"` → 9001 passed, 326 skipped,
+6 deselected, 1 xfailed, 40 warnings in 60.65s.
