@@ -90,6 +90,8 @@ class Ontology:
         Typical use: call from a background thread; poll task status from HTTP.
         """
         from agents.agent_owl_generator import run_agent
+        from back.objects.registry import RegistryCfg
+        from shared.config.settings import get_settings
 
         s = self._domain
         ont = s.ontology
@@ -106,7 +108,7 @@ class Ontology:
             host=host,
             token=token,
             endpoint_name=endpoint_name,
-            registry=dict(s.registry),
+            registry=RegistryCfg.from_domain(s, get_settings()).as_dict(),
             metadata=metadata or {},
             guidelines=guidelines or "",
             options=options or {},
@@ -141,6 +143,8 @@ class Ontology:
         Typical use: call from a background thread; poll task status from HTTP.
         """
         from agents.agent_business_rules_generator import run_agent
+        from back.objects.registry import RegistryCfg
+        from shared.config.settings import get_settings
 
         s = self._domain
         ont = s.ontology
@@ -153,7 +157,7 @@ class Ontology:
             host=host,
             token=token,
             endpoint_name=endpoint_name,
-            registry=dict(s.registry),
+            registry=RegistryCfg.from_domain(s, get_settings()).as_dict(),
             ontology_design=self.agent_ontology_context(connected_only=True),
             base_uri=base_uri,
             options=options or {},
