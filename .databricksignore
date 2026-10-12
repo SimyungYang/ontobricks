@@ -21,8 +21,10 @@ venv/
 __pycache__/
 *.pyc
 *.egg-info/
-dist/
-build/
+# Root-only. A bare ``build/`` matches src/back/objects/digitaltwin/build/
+# and DAB (which also applies .gitignore) drops TwinGraphBuild from the app.
+/dist/
+/build/
 
 # ── Git / IDE / CI / planning ─────────────────────────────────
 .git/

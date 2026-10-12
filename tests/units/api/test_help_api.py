@@ -356,6 +356,27 @@ class TestHelpDeployBundle:
         assert "/app.yaml.template" not in excludes
         assert "src/mcp-server/app.yaml.template" not in excludes
 
+    def test_gitignore_does_not_drop_the_digitaltwin_build_package(self):
+        """DAB applies .gitignore. A bare ``build/`` pattern matches
+        ``src/back/objects/digitaltwin/build/`` and the app fails to import."""
+        import subprocess
+
+        gitignore = (_REPO_ROOT / ".gitignore").read_text(encoding="utf-8")
+        active = {
+            line.strip()
+            for line in gitignore.splitlines()
+            if line.strip() and not line.strip().startswith("#")
+        }
+        assert "build/" not in active, (
+            ".gitignore 'build/' is recursive and strips the TwinGraphBuild "
+            "package from the Apps workspace; use '/build/' for dist artifacts"
+        )
+        pkg = "src/back/objects/digitaltwin/build/__init__.py"
+        tracked = subprocess.check_output(
+            ["git", "ls-files", pkg], cwd=_REPO_ROOT, text=True
+        ).strip()
+        assert tracked == pkg
+
 
 class TestHelpDocFetch:
     def test_unknown_slug_returns_404(self, client):
