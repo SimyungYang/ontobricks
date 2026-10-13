@@ -536,7 +536,7 @@ async function openEntityPanelForEdit(idx, options = {}) {
     }
     
     const emoji = cls.emoji || OntologyState.defaultClassEmoji || '📦';
-    panel.querySelector('#sharedPanelTitle').innerHTML = `<i class="bi bi-pencil"></i> ${emoji} <span id="sharedPanelItemName">${cls.name}</span>`;
+    panel.querySelector('#sharedPanelTitle').innerHTML = `${emoji} <span id="sharedPanelItemName">${cls.name}</span>`;
     await renderEntityForm(panel, cls);
     attachDirtyTracking();
 }
@@ -3299,7 +3299,7 @@ async function openRelationshipPanelForEdit(idx, options = {}) {
         return;
     }
     
-    panel.querySelector('#sharedPanelTitle').innerHTML = `<i class="bi bi-pencil"></i> <span id="sharedPanelItemName">${prop.name}</span>`;
+    panel.querySelector('#sharedPanelTitle').innerHTML = `<span id="sharedPanelItemName">${prop.name}</span>`;
     await renderRelationshipForm(panel, prop);
     attachDirtyTracking();
 }

@@ -581,4 +581,87 @@ Modified files:
 
 Tests: PENDING
 
+================================================================================
+## Thin Ontology and Mapping split handles to 2px
+================================================================================
+
+Context:
+Ontology Studio and Mapping Studio used an 8px drag handle with a 3px grip
+between the canvas and the detail panel. Shrink the track to a quarter of
+that thickness so the split is a hairline; keep the 40px grip length.
+
+Changes:
+
+1. src/front/static/ontology/css/ontology-shared-panels.css
+   `.detail-panel-resize-handle` is 2px (column: 2px height); grip bar is 1px.
+2. tests/units/front/test_ontology_split_panel_layout.py
+   Contract on the 2px / 1px × 40px vertical handle.
+3. tests/units/front/test_mapping_designer_split_layout.py
+   Contract on the 2px / 40px × 1px horizontal handle.
+4. .cursor/11-frontend-design.mdc
+   Drag-handle dimensions in the split-panel contract.
+
+Modified files:
+- src/front/static/ontology/css/ontology-shared-panels.css
+- tests/units/front/test_ontology_split_panel_layout.py
+- tests/units/front/test_mapping_designer_split_layout.py
+- .cursor/11-frontend-design.mdc
+- changelogs/v0.9.0/benoitcayladbx_2026-10-13.log
+
+Tests: `uv run --frozen pytest -q tests/units/front/test_ontology_split_panel_layout.py tests/units/front/test_mapping_designer_split_layout.py` → 42 passed, 1 error at setup of `test_detail_panel_is_permanently_visible` (circular import in unrelated WIP `back.core.databricks.jobs`). Full `pytest -q -m "not scenario"` could not collect (273 errors, same import cycle).
+
+================================================================================
+## Halve Ontology and Mapping split-handle thickness again
+================================================================================
+
+Context:
+The 2px track still sat in a full 0.5rem gutter on each side (~18px valley).
+Halve the track and overlap half the gutter so the split is a hairline.
+
+Changes:
+
+1. src/front/static/ontology/css/ontology-shared-panels.css
+   1px track, 0.5px grip, ±0.25rem margin into the gutter; 8px invisible hit.
+2. tests/units/front/test_ontology_split_panel_layout.py
+   Contract on 1px / 0.5px × 40px and negative horizontal margins.
+3. tests/units/front/test_mapping_designer_split_layout.py
+   Same for the column split (1px height, ±0.25rem vertical margins).
+4. .cursor/11-frontend-design.mdc
+   Drag-handle contract.
+
+Modified files:
+- src/front/static/ontology/css/ontology-shared-panels.css
+- tests/units/front/test_ontology_split_panel_layout.py
+- tests/units/front/test_mapping_designer_split_layout.py
+- .cursor/11-frontend-design.mdc
+- changelogs/v0.9.0/benoitcayladbx_2026-10-13.log
+
+Tests: `uv run --frozen pytest -q tests/units/front/test_ontology_split_panel_layout.py tests/units/front/test_mapping_designer_split_layout.py` → 43 passed, 1 warning in 0.24s.
+
+================================================================================
+## Drop the pencil from the Ontology detail-panel title
+================================================================================
+
+Context:
+Selecting an entity or relationship in Ontology Studio prefixed the right
+pane heading with a pencil. The name (and entity emoji) is enough.
+
+Changes:
+
+1. src/front/static/ontology/js/ontology-shared-panels.js
+   Edit-mode entity and relationship titles no longer include `bi-pencil`.
+2. tests/units/front/test_ontology_split_panel_layout.py
+   Contract: those titles have no pencil.
+3. .cursor/11-frontend-design.mdc
+   Split-panel contract: selected titles have no pencil.
+
+Modified files:
+- src/front/static/ontology/js/ontology-shared-panels.js
+- tests/units/front/test_ontology_split_panel_layout.py
+- .cursor/11-frontend-design.mdc
+- changelogs/v0.9.0/benoitcayladbx_2026-10-13.log
+
+Tests: `uv run --frozen pytest -q tests/units/front/test_ontology_split_panel_layout.py` → 24 passed, 1 warning in 0.17s.
+
+
 

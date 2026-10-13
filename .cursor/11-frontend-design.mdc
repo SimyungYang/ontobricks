@@ -1080,12 +1080,14 @@ The contract:
   `--db-text-muted`, "Click on an entity or relationship to view
   details"). Clicking the empty canvas returns to that placeholder — and
   flushes any pending edit first, since it is the only way out.
+  A selected entity or relationship title has no pencil icon.
   Tabs inside the panel use `.ob-tabs.ob-tabs--compact`; area styles may retain
   only layout rules such as `flex-shrink`. Typography, spacing, overflow,
   focus, hover, and active states remain owned by the shared component.
 - **No close button.** The panel can't be dismissed, so a cross would be a
   dead control.
-- **Drag handle**: an `8px` hit area holding a `3px × 40px` bar,
+- **Drag handle**: a `1px` track holding a `0.5px × 40px` bar,
+  overlapping `0.25rem` of the `0.5rem` gutter on each side,
   `--db-border` at rest and `--db-primary` on hover or while dragging. The
   drag clamp must span the default width (Ontology: `200px`–`900px`).
 - **Host the panel on the wrapper, not on the canvas.** It is a *sibling*
