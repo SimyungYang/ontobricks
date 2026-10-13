@@ -631,7 +631,22 @@ begin_step "Verify synced source"
 
 # Critical files the apps need to boot. Paths are relative to the synced
 # bundle root (source_code_path "." for the UI, "src/mcp-server" for MCP).
-_CRITICAL_SYNCED_FILES=(run.py pyproject.toml src/mcp-server/pyproject.toml src/mcp-server/app.yaml src/mcp-server/app.yaml.template)
+# Entry/deps alone are not enough: a stale snapshot can skip an unchanged
+# module (identical mtime after a package rename) while run.py is present,
+# and the app then dies with ModuleNotFoundError. Probe the packages that
+# already burned us that way.
+_CRITICAL_SYNCED_FILES=(
+    "run.py"
+    "pyproject.toml"
+    "src/mcp-server/pyproject.toml"
+    "src/mcp-server/app.yaml"
+    "src/mcp-server/app.yaml.template"
+    "src/back/objects/registry/collab/__init__.py"
+    "src/back/objects/registry/collab/CommentService.py"
+    "src/back/objects/registry/collab/EditLockService.py"
+    "src/back/objects/registry/collab/ReviewService.py"
+    "src/back/objects/digitaltwin/build/__init__.py"
+)
 
 # Authoritative remote files dir from the resolved bundle; fall back to the
 # databricks.yml root_path convention if `bundle summary` is unavailable.

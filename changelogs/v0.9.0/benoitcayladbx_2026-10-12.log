@@ -54,3 +54,34 @@ Modified files:
 
 Tests: `uv run --frozen pytest -q -m "not scenario"` → 9002 passed, 326 skipped,
 6 deselected, 1 xfailed, 40 warnings in 60.12s.
+
+================================================================================
+## Re-check collab modules after a stale DAB sync snapshot
+================================================================================
+
+Context:
+The 0.9.0 app crashed on start with ``ModuleNotFoundError: No module named
+'back.objects.registry.collab.EditLockService'``. The file is git-tracked and
+not gitignored. The workspace ``collab/`` folder had CommentService,
+ReviewService, and ``__init__.py``, but not EditLockService. The local DAB
+sync snapshot still listed that path with the September mtime, so incremental
+``bundle deploy`` skipped the upload. Step 6b only probed run.py / pyproject,
+so auto-heal never fired.
+
+Changes:
+
+1. scripts/deploy.sh
+   Add the collab package modules and ``digitaltwin/build/__init__.py`` to
+   ``_CRITICAL_SYNCED_FILES`` so a missing boot module wipes the snapshot
+   and re-syncs.
+2. tests/units/api/test_help_api.py
+   Guard that those paths stay in the step-6b list.
+
+Modified files:
+- scripts/deploy.sh
+- tests/units/api/test_help_api.py
+- changelogs/v0.9.0/benoitcayladbx_2026-10-12.log
+
+Tests: `uv run --frozen pytest -q -m "not scenario"` → 9003 passed, 326 skipped,
+6 deselected, 1 xfailed, 40 warnings in 60.07s.
+

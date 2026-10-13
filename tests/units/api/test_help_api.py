@@ -377,6 +377,32 @@ class TestHelpDeployBundle:
         ).strip()
         assert tracked == pkg
 
+    def test_deploy_rechecks_boot_modules_the_snapshot_can_skip(self):
+        """DAB incremental sync trusts ``.databricks/.../sync-snapshots``.
+        If a local path is in the snapshot but missing on the workspace
+        (rename with unchanged mtime, failed upload), ``bundle deploy``
+        skips it and the app boots with ModuleNotFoundError. Step 6b
+        must probe those modules, not only run.py."""
+        text = (_REPO_ROOT / "scripts/deploy.sh").read_text(encoding="utf-8")
+        match = re.search(r"_CRITICAL_SYNCED_FILES=\((.*?)\)", text, re.S)
+        assert match, "_CRITICAL_SYNCED_FILES missing from scripts/deploy.sh"
+        critical = set(re.findall(r'"([^"]+)"', match.group(1)))
+        collab = _REPO_ROOT / "src/back/objects/registry/collab"
+        missing = [
+            str(path.relative_to(_REPO_ROOT))
+            for path in sorted(collab.glob("*.py"))
+            if str(path.relative_to(_REPO_ROOT)) not in critical
+        ]
+        assert not missing, (
+            "deploy.sh step 6b must re-check collab modules so a stale "
+            f"sync snapshot cannot skip them: {missing}"
+        )
+        twin_init = "src/back/objects/digitaltwin/build/__init__.py"
+        assert twin_init in critical, (
+            "deploy.sh step 6b must re-check digitaltwin.build after the "
+            "gitignore /build/ miss"
+        )
+
 
 class TestHelpDocFetch:
     def test_unknown_slug_returns_404(self, client):
