@@ -381,10 +381,11 @@ async def delete_registry_domain(
     domain_name: str,
     session_mgr: SessionManager = Depends(get_session_manager),
     settings: Settings = Depends(get_settings),
+    delete_github: bool = Query(False),
 ):
     """Delete a domain folder and all its versions from the registry."""
     return config_service.delete_registry_domain_result(
-        domain_name, session_mgr, settings
+        domain_name, session_mgr, settings, delete_github=delete_github
     )
 
 
@@ -395,6 +396,7 @@ async def delete_registry_version(
     request: Request,
     session_mgr: SessionManager = Depends(get_session_manager),
     settings: Settings = Depends(get_settings),
+    delete_github: bool = Query(False),
 ):
     """Delete a single version file from a domain in the registry."""
     return config_service.delete_registry_version_result(
@@ -403,6 +405,7 @@ async def delete_registry_version(
         user_role=getattr(request.state, "user_role", "") or "",
         session_mgr=session_mgr,
         settings=settings,
+        delete_github=delete_github,
     )
 
 
@@ -505,15 +508,24 @@ async def import_registry_obx(
     Multipart fields:
 
     * ``file`` -- the uploaded `.obx` JSON body.
+    * ``from_github`` -- ``1`` to rebuild and import from the GitHub
+      repository (no file; blobs are read at confirm time).
     * ``decisions`` -- JSON string ``[{"name": <folder>,
       "action": "skip"|"overwrite"|"rename", "new_name": <str>}]``.
       Missing entries default to ``"skip"``.
     """
     form = await request.form()
-    upload = form.get("file")
-    if upload is None:
-        raise ValidationError("No file provided")
-    file_bytes = await upload.read()
+    from_github = str(form.get("from_github") or "").lower() in ("1", "true", "yes")
+    if from_github:
+        email, _, _, _, _ = _settings_request_identity(request)
+        file_bytes = await run_blocking(
+            GitHubSettings.github_import_bytes, email, session_mgr, settings
+        )
+    else:
+        upload = form.get("file")
+        if upload is None:
+            raise ValidationError("No file provided")
+        file_bytes = await upload.read()
 
     decisions_raw = form.get("decisions") or "[]"
     try:
@@ -601,7 +613,7 @@ async def github_obx_envelope(
     session_mgr: SessionManager = Depends(get_session_manager),
     settings: Settings = Depends(get_settings),
 ):
-    """Rebuild an ``.obx`` envelope from the repository (feeds the import modal)."""
+    """List domains/versions in the GitHub repository (feeds the import modal)."""
     email, _, _, _, _ = _settings_request_identity(request)
     with map_route_errors("GitHub import read", logger):
         return await run_blocking(

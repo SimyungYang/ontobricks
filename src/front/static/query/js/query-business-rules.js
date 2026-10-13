@@ -2,7 +2,7 @@
  * Entity business rules in the Graph Explorer.
  *
  * A business rule is a SWRL rule declared on the entity's ontology class
- * (Ontology > Studio > References). Triggering it runs the rule for this
+ * (Ontology > Studio > Actions). Triggering it runs the rule for this
  * entity only and writes the inferred triples to the graph, so it needs the
  * Builder role and an explicit confirmation (request -> confirm token).
  */

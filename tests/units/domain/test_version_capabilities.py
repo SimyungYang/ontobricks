@@ -61,7 +61,6 @@ def test_latest_version_delete_is_blocked_in_payload():
         user_role=ROLE_ADMIN,
         status="DRAFT",
         is_loaded=True,
-        is_latest=True,
         version_count=3,
     )
     assert latest["is_active"] is True
@@ -79,9 +78,10 @@ def test_sole_loaded_latest_domain_reason_matches_shared_policy():
         user_role=ROLE_ADMIN,
         status="DRAFT",
         is_loaded=True,
-        is_latest=True,
         version_count=1,
     )
+    assert result["versions"][0]["can_delete"] is True
+    assert result["versions"][0]["deletes_domain"] is True
     assert result["versions"][0]["delete_block_reason"] == expected[
         "delete_block_reason"
     ]
@@ -141,7 +141,6 @@ def test_registry_listing_gets_same_delete_capability_without_mutating_cache():
         user_role=ROLE_ADMIN,
         status="DRAFT",
         is_loaded=True,
-        is_latest=True,
         version_count=2,
     )
     assert versions[0]["can_delete"] is False
@@ -185,9 +184,10 @@ def test_sole_loaded_latest_registry_reason_matches_shared_policy():
         user_role=ROLE_ADMIN,
         status="DRAFT",
         is_loaded=True,
-        is_latest=True,
         version_count=1,
     )
+    assert result["domains"][0]["versions"][0]["can_delete"] is True
+    assert result["domains"][0]["versions"][0]["deletes_domain"] is True
     assert result["domains"][0]["versions"][0]["delete_block_reason"] == expected[
         "delete_block_reason"
     ]

@@ -584,13 +584,18 @@ async def list_version_details(
     settings: Settings = Depends(get_settings),
 ):
     """List all versions with card metadata and allowed actions."""
+    from back.objects.registry.gitsync.GitHubConfig import GitHubConfig
+
     domain = get_domain(session_mgr)
     p = Domain(domain, settings)
-    return p.list_version_details(
-        p.build_registry_service(),
+    svc = p.build_registry_service()
+    result = p.list_version_details(
+        svc,
         user_role=getattr(request.state, "user_role", "") or "",
         user_domain_role=getattr(request.state, "user_domain_role", "") or "",
     )
+    result["github_enabled"] = GitHubConfig.ready_for(svc.store)
+    return result
 
 
 @router.delete("/versions/{version}")
@@ -599,6 +604,7 @@ async def delete_domain_version(
     request: Request,
     session_mgr: SessionManager = Depends(get_session_manager),
     settings: Settings = Depends(get_settings),
+    delete_github: bool = Query(False),
 ):
     domain = get_domain(session_mgr)
     # Deletion is session-scoped: only a domain identity persisted by an
@@ -614,6 +620,7 @@ async def delete_domain_version(
         user_role=getattr(request.state, "user_role", "") or "",
         session_mgr=session_mgr,
         settings=settings,
+        delete_github=delete_github,
     )
 
 

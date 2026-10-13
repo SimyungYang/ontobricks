@@ -23,7 +23,7 @@ VERSIONS = {
             "transitions": [],
             "delete_control_visible": True,
             "can_delete": False,
-            "delete_block_reason": "The latest version cannot be deleted.",
+            "delete_block_reason": "Load another version before deleting this one.",
         },
         {
             "version": "11",

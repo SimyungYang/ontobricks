@@ -51,6 +51,17 @@ class GitHubConfig:
     def is_ready(self) -> bool:
         return bool(self.enabled and self.owner and self.repo)
 
+    @classmethod
+    def ready_for(cls, store) -> bool:
+        """True when Settings → GitHub is enabled and has owner/repo."""
+        try:
+            data = store.load_global_config()
+            if not isinstance(data, dict):
+                return False
+            return cls.from_dict(data.get("github_config")).is_ready
+        except Exception:
+            return False
+
     @property
     def label(self) -> str:
         return f"{self.owner}/{self.repo}@{self.branch}"

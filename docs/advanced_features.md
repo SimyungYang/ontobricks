@@ -1,8 +1,8 @@
 # Advanced features
 
 Deeper topics beyond the day-to-day flow in the [User Guide](user-guide.md):
-how OntoBricks models an ontology, how domains move between environments,
-and constraint-based cohort discovery.
+how OntoBricks models an ontology, how domains move between environments
+(OBX, GitHub mirror, CLI), and constraint-based cohort discovery.
 
 <!-- toc -->
 **Contents**
@@ -20,6 +20,7 @@ and constraint-based cohort discovery.
   - [10. Code map](#10-code-map)
 - [Registry import and export](#registry-import-and-export)
   - [OBX Export / Import (Browser UI)](#obx-export--import-browser-ui)
+  - [Load from GitHub repository](#load-from-github-repository)
   - [CLI Import / Export (registry_transfer.sh)](#cli-import--export-registry_transfersh)
   - [What the archive contains](#what-the-archive-contains)
   - [Authentication](#authentication)
@@ -331,12 +332,13 @@ Implementation: `OntologyRdfExtras` (`CONSUMED_PREDICATES` +
 ## Registry import and export
 
 
-OntoBricks provides two complementary ways to move domains between environments or
+OntoBricks provides three complementary ways to move domains between environments or
 share them with teammates:
 
 | Method | When to use | Where |
 |--------|-------------|-------|
 | **OBX UI** (`.obx` file) | Ad-hoc share, cross-tenant copy, quick backup from the browser | **Registry → Browse** → Export / Import buttons |
+| **GitHub repository** | Continuous mirror of every save; restore or seed another instance from the same repo | **Settings → Configuration → GitHub**, then **Import → Load from GitHub repository** |
 | **CLI zip** (`registry_transfer.sh`) | Automated CI/CD promotion, full registry migration | Terminal / shell scripts |
 
 ---
@@ -382,6 +384,22 @@ identity and build metadata unchanged.
 
 > **Note:** The 50 MB upload cap protects the in-memory parse. For larger
 > registries use the CLI tool below.
+
+### Load from GitHub repository
+
+Operator setup lives in the [User Guide — GitHub](user-guide.md#configuration--github-repository-mirror).
+Once **Settings → Configuration → GitHub** points at a claimed repository:
+
+1. Open **Registry → Browse → Import**.
+2. Click **Load from GitHub repository** instead of picking a `.obx` file.
+3. OntoBricks reads the JSON tree (`GET /settings/github/obx`) and opens the
+   same Skip / Overwrite / Rename preview as a file import.
+4. Confirm **Import**. Turtle files (`.owl.ttl`, `.r2rml.ttl`, `shacl.ttl`)
+   are ignored; Lakebase is written from the JSON sources.
+
+The GitHub token must already resolve (Databricks secret or
+`ONTOBRICKS_GITHUB_TOKEN`). A GitHub outage does not affect an already-loaded
+domain; it only blocks this restore path and background pushes.
 
 ---
 
@@ -668,18 +686,20 @@ ONTOBRICKS_PROFILE=dst scripts/registry_transfer.sh import-commit \
 
 ### Comparison of export/import methods
 
-| Capability | OBX UI (Registry → Browse) | CLI (`registry_transfer.sh`) |
-|------------|----------------------------|------------------------------|
-| No terminal required | **Yes** | No |
-| Per-domain conflict resolution UI | **Yes** | `--conflict` flag |
-| Version-mode selector | **Yes** (Latest/Active/All/Choose) | `--domain NAME:all\|Vx,Vy` |
-| Handles large registries (>50 MB) | No (50 MB cap) | **Yes** |
-| Suitable for CI/CD pipelines | No | **Yes** |
-| Includes document attachments | Yes | Yes |
-| Transfers permissions | No | Optional (`--include-permissions`) |
+| Capability | OBX UI (Registry → Browse) | GitHub mirror | CLI (`registry_transfer.sh`) |
+|------------|----------------------------|---------------|------------------------------|
+| No terminal required | **Yes** | **Yes** | No |
+| Per-domain conflict resolution UI | **Yes** | **Yes** (same import preview) | `--conflict` flag |
+| Version-mode selector | **Yes** (Latest/Active/All/Choose) | All versions present in the repo | `--domain NAME:all\|Vx,Vy` |
+| Handles large registries (>50 MB) | No (50 MB cap) | GitHub API (no `.obx` upload) | **Yes** |
+| Suitable for CI/CD pipelines | No | Reviewable git history; not a job runner | **Yes** |
+| Includes document attachments | Yes | No (JSON + generated Turtle only) | Yes |
+| Transfers permissions | No | No | Optional (`--include-permissions`) |
+| Continuous on every save | No | **Yes** (optional) | No |
 
-The OBX UI is the easiest option for ad-hoc or cross-tenant transfers. The CLI
-is the right choice for automated promotion pipelines and full-registry migrations.
+The OBX UI is the easiest option for ad-hoc or cross-tenant transfers. The
+GitHub mirror is the continuous backup and review surface. The CLI is the
+right choice for automated promotion pipelines and full-registry migrations.
 
 ---
 

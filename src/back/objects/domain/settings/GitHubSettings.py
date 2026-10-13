@@ -7,9 +7,10 @@ mirror through :class:`back.objects.registry.gitsync.GitHubMirrorHooks`.
 from __future__ import annotations
 
 import importlib
+import json
 import re
 import uuid
-from typing import Any, Dict
+from typing import Any, Dict, List
 
 from back.core.errors import InfrastructureError, ValidationError
 from shared.config.settings import Settings
@@ -131,10 +132,148 @@ class GitHubSettings:
     def github_obx_envelope_result(
         actor: str, session_mgr: SessionManager, settings: Settings
     ) -> Dict[str, Any]:
+        """List domains/versions from the Git tree (no blob downloads)."""
         cfg = GitHubSettings._load(session_mgr, settings)
         GitHubSettings._require_ready(cfg)
         sync = GitHubSyncService(cfg)
         try:
-            return sync.build_obx_envelope(exported_by=actor)
+            grouped = sync.list_domain_versions()
         finally:
             sync.close()
+        if not grouped:
+            raise ValidationError(
+                "No domains found in the GitHub repository. "
+                "Use Sync all in Settings → GitHub first."
+            )
+        return GitHubSettings._preview_from_listing(
+            grouped, actor, cfg.label, session_mgr, settings
+        )
+
+    @staticmethod
+    def delete_mirrored_domain(
+        folder: str,
+        session_mgr: SessionManager,
+        settings: Settings,
+        *,
+        actor: str = "",
+    ) -> None:
+        """Remove ``domains/<folder>/`` from GitHub. No-op when the mirror is off."""
+        cfg = GitHubSettings._load(session_mgr, settings)
+        if not cfg.is_ready:
+            return
+        GitHubSettings._require_ready(cfg)
+        sync = GitHubSyncService(cfg)
+        try:
+            result = sync.delete_domain(folder, actor=actor)
+        except Exception as exc:
+            message = getattr(exc, "message", "") or str(exc)
+            github_mirror.record("error", folder, "", message, [])
+            raise InfrastructureError(
+                f'Registry domain "{folder}" was deleted, but GitHub delete failed',
+                detail=message,
+            ) from exc
+        finally:
+            sync.close()
+        sha = result.get("commit_sha") or ""
+        github_mirror.record("ok", folder, sha, "", result.get("errors") or [])
+
+    @staticmethod
+    def github_import_bytes(
+        actor: str, session_mgr: SessionManager, settings: Settings
+    ) -> bytes:
+        """Rebuild the `.obx` envelope from GitHub (blob reads) for confirm."""
+        cfg = GitHubSettings._load(session_mgr, settings)
+        GitHubSettings._require_ready(cfg)
+        sync = GitHubSyncService(cfg)
+        try:
+            envelope = sync.build_obx_envelope(exported_by=actor)
+        finally:
+            sync.close()
+        if not envelope.get("domains"):
+            raise ValidationError(
+                "No domains found in the GitHub repository. "
+                "Use Sync all in Settings → GitHub first."
+            )
+        return json.dumps(envelope).encode("utf-8")
+
+    @staticmethod
+    def _preview_from_listing(
+        grouped: Dict[str, List[str]],
+        actor: str,
+        label: str,
+        session_mgr: SessionManager,
+        settings: Settings,
+    ) -> Dict[str, Any]:
+        from shared.config.constants import APP_VERSION
+        from back.objects.registry.obx_format import CURRENT_OBX_FORMAT_VERSION
+
+        domain, _, _, _ = SettingsService._resolve_context(session_mgr, settings)
+        svc = _ss.RegistryService.from_context(domain, settings)
+        if not svc.cfg.is_configured:
+            raise ValidationError("Registry not configured")
+
+        existing: Dict[str, set] = {}
+        ok, details, _msg = svc.list_domain_details_cached()
+        if ok:
+            for item in details or []:
+                name = item.get("name") or ""
+                if not name:
+                    continue
+                versions = {
+                    str(v.get("version"))
+                    for v in (item.get("versions") or [])
+                    if v.get("version") is not None
+                }
+                existing[name] = versions
+        else:
+            ok, names, _msg = svc.list_domains_cached()
+            if ok:
+                existing = {n: set() for n in names}
+
+        taken = set(existing)
+        domains_preview: List[Dict[str, Any]] = []
+        for folder in sorted(grouped):
+            incoming = grouped[folder]
+            display_name = SettingsService._camelcase_import_name(folder)
+            exists = folder in existing or _ss.sanitize_domain_folder(folder) in existing
+            local_versions = existing.get(folder) or existing.get(
+                _ss.sanitize_domain_folder(folder), set()
+            )
+            conflicting = [v for v in incoming if v in local_versions]
+            if exists:
+                suggested = GitHubSettings._suggest_free_name(display_name, taken)
+                taken.add(_ss.sanitize_domain_folder(suggested))
+            else:
+                suggested = display_name
+            domains_preview.append(
+                {
+                    "name": folder,
+                    "original_name": folder,
+                    "incoming_versions": incoming,
+                    "exists": exists,
+                    "conflicting_versions": conflicting,
+                    "suggested_new_name": suggested,
+                    "display_name": display_name,
+                    "info": {"name": display_name},
+                }
+            )
+        return {
+            "success": True,
+            "format_version": CURRENT_OBX_FORMAT_VERSION,
+            "ontobricks_version": APP_VERSION,
+            "exported_at": "",
+            "exported_by": actor,
+            "source": f"github:{label}",
+            "domains": domains_preview,
+        }
+
+    @staticmethod
+    def _suggest_free_name(display_name: str, taken: set) -> str:
+        base = SettingsService._camelcase_import_name(display_name) + "Imported"
+        candidate = base[:64]
+        index = 2
+        while _ss.sanitize_domain_folder(candidate) in taken:
+            suffix = str(index)
+            candidate = base[: 64 - len(suffix)] + suffix
+            index += 1
+        return candidate

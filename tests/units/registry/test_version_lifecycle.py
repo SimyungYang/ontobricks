@@ -184,6 +184,14 @@ def test_old_unloaded_draft_is_deletable_by_app_admin():
     _check_delete()
 
 
+def test_latest_unloaded_draft_is_deletable():
+    _check_delete(is_latest=True)
+
+
+def test_last_remaining_draft_is_deletable_even_when_loaded():
+    _check_delete(is_latest=True, is_loaded=True, version_count=1)
+
+
 @pytest.mark.parametrize("role", [ROLE_BUILDER, ROLE_EDITOR, ROLE_VIEWER, ROLE_NONE])
 def test_version_deletion_requires_app_admin(role):
     with pytest.raises(AuthorizationError, match="administrator"):
@@ -194,8 +202,6 @@ def test_version_deletion_requires_app_admin(role):
     ("overrides", "message"),
     [
         ({"is_loaded": True}, "loaded"),
-        ({"is_latest": True}, "latest"),
-        ({"version_count": 1}, "at least one"),
         ({"status": STATUS_IN_REVIEW}, "Draft"),
         ({"status": STATUS_PUBLISHED}, "Draft"),
     ],
@@ -217,6 +223,7 @@ def test_delete_capability_returns_precise_block_reason():
         "delete_control_visible": True,
         "can_delete": False,
         "delete_block_reason": "Reopen this version as Draft before deleting it.",
+        "deletes_domain": False,
     }
 
 

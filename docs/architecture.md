@@ -54,6 +54,7 @@ Under the hood, SPARQL translates ontology mappings into Spark SQL — users nev
 | **Reasoning Engine** | OWL 2 RL deductive closure, SWRL rules (compiled to SQL), graph reasoning, and constraint validation |
 | **Triple Store Backends** | Delta-backed view in Unity Catalog plus a per-domain pluggable Graph DB engine (Lakebase Postgres, Unity Catalog Delta, or Neo4j) via the `GraphDBFactory` pattern, with BFS, shortest path, and transitive closure built in |
 | **Databricks Platform** | Unity Catalog (metadata & governance), SQL Warehouse (query execution), UC Volumes (shared storage) |
+| **GitHub mirror** *(optional)* | One repository per instance; coalesced commits of registry JSON plus generated OWL/R2RML Turtle. Lakebase stays the source of truth. |
 
 ---
 
@@ -478,6 +479,9 @@ src/
 │   │   │   ├── CommunityDetector.py    # CommunityDetector (NetworkX backend)
 │   │   │   └── models.py              # ClusterRequest, ClusterResult, DetectionResult, DetectionStats
 │   │   │
+│   │   ├── github/                     # GitHub Git Data API client (no git clone)
+│   │   │   └── GitHubClient.py         # Atomic tree commits for the registry mirror
+│   │   │
 │   │   └── sqlwizard/                  # SQL generation helpers for entity mapping
 │   │       └── SQLWizardService.py
 │   │
@@ -506,7 +510,8 @@ src/
 │           ├── PermissionService.py    # roles and domain-level overrides
 │           ├── collab/                 # CommentService, ReviewService, EditLockService
 │           ├── schedule/               # BuildScheduler + task-type specs
-│           └── store/                  # RegistryStore ABC + Lakebase mixins
+│           ├── gitsync/                # GitHubConfig, GitHubSyncService, GitHubMirror(+Hooks)
+│           └── store/                  # RegistryStore ABC + Lakebase mixins (GitHubMirrorHooks)
 │
 ├── api/                                # REST API layer (mounted into the main app)
 │   ├── external_app.py                 # External stateless API app factory (/api/v1/…)
@@ -825,12 +830,15 @@ operators with pre-v0.4.0 deployments must run
 Uploaded Knowledge Store documents also live in Lakebase (parsed text in
 `domain_documents`); the Unity Catalog Volume is now reserved only for ad-hoc
 registry export bundles (OWL import / R2RML export use arbitrary user-chosen
-volumes).
+volumes). An optional GitHub repository can mirror the same registry
+documents for review and restore — see [GitHub repository
+mirror](#github-repository-mirror).
 
 | Storage | Identifier | What lives in it |
 |---|---|---|
 | Databricks Lakebase (Postgres) | `lakebase` | Domain JSON, permissions, schedules, history, global config, and Knowledge Store parsed documents (`domain_documents`) — normalised into relational tables (with JSONB columns for the larger blobs) |
 | Unity Catalog Volume | n/a | Ad-hoc registry export bundles (no document uploads) |
+| GitHub repository *(optional)* | `github_config` | Reviewable commits of domain/version JSON + generated Turtle; not a second source of truth |
 
 The single :class:`RegistryStore` implementation
 (`LakebaseRegistryStore`) is constructed via `RegistryFactory.from_cfg`.
@@ -925,6 +933,47 @@ For security and regeneration reasons, these are excluded from exports:
 - **OWL output** (regenerated from ontology on load)
 - **Query results** (ephemeral data)
 - **User preferences** (runtime only)
+- **GitHub tokens** (resolved live from a Databricks secret or
+  `ONTOBRICKS_GITHUB_TOKEN`; never written to the repository)
+
+### GitHub repository mirror
+
+Administrators configure **one GitHub repository per OntoBricks instance**
+under **Settings → Configuration → GitHub**. Lakebase remains canonical.
+The mirror is a reviewable git history plus generated Turtle next to the JSON
+sources.
+
+**Write path.** `GitHubMirrorHooks` mixes into the registry store. After a
+successful `write_version` / status change / version delete, `GitHubMirror` queues a
+job and a daemon worker waits `DEBOUNCE_S` (2 s) so a burst of saves becomes
+one commit. Deleting a whole domain (or its last remaining version) does **not**
+mirror automatically: the confirm dialog offers **Also delete this domain from
+GitHub**, and the API takes `delete_github=1`. Failures are recorded on **Last
+sync** and on the domain **Audit trail → GitHub** tab; they never fail the
+registry write.
+
+**How files land.** `GitHubClient` uses the GitHub Git Data API (blobs, trees,
+refs) over `httpx`. There is no `git` binary and no clone — a Databricks App
+cannot rely on either. One batch of path writes/deletes is one atomic commit,
+with a short retry if a concurrent push moved the branch.
+
+**Identity and secrets.** `global_config['github_config']` stores owner, repo,
+branch, optional base path, Databricks secret scope/key, author, and
+`instance_uuid`. The PAT itself is never persisted. `GitHubSyncService.resolve_token`
+reads the Databricks secret at push time, or `ONTOBRICKS_GITHUB_TOKEN` when no
+scope/key is set (local development).
+
+**Instance claim.** `Test connection` writes `.ontobricks/instance.json`. A
+second instance cannot push to the same repository unless the operator ticks
+**Take over**.
+
+**Restore.** `GET /settings/github/obx` rebuilds an OBX envelope from the JSON
+tree; **Registry → Import → Load from GitHub repository** feeds the same
+preview as a file import. Turtle is ignored on import.
+
+Operator guide: [User Guide — GitHub](user-guide.md#configuration--github-repository-mirror).
+Code: `back.core.github.GitHubClient`, `back.objects.registry.gitsync`,
+`back.objects.domain.settings.GitHubSettings`.
 
 ### API Endpoints
 
@@ -1615,6 +1664,7 @@ All blocking Databricks I/O runs through `run_blocking()` in `DatabricksHelpers.
 ### Data Protection
 - Session cookies use `secure=True` and `samesite=lax` when running as a Databricks App (`DATABRICKS_APP_PORT` set), ensuring cookies are only sent over HTTPS
 - No credentials persisted to disk
+- GitHub PATs are resolved live from a Databricks secret (or `ONTOBRICKS_GITHUB_TOKEN` locally); only the secret scope/key is stored in `github_config`
 - HTTPS enforced in production
 
 ### SQL Injection Prevention

@@ -24,6 +24,7 @@ document.addEventListener('DOMContentLoaded', function () {
     $('btnSyncAllGithub')?.addEventListener('click', syncAll);
     $('btnRefreshGithubScopes')?.addEventListener('click', () => loadScopes($('githubSecretScope').value));
     $('githubSecretScope')?.addEventListener('change', () => loadKeys($('githubSecretScope').value, ''));
+    $('githubEnabled')?.addEventListener('change', syncDetailsVisibility);
 
     async function load() {
         try {
@@ -44,12 +45,17 @@ document.addEventListener('DOMContentLoaded', function () {
                 loaded = true;
             }
             $('btnSaveGithub').disabled = false;
+            syncDetailsVisibility();
         } catch (err) {
             showResult('danger', 'Could not load GitHub settings: ' + err.message);
         } finally {
             $('githubLoading')?.classList.add('d-none');
             $('githubLoaded')?.classList.remove('d-none');
         }
+    }
+
+    function syncDetailsVisibility() {
+        $('githubDetails')?.classList.toggle('d-none', !$('githubEnabled').checked);
     }
 
     function payload() {

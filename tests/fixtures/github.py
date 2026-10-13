@@ -47,7 +47,13 @@ class FakeGitHub:
         return {p: self.blobs[s] for p, s in self.trees[tree].items()}
 
     def handler(self, request: httpx.Request) -> httpx.Response:
-        path = request.url.path.removeprefix("/repos/acme/onto")
+        full = request.url.path
+        if not full.rstrip("/").startswith("/repos/acme/onto"):
+            return httpx.Response(
+                404,
+                json={"message": f"path escaped repo prefix: {full}"},
+            )
+        path = full.rstrip("/").removeprefix("/repos/acme/onto")
         method = request.method
         self.calls.append((method, path))
         body = json.loads(request.content) if request.content else {}

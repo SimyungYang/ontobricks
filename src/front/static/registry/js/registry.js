@@ -3,6 +3,18 @@
  * Registry page JavaScript – domain browsing and registry configuration
  */
 
+var registryGithubEnabled = false;
+
+function githubDomainDeleteExtras(enabled) {
+    return enabled
+        ? { checkboxLabel: 'Also delete this domain from GitHub', checkboxChecked: false }
+        : {};
+}
+
+function deleteGithubQuery(options) {
+    return options && options.checkboxChecked ? '?delete_github=1' : '';
+}
+
 function createRegistryVersionDeleteControl(v, domainName) {
     if (!v.delete_control_visible) return null;
 
@@ -20,6 +32,10 @@ function createRegistryVersionDeleteControl(v, domainName) {
     button.setAttribute('data-requires-app', 'admin');
     button.setAttribute('aria-label', 'Delete version v' + version);
 
+    if (v.deletes_domain) {
+        button.dataset.deletesDomain = '1';
+    }
+
     if (v.can_delete) {
         button.tabIndex = 0;
     } else {
@@ -36,28 +52,74 @@ function createRegistryVersionDeleteControl(v, domainName) {
     return wrapper;
 }
 
-async function deleteRegistryVersion(
-    domainName,
-    version,
-    refreshDomains = () => {},
-    invalidateBridges = () => {}
-) {
-    const confirmed = await showConfirmDialog({
-        title: 'Delete Version',
-        message: 'Permanently delete version v' + escapeHtml(String(version)) +
-            ' from domain "' + escapeHtml(String(domainName)) +
-            '"? This permanently removes its Knowledge Store content '
-            + 'and cannot be undone.',
+async function deleteRegistryDomain(domainName) {
+    const options = {
+        title: 'Delete Domain',
+        message: 'Permanently delete domain "' + escapeHtml(domainName)
+            + '" and all its versions from the registry? This permanently '
+            + 'removes all Knowledge Store content and cannot be undone.',
         confirmText: 'Delete',
         confirmClass: 'btn-danger',
-        icon: 'trash'
-    });
+        icon: 'trash',
+        ...githubDomainDeleteExtras(registryGithubEnabled)
+    };
+    const confirmed = await showConfirmDialog(options);
     if (!confirmed) return;
 
     try {
         const resp = await fetch(
             '/settings/registry/domains/' + encodeURIComponent(domainName) +
-                '/versions/' + encodeURIComponent(version),
+                deleteGithubQuery(options),
+            { method: 'DELETE', credentials: 'same-origin' }
+        );
+        const data = await resp.json();
+        if (data.success) {
+            showNotification(data.message, 'success');
+            if (typeof invalidateRegistryBridges === 'function') {
+                invalidateRegistryBridges();
+            }
+            if (typeof loadRegistryDomains === 'function') {
+                loadRegistryDomains(true);
+            }
+        } else {
+            showNotification('Error: ' + data.message, 'error');
+        }
+    } catch (e) {
+        showNotification('Error deleting domain: ' + e.message, 'error');
+    }
+}
+
+async function deleteRegistryVersion(
+    domainName,
+    version,
+    refreshDomains = () => {},
+    invalidateBridges = () => {},
+    deletesDomain = false
+) {
+    const options = {
+        title: deletesDomain ? 'Delete last version and domain' : 'Delete Version',
+        message: deletesDomain
+            ? 'Version v' + escapeHtml(String(version))
+                + ' is the only version of "' + escapeHtml(String(domainName))
+                + '". Deleting it will also delete the domain and all Knowledge '
+                + 'Store content. This cannot be undone.'
+            : 'Permanently delete version v' + escapeHtml(String(version)) +
+                ' from domain "' + escapeHtml(String(domainName)) +
+                '"? This permanently removes its Knowledge Store content '
+                + 'and cannot be undone.',
+        confirmText: 'Delete',
+        confirmClass: 'btn-danger',
+        icon: 'trash',
+        ...githubDomainDeleteExtras(deletesDomain && registryGithubEnabled)
+    };
+    const confirmed = await showConfirmDialog(options);
+    if (!confirmed) return;
+
+    try {
+        const resp = await fetch(
+            '/settings/registry/domains/' + encodeURIComponent(domainName) +
+                '/versions/' + encodeURIComponent(version) +
+                deleteGithubQuery(options),
             { method: 'DELETE', credentials: 'same-origin' }
         );
         const data = await resp.json();
@@ -354,6 +416,7 @@ document.addEventListener('DOMContentLoaded', function () {
             .finally(() => { domainsLoadPromise = null; });
         return domainsLoadPromise;
     }
+    window.loadRegistryDomains = loadRegistryDomains;
 
     async function _loadRegistryDomains() {
         const section = document.getElementById('registryDomainsSection');
@@ -380,6 +443,7 @@ document.addEventListener('DOMContentLoaded', function () {
             }
 
             domainsLoadedAt = Date.now();
+            registryGithubEnabled = !!data.github_enabled;
             const rows = data.domains || data.projects || [];
             if (!rows.length) {
                 listDiv.innerHTML = '<div class="text-muted small py-3 text-center">' +
@@ -533,7 +597,8 @@ document.addEventListener('DOMContentLoaded', function () {
                         btn.dataset.domain,
                         btn.dataset.version,
                         loadRegistryDomains,
-                        () => { invalidateRegistryBridges(); }
+                        () => { invalidateRegistryBridges(); },
+                        btn.dataset.deletesDomain === '1'
                     );
                 });
             });
@@ -561,36 +626,6 @@ document.addEventListener('DOMContentLoaded', function () {
             console.error('Error loading registry domains:', e);
             listDiv.innerHTML = '<div class="text-danger small py-3">' +
                 '<i class="bi bi-x-circle me-1"></i> Error loading domains</div>';
-        }
-    }
-
-    async function deleteRegistryDomain(domainName) {
-        const confirmed = await showConfirmDialog({
-            title: 'Delete Domain',
-            message: 'Permanently delete domain "' + escapeHtml(domainName)
-                + '" and all its versions from the registry? This permanently '
-                + 'removes all Knowledge Store content and cannot be undone.',
-            confirmText: 'Delete',
-            confirmClass: 'btn-danger',
-            icon: 'trash'
-        });
-        if (!confirmed) return;
-
-        try {
-            const resp = await fetch('/settings/registry/domains/' + encodeURIComponent(domainName), {
-                method: 'DELETE',
-                credentials: 'same-origin'
-            });
-            const data = await resp.json();
-            if (data.success) {
-                showNotification(data.message, 'success');
-                invalidateRegistryBridges();
-                loadRegistryDomains(true);
-            } else {
-                showNotification('Error: ' + data.message, 'error');
-            }
-        } catch (e) {
-            showNotification('Error deleting domain: ' + e.message, 'error');
         }
     }
 
@@ -847,11 +882,13 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // The file being imported: either the picked .obx or one rebuilt from GitHub.
     let pendingImportFile = null;
+    let pendingImportFromGithub = false;
 
     function openImportObxModal() {
         const modalEl = document.getElementById('importObxModal');
         if (!modalEl) return;
         pendingImportFile = null;
+        pendingImportFromGithub = false;
         document.getElementById('importObxStep1').classList.remove('d-none');
         document.getElementById('importObxStep2').classList.add('d-none');
         document.getElementById('importObxFile').value = '';
@@ -875,22 +912,41 @@ document.addEventListener('DOMContentLoaded', function () {
     document.getElementById('btnImportFromGithub')?.addEventListener('click', async (e) => {
         const btn = e.currentTarget;
         const errEl = document.getElementById('importObxPreviewError');
+        const busyEl = document.getElementById('importObxPreviewBusy');
         errEl.classList.add('d-none');
         btn.disabled = true;
+        busyEl?.classList.remove('d-none');
+        const ac = new AbortController();
+        const timer = setTimeout(() => ac.abort(), 60000);
         try {
-            const resp = await fetch('/settings/github/obx', { credentials: 'same-origin' });
+            const resp = await fetch('/settings/github/obx', {
+                credentials: 'same-origin',
+                signal: ac.signal
+            });
             const data = await resp.json();
             if (!resp.ok || data.success === false) {
                 errEl.textContent = data.message || 'Could not read the GitHub repository';
                 errEl.classList.remove('d-none');
+                if (typeof showNotification === 'function') {
+                    showNotification(errEl.textContent, 'error');
+                }
                 return;
             }
-            const file = new File([JSON.stringify(data)], 'github.obx', { type: 'application/json' });
-            await previewImportFile(file);
+            pendingImportFile = null;
+            pendingImportFromGithub = true;
+            renderImportObxPreview(data);
         } catch (err) {
-            errEl.textContent = 'Network error: ' + err.message;
+            const timedOut = err && err.name === 'AbortError';
+            errEl.textContent = timedOut
+                ? 'GitHub import timed out. Try again, or use Sync all in Settings → GitHub first.'
+                : ('Network error: ' + err.message);
             errEl.classList.remove('d-none');
+            if (typeof showNotification === 'function') {
+                showNotification(errEl.textContent, 'error');
+            }
         } finally {
+            clearTimeout(timer);
+            busyEl?.classList.add('d-none');
             btn.disabled = false;
         }
     });
@@ -1017,7 +1073,10 @@ document.addEventListener('DOMContentLoaded', function () {
 
     document.getElementById('btnImportObxConfirm')?.addEventListener('click', async () => {
         const file = pendingImportFile;
-        if (!file) { showNotification('Pick a .obx file first', 'warning'); return; }
+        if (!file && !pendingImportFromGithub) {
+            showNotification('Pick a .obx file first', 'warning');
+            return;
+        }
 
         const decisions = [];
         const targetFolders = new Set();
@@ -1093,7 +1152,11 @@ document.addEventListener('DOMContentLoaded', function () {
 
         try {
             const form = new FormData();
-            form.append('file', file);
+            if (pendingImportFromGithub) {
+                form.append('from_github', '1');
+            } else {
+                form.append('file', file);
+            }
             form.append('decisions', JSON.stringify(decisions));
             const resp = await fetch('/settings/registry/import', {
                 method: 'POST',
@@ -1139,6 +1202,7 @@ document.addEventListener('DOMContentLoaded', function () {
         bridgesLoaded = false;
         bridgesData = null;
     }
+    window.invalidateRegistryBridges = invalidateRegistryBridges;
 
     function _ensureD3() {
         if (typeof d3 !== 'undefined') return Promise.resolve();

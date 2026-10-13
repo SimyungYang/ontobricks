@@ -36,6 +36,5 @@ class GitHubMirrorHooks:
         return ok, msg
 
     def delete_domain(self, folder: str) -> List[str]:
-        errors = super().delete_domain(folder)  # type: ignore[misc]
-        github_mirror.notify_delete_domain(self, folder)
-        return errors
+        # GitHub domain delete is opt-in from the registry UI confirm dialog.
+        return super().delete_domain(folder)  # type: ignore[misc]

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import time
 from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List, Optional
 
@@ -307,10 +308,35 @@ class GitHubSyncService:
     # Read back (Import from GitHub)
     # ------------------------------------------------------------------
 
+    @staticmethod
+    def _version_sort_key(version: str) -> List[int]:
+        return [int(x) for x in version.split(".") if x.isdigit()] or [0]
+
+    def list_domain_versions(self) -> Dict[str, List[str]]:
+        """Return ``{folder: [version, ...]}`` from the Git tree (no blob reads)."""
+        prefix = self.cfg.path("domains")
+        listing = self.client.list_files(prefix)
+        base = f"{self.cfg.base_path}/" if self.cfg.base_path else ""
+        grouped: Dict[str, set[str]] = {}
+        for path in listing:
+            rel = path[len(base) :] if base and path.startswith(base) else path
+            parsed = DomainRepoLayout.parse_version_path(rel)
+            if not parsed:
+                continue
+            folder, version, file_rel = parsed
+            if not file_rel.endswith(".json"):
+                continue
+            grouped.setdefault(folder, set()).add(version)
+        return {
+            folder: sorted(versions, key=self._version_sort_key, reverse=True)
+            for folder, versions in grouped.items()
+        }
+
     def build_obx_envelope(self, *, exported_by: str = "") -> Dict[str, Any]:
         """Rebuild an ``.obx`` envelope from the repository JSON sources."""
         from back.objects.registry import obx_format
 
+        started = time.monotonic()
         prefix = self.cfg.path("domains")
         listing = self.client.list_files(prefix)
         grouped: Dict[str, Dict[str, Dict[str, str]]] = {}
@@ -344,4 +370,11 @@ class GitHubSyncService:
             )
         envelope = obx_format.build_envelope(domains, exported_by=exported_by)
         envelope["source"] = f"github:{self.cfg.label}"
+        logger.info(
+            "GitHub OBX envelope from %s: %d files, %d domains in %.1fs",
+            self.cfg.label,
+            len(listing),
+            len(domains),
+            time.monotonic() - started,
+        )
         return envelope

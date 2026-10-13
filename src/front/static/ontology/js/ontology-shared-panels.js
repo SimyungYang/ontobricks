@@ -639,7 +639,8 @@ async function renderEntityForm(panel, cls, viewOnly = false) {
             ${renderFormTabsNav([
                 { id: 'details', icon: 'bi-info-circle', label: 'Details' },
                 { id: 'attributes', icon: 'bi-tags', label: 'Attributes' },
-                { id: 'actions', icon: 'bi-lightning', label: 'References' },
+                { id: 'refs', icon: 'bi-link-45deg', label: 'Refs.' },
+                { id: 'actions', icon: 'bi-lightning', label: 'Actions' },
                 { id: 'constraints', icon: 'bi-sliders', label: 'Constraints' },
             ], _eTab)}
 
@@ -706,7 +707,7 @@ async function renderEntityForm(panel, cls, viewOnly = false) {
                 </div>
             </div>
 
-            <div class="form-tab-pane ${_eTab === 'actions' ? 'active' : ''}" data-form-tab-content="actions">
+            <div class="form-tab-pane ${_eTab === 'refs' ? 'active' : ''}" data-form-tab-content="refs">
                 <div class="mb-3">
                     <label class="form-label d-flex justify-content-between align-items-center">
                         <span><i class="bi bi-speedometer2 me-1"></i>Dashboard</span>
@@ -731,6 +732,20 @@ async function renderEntityForm(panel, cls, viewOnly = false) {
                 </div>
                 <div class="mb-3">
                     <label class="form-label d-flex justify-content-between align-items-center">
+                        <span><i class="bi bi-signpost-2 me-1"></i>Bridges</span>
+                        ${!viewOnly ? '<button type="button" class="btn btn-sm btn-outline-primary py-0 px-1" onclick="openBridgeSelectorModal()"><i class="bi bi-plus"></i> Add</button>' : ''}
+                    </label>
+                    <div id="sharedEntityBridges" class="border rounded p-2" style="background: #ffffff;">
+                        <div id="sharedEntityBridgesContent">
+                            <small class="text-muted">No bridges to other domains</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="form-tab-pane ${_eTab === 'actions' ? 'active' : ''}" data-form-tab-content="actions">
+                <div class="mb-3">
+                    <label class="form-label d-flex justify-content-between align-items-center">
                         <span><i class="bi bi-lightning-charge me-1"></i>Actions</span>
                         ${!viewOnly ? '<button type="button" class="btn btn-sm btn-outline-primary py-0 px-1" onclick="openActionSelectorModal()"><i class="bi bi-plus"></i> Add</button>' : ''}
                     </label>
@@ -752,17 +767,6 @@ async function renderEntityForm(panel, cls, viewOnly = false) {
                         </div>
                     </div>
                     <div class="form-text small">SWRL rules triggered from the Knowledge Graph on a single entity; the inferred triples are written to the graph.</div>
-                </div>
-                <div class="mb-3">
-                    <label class="form-label d-flex justify-content-between align-items-center">
-                        <span><i class="bi bi-signpost-2 me-1"></i>Bridges</span>
-                        ${!viewOnly ? '<button type="button" class="btn btn-sm btn-outline-primary py-0 px-1" onclick="openBridgeSelectorModal()"><i class="bi bi-plus"></i> Add</button>' : ''}
-                    </label>
-                    <div id="sharedEntityBridges" class="border rounded p-2" style="background: #ffffff;">
-                        <div id="sharedEntityBridgesContent">
-                            <small class="text-muted">No bridges to other domains</small>
-                        </div>
-                    </div>
                 </div>
             </div>
 

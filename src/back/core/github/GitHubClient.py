@@ -47,8 +47,10 @@ class GitHubClient:
         self.repo = repo
         self.branch = branch or "main"
         self._repo_url = f"{api_url.rstrip('/')}/repos/{owner}/{repo}"
+        # Trailing slash + relative paths: a leading "/" on the request path
+        # would make httpx join against the host and drop /repos/{owner}/{repo}.
         self._http = httpx.Client(
-            base_url=self._repo_url,
+            base_url=self._repo_url + "/",
             headers={
                 "Authorization": f"Bearer {token}",
                 "Accept": "application/vnd.github+json",
@@ -72,8 +74,9 @@ class GitHubClient:
     # ------------------------------------------------------------------
 
     def _request(self, method: str, path: str, **kw: Any) -> httpx.Response:
+        rel = path if path.startswith("http") else path.lstrip("/")
         try:
-            return self._http.request(method, path, **kw)
+            return self._http.request(method, rel, **kw)
         except httpx.HTTPError as exc:
             raise InfrastructureError(
                 "Could not reach the GitHub API", detail=str(exc)
@@ -115,6 +118,7 @@ class GitHubClient:
 
     def get_repo(self) -> Dict[str, Any]:
         """Return repository metadata (``permissions``, ``default_branch``, ...)."""
+        # Absolute URL without a trailing slash — GitHub 404s ``.../repo/``.
         return self._json("GET", self._repo_url)
 
     def _head(self) -> Optional[Tuple[str, str]]:

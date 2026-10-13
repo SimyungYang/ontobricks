@@ -3,6 +3,18 @@
  * Version list management for the Domain > Versions submenu.
  */
 
+var versionsGithubEnabled = false;
+
+function githubDomainDeleteExtras(enabled) {
+    return enabled
+        ? { checkboxLabel: 'Also delete this domain from GitHub', checkboxChecked: false }
+        : {};
+}
+
+function deleteGithubQuery(options) {
+    return options && options.checkboxChecked ? '?delete_github=1' : '';
+}
+
 const VERSION_STATUS_MAP = {
     'DRAFT': {
         cls: 'bg-warning-subtle text-dark border-warning',
@@ -52,6 +64,7 @@ async function loadVersionsList() {
             throw new Error(data.message || 'Failed to load versions');
         }
 
+        versionsGithubEnabled = !!data.github_enabled;
         if (!data.versions || data.versions.length === 0) {
             list.replaceChildren();
             setVersionsState('empty');
@@ -97,6 +110,9 @@ function createVersionActionButton(options) {
     }
     if (options.targetStatus !== undefined) {
         button.dataset.targetStatus = String(options.targetStatus);
+    }
+    if (options.deletesDomain) {
+        button.dataset.deletesDomain = '1';
     }
     button.disabled = Boolean(options.disabled);
     if (options.icon) prependVersionIcon(button, options.icon);
@@ -201,7 +217,8 @@ function renderVersionCard(version, domainFolder) {
             label: 'Delete',
             icon: 'trash',
             buttonClass: 'btn-outline-danger',
-            disabled: !version.can_delete
+            disabled: !version.can_delete,
+            deletesDomain: Boolean(version.deletes_domain)
         });
         if (deleteButton.disabled) {
             deleteWrapper.className = 'dm-version-action-blocked';
@@ -273,24 +290,31 @@ async function transitionVersion(
     }
 }
 
-async function deleteVersionFromList(domainFolder, version, triggerButton = null) {
-    const confirmed = await showConfirmDialog({
-        title: 'Delete Version',
-        message: 'Permanently delete version v' + escapeHtml(version)
-            + ' from domain "' + escapeHtml(domainFolder)
-            + '"? This permanently removes its Knowledge Store content '
-            + 'and cannot be undone.',
+async function deleteVersionFromList(domainFolder, version, triggerButton = null, deletesDomain = false) {
+    const options = {
+        title: deletesDomain ? 'Delete last version and domain' : 'Delete Version',
+        message: deletesDomain
+            ? 'Version v' + escapeHtml(version)
+                + ' is the only version of "' + escapeHtml(domainFolder)
+                + '". Deleting it will also delete the domain and all Knowledge '
+                + 'Store content. This cannot be undone.'
+            : 'Permanently delete version v' + escapeHtml(version)
+                + ' from domain "' + escapeHtml(domainFolder)
+                + '"? This permanently removes its Knowledge Store content '
+                + 'and cannot be undone.',
         confirmText: 'Delete Version',
         confirmClass: 'btn-danger',
-        icon: 'trash'
-    });
+        icon: 'trash',
+        ...githubDomainDeleteExtras(deletesDomain && versionsGithubEnabled)
+    };
+    const confirmed = await showConfirmDialog(options);
     if (!confirmed) {
         restoreVersionActionFocus(triggerButton);
         return;
     }
 
     const response = await fetch(
-        '/domain/versions/' + encodeURIComponent(version),
+        '/domain/versions/' + encodeURIComponent(version) + deleteGithubQuery(options),
         { method: 'DELETE', credentials: 'same-origin' }
     );
     const data = await response.json();
@@ -299,6 +323,10 @@ async function deleteVersionFromList(domainFolder, version, triggerButton = null
         throw new Error(data.message || 'Version deletion failed');
     }
     showNotification(data.message, 'success');
+    if (data.domain_deleted) {
+        window.location.href = '/';
+        return;
+    }
     await loadVersionsList();
 }
 
@@ -420,7 +448,8 @@ document.addEventListener('DOMContentLoaded', function () {
                     await deleteVersionFromList(
                         actionButton.dataset.domain,
                         actionButton.dataset.version,
-                        actionButton
+                        actionButton,
+                        actionButton.dataset.deletesDomain === '1'
                     );
                 }
             } catch (err) {

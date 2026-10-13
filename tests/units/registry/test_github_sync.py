@@ -204,6 +204,23 @@ class TestSyncAllAndImport:
         assert entry["name"] == "Sales"
         assert entry["versions"]["1"] == _doc()
 
+    def test_list_domain_versions_does_not_read_blobs(self):
+        gh = FakeGitHub({"README.md": "r"})
+        svc = FakeRegistry(
+            {"Sales": {"1": _doc(), "2": _doc()}, "Hr": {"1": _doc()}}
+        )
+        sync = _sync(gh)
+        sync.sync_all(svc)
+        blob_gets = [
+            (m, p) for m, p in gh.calls if m == "GET" and "/git/blobs/" in p
+        ]
+        listed = sync.list_domain_versions()
+        blob_gets_after = [
+            (m, p) for m, p in gh.calls if m == "GET" and "/git/blobs/" in p
+        ]
+        assert listed == {"Hr": ["1"], "Sales": ["2", "1"]}
+        assert blob_gets_after == blob_gets
+
 
 class TestMirror:
     def _mirror(self):
@@ -386,7 +403,6 @@ class TestStoreHooks:
             ("notify_write", "Sales", "1"),
             ("notify_write", "Sales", "1"),
             ("notify_delete_version", "Sales", "1"),
-            ("notify_delete_domain", "Sales"),
         ]
 
     def test_failed_write_does_not_notify(self, monkeypatch):

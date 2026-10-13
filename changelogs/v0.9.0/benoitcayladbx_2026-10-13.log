@@ -28,3 +28,391 @@ Modified files:
 
 Tests: `uv run --frozen pytest -q -m "not scenario"` → 9061 passed, 326 skipped,
 6 deselected, 1 xfailed, 40 warnings in 53.40s.
+
+================================================================================
+## Keep GitHub title visible while settings load
+================================================================================
+
+Context:
+Hiding the whole GitHub section behind the spinner also hid the page title
+and subtitle. Keep the section header (title, subtitle, disabled Save) on
+screen and only hide the form, info banner and Test connection toolbar.
+
+Changes:
+
+1. src/front/templates/partials/settings/_settings_github.html
+   Move `.section-header` above `#githubLoading`; `#githubLoaded` still
+   wraps the body that waits on GET /settings/github.
+2. tests/units/front/test_settings_github_loading.py
+   Assert the title row is outside the hidden wrapper.
+
+Modified files:
+- src/front/templates/partials/settings/_settings_github.html
+- tests/units/front/test_settings_github_loading.py
+- changelogs/v0.9.0/benoitcayladbx_2026-10-13.log
+
+Tests: `uv run --frozen pytest -q -m "not scenario"` → 9062 passed, 326 skipped,
+6 deselected, 1 xfailed, 40 warnings in 60.68s.
+
+================================================================================
+## Hide GitHub configuration until the mirror is enabled
+================================================================================
+
+Context:
+Settings → GitHub always showed owner, repo, secrets, Test connection and
+Sync all, even with Enable GitHub mirror off. Those fields are unused until
+the switch is on; keep only the enable control until then.
+
+Changes:
+
+1. src/front/templates/partials/settings/_settings_github.html
+   Wrap repo fields, info banner and toolbar in `#githubDetails` (`d-none`).
+2. src/front/static/config/js/settings-github.js
+   Toggle `#githubDetails` from the Enable GitHub mirror checkbox after load
+   and on change. Saved values stay in the form when hidden.
+3. tests/units/front/test_settings_github_loading.py
+   Contract: details start hidden; JS binds the enable switch.
+4. docs/user-guide.md
+   Setup now ticks Enable first so the fields appear.
+
+Modified files:
+- src/front/templates/partials/settings/_settings_github.html
+- src/front/static/config/js/settings-github.js
+- tests/units/front/test_settings_github_loading.py
+- docs/user-guide.md
+- changelogs/v0.9.0/benoitcayladbx_2026-10-13.log
+
+Tests: `uv run --frozen pytest -q -m "not scenario"` → 9064 passed, 326 skipped,
+6 deselected, 1 xfailed, 40 warnings in 54.05s.
+
+================================================================================
+## Fix Load from GitHub doing nothing on Import
+================================================================================
+
+Context:
+Registry → Import → Load from GitHub looked like a no-op: GitHubClient used
+httpx `base_url` without a trailing slash and request paths with a leading
+slash, so Git Data calls joined to `https://api.github.com/git/...` instead
+of `/repos/{owner}/{repo}/git/...`. Test connection could still work because
+`get_repo` used an absolute URL. The import modal also hid the spinner until
+after the envelope download.
+
+Changes:
+
+1. src/back/core/github/GitHubClient.py
+   Trailing slash on `base_url`; strip leading slashes so requests stay under
+   the repo prefix. `get_repo` uses a relative GET.
+2. tests/fixtures/github.py
+   Reject calls that escape `/repos/acme/onto` so the join bug cannot regress
+   in FakeGitHub.
+3. tests/units/registry/test_github_client.py
+   Assert tree/ref URLs keep the repo prefix.
+4. src/front/static/registry/js/registry.js
+   Show the preview spinner immediately, toast errors on GitHub read failure.
+5. src/front/templates/partials/registry/_import_obx_modal.html
+   Generic "Reading…" busy copy for file and GitHub.
+6. tests/units/front/test_registry_obx_import_rename.py
+   Contract: GitHub click shows busy and hits `/settings/github/obx`.
+
+Modified files:
+- src/back/core/github/GitHubClient.py
+- tests/fixtures/github.py
+- tests/units/registry/test_github_client.py
+- src/front/static/registry/js/registry.js
+- src/front/templates/partials/registry/_import_obx_modal.html
+- tests/units/front/test_registry_obx_import_rename.py
+- changelogs/v0.9.0/benoitcayladbx_2026-10-13.log
+
+Tests: `uv run --frozen pytest -q -m "not scenario"` → 9066 passed, 326 skipped,
+6 deselected, 1 xfailed, 40 warnings in 55.55s.
+
+================================================================================
+## Stop GitHub import spinner hanging on Reading…
+================================================================================
+
+Context:
+Load from GitHub showed Reading… indefinitely. GET /settings/github/obx
+returned the full envelope, the browser JSON-parsed it, then POSTed it to
+/settings/registry/import/preview (warehouse lookups per domain) with no
+fetch timeout. The spinner only hid after both hops finished.
+
+Changes:
+
+1. src/back/objects/domain/settings/GitHubSettings.py
+   Preview on the server; stash the envelope for confirm; reject empty repos.
+2. src/api/routers/internal/settings.py
+   POST /settings/registry/import accepts ``from_github=1`` and uses the stash.
+3. src/front/static/registry/js/registry.js
+   Render the preview JSON directly; 60s AbortController; confirm sends
+   from_github instead of re-uploading the envelope.
+4. src/back/objects/registry/gitsync/GitHubSyncService.py
+   Log file/domain counts and duration for the OBX rebuild.
+5. tests/units/settings/test_github_settings.py
+   Preview+stash, empty repo, envelope TTL.
+6. tests/units/front/test_registry_obx_import_rename.py
+   Contract: abort + renderImportObxPreview, no second preview POST.
+
+Modified files:
+- src/back/objects/domain/settings/GitHubSettings.py
+- src/api/routers/internal/settings.py
+- src/front/static/registry/js/registry.js
+- src/back/objects/registry/gitsync/GitHubSyncService.py
+- tests/units/settings/test_github_settings.py
+- tests/units/front/test_registry_obx_import_rename.py
+- changelogs/v0.9.0/benoitcayladbx_2026-10-13.log
+
+Tests: `uv run --frozen pytest -q -m "not scenario"` → 9069 passed, 326 skipped,
+6 deselected, 1 xfailed, 40 warnings in 65.77s.
+
+================================================================================
+## Fix Test connection 404 on GET repo
+================================================================================
+
+Context:
+After the httpx base_url trailing-slash fix, Test connection called
+``get_repo`` as ``GET ""``, which joined to ``/repos/{owner}/{repo}/``.
+GitHub 404s that trailing slash (``GitHub resource not found: GET``).
+
+Changes:
+
+1. src/back/core/github/GitHubClient.py
+   ``get_repo`` uses the absolute repo URL with no trailing slash.
+2. tests/units/registry/test_github_client.py
+   Assert the GET URL is ``https://api.github.com/repos/acme/onto``.
+
+Modified files:
+- src/back/core/github/GitHubClient.py
+- tests/units/registry/test_github_client.py
+- changelogs/v0.9.0/benoitcayladbx_2026-10-13.log
+
+Tests: `uv run --frozen pytest -q -m "not scenario"` → 9070 passed, 326 skipped,
+6 deselected, 1 xfailed, 40 warnings in 56.13s.
+
+================================================================================
+## List GitHub import domains from the Git tree
+================================================================================
+
+Context:
+Load from GitHub timed out because it downloaded every JSON blob to rebuild
+a full .obx envelope before showing the domain/version table. The recursive
+tree listing already has folder and version in the paths.
+
+Changes:
+
+1. src/back/objects/registry/gitsync/GitHubSyncService.py
+   ``list_domain_versions()`` — one tree listing, no blob reads.
+2. src/back/objects/domain/settings/GitHubSettings.py
+   Preview from that listing + cached registry details. Blob reads move to
+   ``github_import_bytes`` on confirm.
+3. src/api/routers/internal/settings.py
+   GET /github/obx lists; POST import ``from_github`` rebuilds the envelope.
+4. src/front/templates/partials/registry/_import_obx_modal.html
+   Busy copy: Listing GitHub repository…
+5. tests/units/settings/test_github_settings.py
+   Preview does not call ``build_obx_envelope``.
+6. tests/units/registry/test_github_sync.py
+   Tree listing adds no extra blob GETs.
+
+Modified files:
+- src/back/objects/registry/gitsync/GitHubSyncService.py
+- src/back/objects/domain/settings/GitHubSettings.py
+- src/api/routers/internal/settings.py
+- src/front/templates/partials/registry/_import_obx_modal.html
+- tests/units/settings/test_github_settings.py
+- tests/units/registry/test_github_sync.py
+- changelogs/v0.9.0/benoitcayladbx_2026-10-13.log
+
+Tests: `uv run --frozen pytest -q -m "not scenario"` → 9070 passed, 326 skipped,
+6 deselected, 1 xfailed, 40 warnings in 54.32s.
+
+================================================================================
+## Allow deleting a domain's last version
+================================================================================
+
+Context:
+Admins could not delete the latest draft or the only remaining version
+("must keep at least one version" / "latest cannot be deleted"). Deleting
+the sole version should remove the domain as well.
+
+Changes:
+
+1. src/back/objects/registry/version_lifecycle.py
+   Latest drafts are deletable. The last remaining draft may be deleted
+   even if it is loaded. Still Draft-only; loaded versions with siblings
+   still require switching first.
+2. src/back/objects/domain/settings/RegistryDomainSettings.py
+   After deleting the last version, delete the empty domain.
+3. src/front/static/registry/js/registry.js
+   Confirm copy when the delete also removes the domain.
+4. src/front/static/domain/js/domain-versions.js
+   Same confirm; redirect home when the domain is gone.
+5. tests/units/registry/test_version_lifecycle.py
+   Latest and last-version drafts are allowed.
+6. tests/units/settings/test_settings_version_deletion.py
+   Last version cascades to domain delete.
+7. tests/units/domain/test_version_capabilities.py
+   Sole loaded draft is deletable and sets ``deletes_domain``.
+8. tests/units/front/test_domain_versions_cards.py
+   Last-version confirm copy.
+9. tests/e2e/domain/test_domain_versions_cards.py
+   Loaded (non-last) version uses the load-another-version reason.
+
+Modified files:
+- src/back/objects/registry/version_lifecycle.py
+- src/back/objects/domain/settings/RegistryDomainSettings.py
+- src/front/static/registry/js/registry.js
+- src/front/static/domain/js/domain-versions.js
+- tests/units/registry/test_version_lifecycle.py
+- tests/units/settings/test_settings_version_deletion.py
+- tests/units/domain/test_version_capabilities.py
+- tests/units/front/test_domain_versions_cards.py
+- tests/e2e/domain/test_domain_versions_cards.py
+- changelogs/v0.9.0/benoitcayladbx_2026-10-13.log
+
+Tests: `uv run --frozen pytest -q -m "not scenario"` → 9071 passed, 326 skipped,
+6 deselected, 1 xfailed, 40 warnings in 58.53s.
+
+================================================================================
+## Ask to delete the GitHub domain when deleting a registry domain
+================================================================================
+
+Context:
+With GitHub enabled, Delete Domain (and last-version cascade) never offered
+to remove the mirrored folder. Hooks no longer auto-delete GitHub domains;
+the confirm dialog now shows an opt-in checkbox and DELETE takes
+``delete_github=1``.
+
+Changes:
+
+1. src/front/static/global/js/utils.js
+   Confirm dialog already supports a checkbox; callers now use it.
+2. src/front/static/registry/js/registry.js
+   Delete Domain / last version: checkbox when the GitHub mirror is on;
+   pass ``?delete_github=1`` when checked.
+3. src/front/static/domain/js/domain-versions.js
+   Same checkbox on last-version delete from Domain → Versions.
+4. src/back/objects/domain/settings/RegistryDomainSettings.py
+   ``github_enabled`` on the domain list; pause the mirror during domain
+   delete; call GitHub only when ``delete_github`` is true.
+5. src/back/objects/domain/settings/GitHubSettings.py
+   ``delete_mirrored_domain`` removes ``domains/<folder>/`` when the mirror
+   is ready.
+6. src/back/objects/domain/settings/SettingsService.py
+   Forward ``delete_github`` on domain and version delete.
+7. src/api/routers/internal/settings.py
+   Query ``delete_github`` on registry domain/version DELETE.
+8. src/api/routers/internal/domain.py
+   Same query on ``DELETE /domain/versions/{version}``.
+9. src/back/objects/registry/gitsync/GitHubConfig.py
+   ``ready_for(store)`` reports whether the mirror is on.
+10. src/api/routers/internal/domain.py
+    Versions list includes ``github_enabled``.
+11. src/back/objects/registry/gitsync/GitHubMirrorHooks.py
+    Domain delete is opt-in; do not enqueue a GitHub domain delete.
+12. docs/user-guide.md
+    Document the GitHub delete checkbox.
+13. docs/architecture.md
+    Domain GitHub delete is opt-in, not automatic.
+
+Modified files:
+- src/front/static/registry/js/registry.js
+- src/front/static/domain/js/domain-versions.js
+- src/back/objects/domain/settings/RegistryDomainSettings.py
+- src/back/objects/domain/settings/GitHubSettings.py
+- src/back/objects/domain/settings/SettingsService.py
+- src/api/routers/internal/settings.py
+- src/api/routers/internal/domain.py
+- src/back/objects/registry/gitsync/GitHubConfig.py
+- src/back/objects/registry/gitsync/GitHubMirrorHooks.py
+- src/back/objects/registry/gitsync/GitHubMirror.py
+- docs/user-guide.md
+- docs/architecture.md
+- tests/units/front/test_domain_versions_cards.py
+- tests/units/settings/test_v090_settings_registry_domains.py
+- tests/units/settings/test_github_settings.py
+- tests/units/registry/test_github_sync.py
+- tests/units/domain/test_version_capabilities.py
+- changelogs/v0.9.0/benoitcayladbx_2026-10-13.log
+
+Tests: `uv run --frozen pytest -q -m "not scenario"` → 9081 passed, 326 skipped,
+6 deselected, 1 xfailed, 40 warnings in 53.70s.
+
+================================================================================
+## Make the GitHub delete checkbox clickable on read-only domains
+================================================================================
+
+Context:
+Delete Domain showed "Also delete this domain from GitHub" but the box
+could not be checked. Registry Browse opens over the loaded domain; when
+that domain is PUBLISHED / IN-REVIEW (or the user is a viewer),
+permissions.css sets pointer-events: none on every input. Exempt the
+confirm-dialog checkbox the same way as New Domain fields.
+
+Changes:
+
+1. src/front/static/global/js/utils.js
+   Class ``ob-confirm-check`` on the confirm-dialog checkbox.
+2. src/front/static/global/css/permissions.css
+   Exempt ``.ob-confirm-check`` from the read-only input lock.
+3. tests/units/front/test_stacked_confirm_modal.py
+   Contract: class + CSS exemption.
+
+Modified files:
+- src/front/static/global/js/utils.js
+- src/front/static/global/css/permissions.css
+- tests/units/front/test_stacked_confirm_modal.py
+- changelogs/v0.9.0/benoitcayladbx_2026-10-13.log
+
+Tests: `uv run --frozen pytest -q -m "not scenario"` → 9082 passed, 326 skipped,
+6 deselected, 1 xfailed, 40 warnings in 54.61s.
+
+================================================================================
+## Split entity panel Actions from Refs.
+================================================================================
+
+Context:
+Ontology Studio's entity right pane packed dashboard, dataset, bridges,
+UC actions and SWRL business rules under one References tab. Split
+behaviours into an Actions tab and keep the link targets under a shorter
+Refs. label so the compact rail still fits.
+
+Changes:
+
+1. src/front/static/ontology/js/ontology-shared-panels.js
+   Entity tabs: Details / Attributes / Refs. / Actions / Constraints.
+   Refs. holds Dashboard, Dataset, Bridges; Actions holds UC actions
+   and business rules.
+2. src/front/static/ontology/js/ontology-map.js
+   Designer context menu shortcuts for Refs. and Actions.
+3. tests/units/front/test_map_context_menu_tabs.py
+   Five entity tab shortcuts, including Refs. and Actions.
+4. tests/units/front/test_class_actions_ui.py
+   Refs. pane owns dashboard/dataset/bridges, not actions/rules.
+5. tests/units/front/test_entity_business_rules_ui.py
+   Business rules live in the Actions pane.
+6. tests/units/front/test_ontology_map_external_badge.py
+   Badge docstring points at Refs. / Actions.
+7. docs/user-guide.md
+   Class actions and SWRL attach from Studio → Actions.
+8. docs/api.md
+   Business-rule endpoint cites Studio → Actions.
+9. src/front/static/query/js/query-business-rules.js
+   Comment path updated to Studio > Actions.
+10. .cursor/11-frontend-design.mdc
+    Compact-tab count no longer hard-coded as four.
+
+Modified files:
+- src/front/static/ontology/js/ontology-shared-panels.js
+- src/front/static/ontology/js/ontology-map.js
+- src/front/static/query/js/query-business-rules.js
+- tests/units/front/test_map_context_menu_tabs.py
+- tests/units/front/test_class_actions_ui.py
+- tests/units/front/test_entity_business_rules_ui.py
+- tests/units/front/test_ontology_map_external_badge.py
+- docs/user-guide.md
+- docs/api.md
+- .cursor/11-frontend-design.mdc
+- changelogs/v0.9.0/benoitcayladbx_2026-10-13.log
+
+Tests: `uv run --frozen pytest -q -m "not scenario"` → 9083 passed, 326 skipped,
+6 deselected, 1 xfailed, 40 warnings in 56.97s.

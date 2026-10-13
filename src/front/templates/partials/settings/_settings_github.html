@@ -6,11 +6,6 @@
    /static/config/js/settings-github.js (GET/POST /settings/github,
    POST /settings/github/test, POST /settings/github/sync-all).
 #}
-<div id="githubLoading" class="text-muted small py-3">
-    <span class="spinner-border spinner-border-sm me-1"></span> Loading GitHub settings…
-</div>
-
-<div id="githubLoaded" class="d-none">
 <div class="section-header d-flex justify-content-between align-items-center mb-4">
     <div>
         <h4 class="mb-1"><i class="bi bi-github me-2"></i>GitHub</h4>
@@ -21,6 +16,18 @@
     </button>
 </div>
 
+<div id="githubLoading" class="text-muted small py-3">
+    <span class="spinner-border spinner-border-sm me-1"></span> Loading GitHub settings…
+</div>
+
+<div id="githubLoaded" class="d-none">
+<form id="githubConfigForm" autocomplete="off">
+    <div class="form-check form-switch mb-3">
+        <input class="form-check-input" type="checkbox" id="githubEnabled">
+        <label class="form-check-label small fw-semibold" for="githubEnabled">Enable GitHub mirror</label>
+    </div>
+
+    <div id="githubDetails" class="d-none">
 <div class="alert alert-info border-0 mb-3 small">
     <strong>One repository per instance.</strong> Lakebase stays the source of truth;
     each save pushes one commit to
@@ -30,13 +37,8 @@
     Restore with <em>Registry &rarr; Import &rarr; Load from GitHub</em>.
 </div>
 
-<form id="githubConfigForm" autocomplete="off">
     <div class="row g-3">
         <div class="col-12">
-            <div class="form-check form-switch">
-                <input class="form-check-input" type="checkbox" id="githubEnabled">
-                <label class="form-check-label small fw-semibold" for="githubEnabled">Enable GitHub mirror</label>
-            </div>
             <div class="form-check form-switch">
                 <input class="form-check-input" type="checkbox" id="githubPushOnSave" checked>
                 <label class="form-check-label small" for="githubPushOnSave">Push on every save</label>
@@ -100,7 +102,6 @@
             <input type="email" class="form-control form-control-sm" id="githubAuthorEmail" placeholder="ontobricks@example.com">
         </div>
     </div>
-</form>
 
 <hr class="my-4">
 
@@ -126,4 +127,6 @@
         <em>Domain &rarr; Audit trail &rarr; GitHub</em>.
     </div>
 </div>
+    </div>
+</form>
 </div>

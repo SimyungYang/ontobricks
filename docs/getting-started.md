@@ -522,6 +522,7 @@ OntoBricks uses environment variables for configuration, making it easy to deplo
 | `REGISTRY_VOLUME` | Volume name for domain storage (local dev fallback) | `OntoBricksRegistry` |
 | `DATABRICKS_TRIPLESTORE_TABLE` | Default triple store table (catalog.schema.table) | *(none)* |
 | `DATABRICKS_SQL_WAREHOUSE_ID_DEFAULT` | Fallback SQL Warehouse ID for MCP/API calls | *(none)* |
+| `ONTOBRICKS_GITHUB_TOKEN` | Fine-grained GitHub PAT for the instance repository mirror when no Databricks secret is configured. Production should use **Settings → Configuration → GitHub** + a Databricks secret instead. | *(none)* |
 
 #### Lakebase (Required since v0.4.0)
 
@@ -598,6 +599,7 @@ ONTOBRICKS_THREAD_POOL_SIZE=20         # Max threads for blocking I/O
 ONTOBRICKS_ANALYTICS_MAX_TRIPLES=500000  # Community detection in-memory triple cap
 ONTOBRICKS_ANALYTICS_TOP_N=100           # Top nodes per metric returned by the Lakeflow job
 ONTOBRICKS_ANALYTICS_JOB_ENABLED=false   # Initial value; admins override it in Settings → Global
+# ONTOBRICKS_GITHUB_TOKEN=ghp_...          # Local GitHub mirror only; prefer a Databricks secret in Apps
 ```
 
 #### Shell Export

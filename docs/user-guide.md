@@ -1471,7 +1471,9 @@ review workflow that collects reviewer sign-offs and keeps a durable audit trail
     published, reopened) with the actor, timestamp, comment, and the `from → to` status
     snapshot for lifecycle transitions. Ontology and mapping edits live on their own tabs
     as compact `entity | field | old → new` rows (relationships are object properties;
-    SWRL, SHACL, groups, axioms, expressions, and business-rule CRUD are included). Entries
+    SWRL, SHACL, groups, axioms, expressions, and business-rule CRUD are included). The
+    **GitHub** tab lists mirror commits, tags, and generation warnings for that version
+    (see [Configuration → GitHub](#configuration--github-repository-mirror)). Entries
     appear after the domain is saved to the registry. The Generate wizard still records one
     summary line rather than a per-element diff.
 - **Roles & quorum** — Submit and Publish stay builder/admin. **Publish** unlocks for a
@@ -1877,7 +1879,13 @@ results across all sizes.
 **Settings → Configuration → GitHub** mirrors every registry domain into **one
 GitHub repository per OntoBricks instance**. Lakebase remains the source of
 truth; GitHub gives you a reviewable, diffable history plus ready-to-use Turtle
-files for external tools.
+files for external tools. Architecture: [GitHub repository
+mirror](architecture.md#github-repository-mirror). Restore details:
+[Load from GitHub](advanced_features.md#load-from-github-repository).
+
+The page title and subtitle stay visible while settings load; the form,
+info banner, and Test connection toolbar appear after `GET /settings/github`
+returns. Save stays disabled until then.
 
 **Setup**
 
@@ -1886,26 +1894,36 @@ files for external tools.
    write**.
 2. Store the token in a Databricks secret and grant the app service principal
    `READ` on the scope (`databricks secrets put-acl --scope <scope> --principal <app-sp> --permission READ`).
-3. In **Settings → GitHub** fill in *Owner*, *Repository*, *Branch* (default
-   `main`), an optional *Base path*, pick the token *secret scope* / *secret
-   name*, tick **Enable GitHub mirror**, then **Save** and **Test connection**.
+3. In **Settings → Configuration → GitHub** tick **Enable GitHub mirror**
+   (the repository fields appear only then). Fill in *Owner*, *Repository*,
+   *Branch* (default `main`), an optional *Base path* (sub-folder that holds
+   `domains/` and `.ontobricks/`), pick the token *secret scope* / *secret
+   name*, optional commit author name/email, then **Save** and **Test
+   connection**.
 
 The token is never stored by OntoBricks — only the secret scope/key. For local
 development without a secret, the `ONTOBRICKS_GITHUB_TOKEN` environment
-variable is used instead.
+variable is used instead (see [Getting started](getting-started.md#optional-configuration)).
 
 **One repository per instance.** *Test connection* writes
 `.ontobricks/instance.json` (instance id, workspace host, app name). If the
 repository is already claimed by another instance the test fails; tick
-**Take over** to claim it deliberately.
+**Take over** to claim it deliberately. Untick **Enable GitHub mirror** to
+hide the configuration and stop automatic commits without deleting the
+repository (saved owner/repo/secret refs are kept). **Push on every save**
+only applies while the mirror is enabled.
 
 **What is pushed, and when.** With **Push on every save** on, every registry
 write (save, new version, lifecycle change, OBX import, deletion) queues an
-asynchronous push; saves made within a couple of seconds are coalesced into a
+asynchronous push; saves made within about two seconds are coalesced into a
 single commit (`save(<Domain>/V<n>): by <user>`). A failing push never blocks
-the save — the latest outcome is shown under **Last sync**. **Sync all now** rewrites
-the whole `domains/` tree from the registry in one commit. Published versions
-are tagged `<Domain>/V<n>`.
+the save — the latest outcome is shown under **Last sync**. Deleting a domain
+(or its last remaining version) asks whether to also remove `domains/<Domain>/`
+from GitHub; leave the box unticked to keep the Git copy. **Sync all now**
+rewrites the whole `domains/` tree from the registry in one commit (and
+versions `.ontobricks/global_config.json` with non-secret instance defaults).
+Published versions are tagged `<Domain>/V<n>`. There is no `git` clone on the
+app host: commits go through the GitHub Git Data API.
 
 **History in the Audit trail.** Every push that produced a commit (or a
 warning) is logged on the **GitHub** tab of **Domain → Audit trail**, per
@@ -1945,7 +1963,7 @@ every push so they always match the JSON in the same commit.
 **Restore / migrate.** **Registry → Browse → Import → Load from GitHub
 repository** rebuilds the domains from the repository JSON files and opens the
 usual import preview (Skip / Overwrite / Rename). Turtle files are ignored on
-import.
+import. The repository must already be configured and claimed in Settings.
 
 ## Troubleshooting
 
@@ -1967,6 +1985,18 @@ import.
 - Verify catalog and schema names are correct
 - Check permissions on the schema
 - Ensure tables exist in the schema
+
+### GitHub mirror
+
+**Problem**: *Test connection* fails or Last sync stays on error
+
+**Solutions**:
+- Confirm the token has **Contents: read and write** on that repository
+- Confirm the Databricks secret scope/key (or `ONTOBRICKS_GITHUB_TOKEN` locally)
+- If the repository is claimed by another instance, tick **Take over** only if
+  you intend to reuse it
+- A GitHub outage never fails a registry save; retry **Sync all now** after
+  the API is reachable
 
 ### Query Test Fails
 
@@ -2782,9 +2812,9 @@ After import you can:
 - **AI Graph Interpretation**: After running an Analytics computation, click **Interpret** to invoke the `agent_graph_interpreter` AI agent. The agent uses the LLM saved in **Domain Information → AI**, may call `get_entity_details` to look up top-ranked entities, and produces three structured insight sections (Key Findings, Notable Entities, Recommendations). Results are rendered as styled Bootstrap cards with markdown support. Clickable entity names in "Notable Entities" jump to the Graph Viewer. Unavailable when **No LLM** is selected.
 - **Audit Trail Integration**: From the AI Insights card, click **Add to audit trail** to post the AI-generated interpretation as a comment on the current domain version (markdown-formatted). The discussion panel opens automatically to show the new entry.
 - **Dashboard Embedding**: View assigned Databricks dashboards with entity-specific parameters directly in the Graph Viewer.
-- **Class Actions (Unity Catalog functions)**: Bind any number of UC functions to an ontology class in **Ontology → Studio → External**, each with its own description. Run them on a node from the details pane or its right-click menu; the result (scalar or table) opens in a popup. Each function must take exactly one argument — the entity's ID — and the invocation endpoint enforces an allow-list so only functions declared on the node's own class can be called. The same actions are surfaced to the MCP server through `get_entity_context` and `invoke_entity_action`.
+- **Class Actions (Unity Catalog functions)**: Bind any number of UC functions to an ontology class in **Ontology → Studio → Actions**, each with its own description. Run them on a node from the details pane or its right-click menu; the result (scalar or table) opens in a popup. Each function must take exactly one argument — the entity's ID — and the invocation endpoint enforces an allow-list so only functions declared on the node's own class can be called. The same actions are surfaced to the MCP server through `get_entity_context` and `invoke_entity_action`.
 
-- **Entity Business Rules (SWRL)**: In **Ontology → Studio → References**, attach one or more SWRL rules to a class. The picker lists only the rules whose atoms cite the class or one of its parent classes. In **Knowledge Graph → Explorer**, run a rule on a node from the details pane or its right-click menu. A confirmation modal shows the rule, then the rule runs **scoped to that entity**, the inferred triples are materialised into the graph, and the canvas refreshes. MCP clients get the same capability through `run_entity_business_rule`, which runs immediately without a confirmation step. Running a rule requires the **Builder** role on the domain. Renaming or deleting a rule in the SWRL editor updates the class references. Neo4j-backed domains infer nothing yet, because Cypher translation of SWRL rules is not implemented.
+- **Entity Business Rules (SWRL)**: In **Ontology → Studio → Actions**, attach one or more SWRL rules to a class. The picker lists only the rules whose atoms cite the class or one of its parent classes. In **Knowledge Graph → Explorer**, run a rule on a node from the details pane or its right-click menu. A confirmation modal shows the rule, then the rule runs **scoped to that entity**, the inferred triples are materialised into the graph, and the canvas refreshes. MCP clients get the same capability through `run_entity_business_rule`, which runs immediately without a confirmation step. Running a rule requires the **Builder** role on the domain. Renaming or deleting a rule in the SWRL editor updates the class references. Neo4j-backed domains infer nothing yet, because Cypher translation of SWRL rules is not implemented.
 - **Virtual Attributes (computed on demand)**: A class of attribute that no mapping feeds and no build materialises — a Unity Catalog function computes it from the entity's ID when someone asks. Declare them in **Ontology → Studio → Attributes → Virtual Attributes** by picking a UC function that takes exactly one parameter; one attribute is created per returned column (or a single one for a scalar function), read from `information_schema`. In the Graph Explorer they appear in their own **Virtual Attributes** section under the mapped ones with a per-function **Compute** button, a **Compute all**, and a right-click shortcut; computed values are cached per entity for the page's lifetime, with **Recompute** as the refresh. Over MCP the declarations always ride along with `get_entity_context`; when a question is about a virtual attribute's value, the model should call `compute_virtual_attributes(entity_uri)` to run the UC function — nothing is computed unless asked. A failing function reports its error without denying the attributes that still resolve. Because they are never materialised, virtual attributes are **not queryable** in SPARQL or GraphQL and take no part in mappings, R2RML, SHACL or data-quality checks.
 - **Graph Chat ↔ MCP alignment**: Knowledge Graph → Chat discovers Datasets, Bridges, and Class Actions the same way MCP does (`get_entity_context`). Executing an Action from Graph Chat is **confirmation-gated**: the agent proposes via `request_entity_action`, the UI shows a Confirm/Cancel card, and only Confirm runs the allow-listed UC function. Graph Chat does **not** expose MCP's direct `invoke_entity_action` tool.
 - **Named Neo4j connections**: Settings → Neo4j holds multiple named Bolt profiles (URI, database, username, Databricks secret). Domains with Graph Backend = Neo4j must pick one connection on Domain → Information → Knowledge Graph; Test connection / Objects operate on the selected profile.
@@ -2795,7 +2825,7 @@ After import you can:
 - **Version Control**: Domain → Versions presents newest-first cards with Loaded and Latest badges, metadata, and inline lifecycle actions that immediately synchronize global badges and read-only state. App administrators can permanently delete only older, unloaded Draft versions; loaded, latest, In Review, and Published versions are protected, and the destructive Lakebase statement atomically rechecks Draft status before Knowledge Store cleanup. Registry-row deletion and Knowledge Store cleanup cannot share one transaction; a cleanup failure therefore returns a truthful 5xx partial-deletion error rather than success. Lifecycle status (Draft / In Review / Published) is separate from the **Active** version exposed through API/MCP, which is selected in **Registry → Browse**.
 - **Single-editor concurrency**: A DRAFT domain version can only be **edited by one user at a time**. The first opener edits; anyone else opening the same version is automatically **read-only** with a banner naming the current editor. The lock uses a **renew-only lease** — the editor's browser keeps it alive while the domain is open, so an active session never expires, but a lock left behind (crashed/abandoned tab) auto-releases once its lease lapses (configurable in **Settings → Global → Edit Lock Lease**, or via `ONTOBRICKS_EDIT_LOCK_TTL_S`; default 10 min; `0` disables). It is also released immediately when the editor clicks **Close** (which prompts *Save before closing?* and returns to Home) or an **app-admin takes over**. The **Save** and **Close** buttons sit together in the domain sub-navigation.
 - **Domain Cockpit (Validation)**: Readiness tiles including **Active Version** — the version currently exposed via API/MCP (from the registry), with a *(not loaded)* hint when it differs from the version open in the session. Distinct from “latest on disk” vs read-only UI gating (still driven by whether the loaded version is the latest).
-- **Audit Trail**: Domain → Audit trail splits ontology vs mapping into tabs (plus Status and Builds). Change rows are compact: the icon is the action, and the line names the asset with previous → new values on edits. Events are buffered in the working session and flushed to the registry (`domain_change_events`) on **Save to registry**. A version dropdown scopes the timeline.
+- **Audit Trail**: Domain → Audit trail splits ontology vs mapping into tabs (plus Status, Builds, and GitHub). Change rows are compact: the icon is the action, and the line names the asset with previous → new values on edits. Events are buffered in the working session and flushed to the registry (`domain_change_events`) on **Save to registry**. A version dropdown scopes the timeline. GitHub pushes that produced a commit or warning appear on the GitHub tab.
 - **New-domain loading**: After **New Domain** from the navbar, a full-page spinner runs until Domain Information has finished its initial fetches (LLM endpoints, version status, domain info).
 - **CamelCase domain names**: New domains must use alphanumeric CamelCase names (no spaces or special characters); the creation UI sanitizes as you type and the backend rejects invalid names.
 - **Domain Information — Knowledge Graph fields**: Triple-store FQN and Graph DB table name (e.g. Lakebase `g_<domain>_v<version>`) refresh when the domain name is **committed** (blur / `change`) or the version changes, so previews match naming rules before save. When the backend is Neo4j, a required **Neo4j connection** dropdown lists Settings profiles (no per-domain database override).

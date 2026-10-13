@@ -1069,7 +1069,7 @@ The contract:
 - **The panel is permanent, not a drawer.** `min-width: 200px`,
   `max-width: 50%`; the default width is `320px` for a read-only details
   panel (Explorer) and `420px` where the panel hosts edit forms (Ontology),
-  which gives the four compact tabs a comfortable default. The shared rail
+  which gives the compact tabs a comfortable default. The shared rail
   remains on one line and scrolls horizontally when the panel is narrower.
   It is created *before* the view renders — canvases read their width once
   (D3 / Sigma size from `container.clientWidth`), so a panel that appears

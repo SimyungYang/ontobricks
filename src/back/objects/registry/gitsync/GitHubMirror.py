@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import threading
 import time
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
@@ -57,6 +58,7 @@ class GitHubMirror:
         self._thread: Optional[threading.Thread] = None
         self._cfg_cache: Dict[str, Tuple[float, Optional[GitHubConfig]]] = {}
         self._claimed: set = set()
+        self._pause_depth = 0
         self._status: Dict[str, Any] = {
             "state": "idle",
             "at": "",
@@ -106,9 +108,20 @@ class GitHubMirror:
     def notify_delete_domain(self, store, folder: str) -> None:
         self._enqueue(_Job(_OP_DELETE_DOMAIN, store, folder, None, _actor()))
 
+    @contextmanager
+    def paused(self):
+        """Skip queueing mirror jobs for the duration of the block."""
+        with self._cond:
+            self._pause_depth += 1
+        try:
+            yield
+        finally:
+            with self._cond:
+                self._pause_depth = max(0, self._pause_depth - 1)
+
     def _enqueue(self, job: _Job) -> None:
         try:
-            if not job.folder or self.config_for(job.store) is None:
+            if self._pause_depth or not job.folder or self.config_for(job.store) is None:
                 return
             job.due = time.monotonic() + self.DEBOUNCE_S
             with self._cond:

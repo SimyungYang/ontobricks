@@ -117,6 +117,8 @@ def test_js_renders_server_capabilities_and_new_endpoints():
     assert "version.delete_control_visible" in js
     assert "/domain/set-version-status" in js
     assert "/domain/versions/" in js
+    assert "deletes_domain" in js
+    assert "Delete last version and domain" in js
     assert "STATUS_MAP" in js
     assert "is_latest" not in js
     assert "status === 'DRAFT'" not in js
@@ -372,6 +374,8 @@ def test_registry_uses_server_delete_capability():
     assert "v.delete_control_visible" in js
     assert "v.can_delete" in js
     assert "v.delete_block_reason" in js
+    assert "deletesDomain" in js
+    assert "Delete last version and domain" in js
     delete_section = js[
         js.index("function createRegistryVersionDeleteControl") :
         js.index("document.addEventListener")
@@ -454,10 +458,146 @@ def test_registry_domain_delete_confirmation_escapes_name_and_names_knowledge_st
     js = REGISTRY_JS.read_text(encoding="utf-8")
     delete_domain = js[
         js.index("async function deleteRegistryDomain") :
-        js.index("async function loadRegistryDomainVersion")
+        js.index("document.addEventListener")
     ]
     assert "escapeHtml(domainName)" in delete_domain
     assert "Knowledge Store" in delete_domain
+    assert "githubDomainDeleteExtras(registryGithubEnabled)" in delete_domain
+    assert "deleteGithubQuery" in delete_domain
+
+
+def test_registry_domain_delete_asks_github_when_mirror_enabled():
+    _run_renderer_assertions(
+        r"""
+        (async () => {
+            let confirmation;
+            let request;
+            context.escapeHtml = (value) => String(value);
+            context.registryGithubEnabled = true;
+            context.showConfirmDialog = async (options) => {
+                confirmation = options;
+                options.checkboxChecked = true;
+                return true;
+            };
+            context.showNotification = () => {};
+            context.fetch = async (url, options) => {
+                request = {url, options};
+                return { json: async () => ({success: true, message: 'ok'}) };
+            };
+            context.invalidateRegistryBridges = () => {};
+            context.loadRegistryDomains = () => {};
+
+            await context.deleteRegistryDomain('acme');
+
+            assert.equal(confirmation.title, 'Delete Domain');
+            assert.equal(confirmation.checkboxLabel, 'Also delete this domain from GitHub');
+            assert.equal(request.url, '/settings/registry/domains/acme?delete_github=1');
+            assert.equal(request.options.method, 'DELETE');
+        })().catch((error) => {
+            console.error(error);
+            process.exitCode = 1;
+        });
+        """,
+        REGISTRY_JS,
+    )
+
+
+def test_registry_domain_delete_omits_github_checkbox_when_mirror_off():
+    _run_renderer_assertions(
+        r"""
+        (async () => {
+            let confirmation;
+            context.escapeHtml = (value) => String(value);
+            context.registryGithubEnabled = false;
+            context.showConfirmDialog = async (options) => {
+                confirmation = options;
+                return false;
+            };
+
+            await context.deleteRegistryDomain('acme');
+
+            assert.equal(confirmation.checkboxLabel || '', '');
+        })().catch((error) => {
+            console.error(error);
+            process.exitCode = 1;
+        });
+        """,
+        REGISTRY_JS,
+    )
+
+
+def test_last_version_delete_asks_github_when_mirror_enabled():
+    _run_renderer_assertions(
+        r"""
+        (async () => {
+            let confirmation;
+            let request;
+            context.escapeHtml = (value) => String(value);
+            context.window.location = { href: '' };
+            context.versionsGithubEnabled = true;
+            context.showConfirmDialog = async (options) => {
+                confirmation = options;
+                options.checkboxChecked = true;
+                return true;
+            };
+            context.showNotification = () => {};
+            context.fetch = async (url, options) => {
+                request = {url, options};
+                return {
+                    ok: true,
+                    json: async () => ({success: true, message: 'ok', domain_deleted: true})
+                };
+            };
+
+            await context.deleteVersionFromList('acme', '1', null, true);
+
+            assert.equal(confirmation.title, 'Delete last version and domain');
+            assert.equal(confirmation.checkboxLabel, 'Also delete this domain from GitHub');
+            assert.equal(request.url, '/domain/versions/1?delete_github=1');
+        })().catch((error) => {
+            console.error(error);
+            process.exitCode = 1;
+        });
+        """
+    )
+
+
+def test_registry_last_version_delete_sends_github_query():
+    _run_renderer_assertions(
+        r"""
+        (async () => {
+            let confirmation;
+            let request;
+            context.escapeHtml = (value) => String(value);
+            context.registryGithubEnabled = true;
+            context.showConfirmDialog = async (options) => {
+                confirmation = options;
+                options.checkboxChecked = true;
+                return true;
+            };
+            context.showNotification = () => {};
+            context.fetch = async (url, options) => {
+                request = {url, options};
+                return {
+                    status: 200,
+                    json: async () => ({success: true, message: 'ok'})
+                };
+            };
+
+            await context.deleteRegistryVersion('acme', '1', () => {}, () => {}, true);
+
+            assert.equal(confirmation.checkboxLabel, 'Also delete this domain from GitHub');
+            assert.equal(
+                request.url,
+                '/settings/registry/domains/acme/versions/1?delete_github=1'
+            );
+        })().catch((error) => {
+            console.error(error);
+            process.exitCode = 1;
+        });
+        """,
+        REGISTRY_JS,
+    )
 
 
 def test_registry_delete_conflict_shows_server_message_and_refreshes():

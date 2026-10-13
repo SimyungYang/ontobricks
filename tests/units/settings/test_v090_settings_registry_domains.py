@@ -10,6 +10,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from back.core.errors import InfrastructureError, NotFoundError, ValidationError
+from back.objects.domain.settings.GitHubSettings import GitHubSettings
 from back.objects.domain.settings.RegistryDomainSettings import RegistryDomainSettings
 
 pytestmark = pytest.mark.unit
@@ -92,6 +93,17 @@ class TestListRegistryDomains:
             dict(user_role="admin", status="DRAFT", is_loaded=False, is_latest=False, version_count=2),
         ]
         assert cached[0]["versions"][0] == {"version": "2", "status": "PUBLISHED"}
+        assert result["github_enabled"] is False
+
+    def test_exposes_github_enabled_when_mirror_is_ready(self, svc):
+        svc.list_domain_details_cached.return_value = (True, [], "")
+        svc.store.load_global_config.return_value = {
+            "github_config": {"enabled": True, "owner": "acme", "repo": "onto"}
+        }
+        result = RegistryDomainSettings.list_registry_domains_result(
+            MagicMock(), MagicMock()
+        )
+        assert result["github_enabled"] is True
 
 
 # ---------------------------------------------------------------------------
@@ -137,6 +149,28 @@ class TestDeleteRegistryDomain:
         assert result == {"success": True, "message": 'Domain "claims" deleted from registry'}
         svc.delete_domain.assert_called_once_with("claims")
 
+    def test_opt_in_github_delete_runs_after_registry_delete(self, svc, monkeypatch):
+        svc.delete_domain.return_value = []
+        called = []
+
+        def _gh(folder, session_mgr, settings, *, actor=""):
+            called.append((folder, actor))
+
+        monkeypatch.setattr(GitHubSettings, "delete_mirrored_domain", _gh)
+        RegistryDomainSettings.delete_registry_domain_result(
+            "claims", MagicMock(), MagicMock(), delete_github=True
+        )
+        assert called[0][0] == "claims"
+
+    def test_skips_github_delete_unless_requested(self, svc, monkeypatch):
+        svc.delete_domain.return_value = []
+        gh = MagicMock()
+        monkeypatch.setattr(GitHubSettings, "delete_mirrored_domain", gh)
+        RegistryDomainSettings.delete_registry_domain_result(
+            "claims", MagicMock(), MagicMock()
+        )
+        gh.assert_not_called()
+
     def test_partial_delete_joins_errors_in_detail(self, svc):
         svc.delete_domain.return_value = ["volume busy", "lakebase row locked"]
         with pytest.raises(InfrastructureError, match="partially deleted") as exc_info:
@@ -179,6 +213,26 @@ class TestDeleteRegistryVersion:
         svc.list_versions.return_value = (True, ["1", "2"], "")
         with pytest.raises(NotFoundError):
             self._call("9")
+
+    def test_last_version_opt_in_github_delete(self, svc, monkeypatch):
+        svc.list_versions.return_value = (True, ["1"], "")
+        svc.read_version.return_value = (True, {"info": {"status": "DRAFT"}}, "")
+        svc.delete_version.return_value = (True, "")
+        svc.delete_domain.return_value = []
+        gh = MagicMock()
+        monkeypatch.setattr(GitHubSettings, "delete_mirrored_domain", gh)
+        monkeypatch.setattr(_ss, "check_version_deletion", lambda **_k: None)
+        result = RegistryDomainSettings.delete_registry_version_result(
+            "claims",
+            "1",
+            user_role="admin",
+            session_mgr=MagicMock(),
+            settings=MagicMock(),
+            delete_github=True,
+        )
+        assert result["domain_deleted"] is True
+        gh.assert_called_once()
+        assert gh.call_args.args[0] == "claims"
 
 
 # ---------------------------------------------------------------------------

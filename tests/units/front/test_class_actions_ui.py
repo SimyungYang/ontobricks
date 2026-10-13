@@ -21,6 +21,20 @@ def test_external_tab_has_actions_box_with_add_button():
     assert "renderSharedEntityActions(viewOnly)" in js
 
 
+def test_refs_tab_keeps_dashboard_dataset_and_bridges():
+    js = PANELS_JS.read_text(encoding="utf-8")
+    refs_start = js.index('data-form-tab-content="refs"')
+    actions_start = js.index('data-form-tab-content="actions"')
+    refs_pane = js[refs_start:actions_start]
+    assert 'id="sharedEntityDashboard"' in refs_pane
+    assert 'id="sharedEntityDataset"' in refs_pane
+    assert 'id="sharedEntityBridges"' in refs_pane
+    assert 'id="sharedEntityActions"' not in refs_pane
+    assert 'id="sharedEntityBusinessRules"' not in refs_pane
+    assert "{ id: 'refs', icon: 'bi-link-45deg', label: 'Refs.' }" in js
+    assert "{ id: 'actions', icon: 'bi-lightning', label: 'Actions' }" in js
+
+
 def test_actions_box_documents_the_single_parameter_contract():
     js = PANELS_JS.read_text(encoding="utf-8")
     assert "exactly one parameter" in js
@@ -57,7 +71,7 @@ def test_loaders_retain_class_actions():
 
 
 def test_designer_sync_preserves_dataset_actions_and_bridges():
-    """Designer → ontology sync must not wipe References-tab metadata."""
+    """Designer → ontology sync must not wipe Refs./Actions-tab metadata."""
     js = DESIGN_JS.read_text(encoding="utf-8")
     assert "bridges: existing.bridges || []" in js
     assert "dataset: existing.dataset || null" in js

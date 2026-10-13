@@ -66,3 +66,17 @@ def test_import_preview_shows_spinner_while_reading_file():
     assert 'id="importObxPreviewBusy"' in TEMPLATE
     assert "spinner-border spinner-border-sm" in TEMPLATE
     assert "importObxPreviewBusy" in SCRIPT
+
+
+def test_load_from_github_shows_busy_then_fetches_obx():
+    assert 'id="btnImportFromGithub"' in TEMPLATE
+    github_click = SCRIPT.split("btnImportFromGithub")[1].split(
+        "async function previewImportFile"
+    )[0]
+    assert "busyEl?.classList.remove('d-none')" in github_click
+    assert "/settings/github/obx" in github_click
+    assert "AbortController" in github_click
+    assert "renderImportObxPreview(data)" in github_click
+    assert "pendingImportFromGithub = true" in github_click
+    assert "showNotification" in github_click
+    assert "from_github" in SCRIPT

@@ -8,11 +8,15 @@ from __future__ import annotations
 
 import copy
 import importlib
+from contextlib import nullcontext
 from typing import Any, Dict
 
+from back.core.databricks.request_identity import get_request_identity
 from back.core.errors import InfrastructureError, NotFoundError, OntoBricksError, ValidationError
 from shared.config.settings import Settings
 from back.core.logging import get_logger
+from back.objects.registry.gitsync.GitHubConfig import GitHubConfig
+from back.objects.registry.gitsync.GitHubMirror import github_mirror
 from back.objects.session import SessionManager
 
 # Package ``__init__`` binds ``SettingsService`` as the class, which shadows
@@ -25,6 +29,29 @@ logger = get_logger(__name__)
 
 class RegistryDomainSettings:
     """Settings → Registry: domains, versions, bridges, and target-domain role."""
+
+    @staticmethod
+    def _github_enabled(svc) -> bool:
+        return GitHubConfig.ready_for(svc.store)
+
+    @staticmethod
+    def _delete_github_mirror(
+        folder: str,
+        session_mgr: SessionManager,
+        settings: Settings,
+        *,
+        delete_github: bool,
+    ) -> None:
+        if not delete_github:
+            return
+        from back.objects.domain.settings.GitHubSettings import GitHubSettings
+
+        GitHubSettings.delete_mirrored_domain(
+            folder,
+            session_mgr,
+            settings,
+            actor=get_request_identity().email,
+        )
 
     @staticmethod
     def list_registry_domains_result(
@@ -61,7 +88,11 @@ class RegistryDomainSettings:
                         version_count=len(versions),
                     )
                     version_data.update(deletion)
-            return {"success": True, "domains": result}
+            return {
+                "success": True,
+                "domains": result,
+                "github_enabled": RegistryDomainSettings._github_enabled(svc),
+            }
         except OntoBricksError:
             raise
         except Exception as e:
@@ -98,6 +129,8 @@ class RegistryDomainSettings:
         domain_name: str,
         session_mgr: SessionManager,
         settings: Settings,
+        *,
+        delete_github: bool = False,
     ) -> Dict[str, Any]:
         try:
             domain = _ss.get_domain(session_mgr)
@@ -105,7 +138,8 @@ class RegistryDomainSettings:
             if not svc.cfg.is_configured:
                 raise ValidationError("Registry not configured")
 
-            errors = svc.delete_domain(domain_name)
+            with github_mirror.paused():
+                errors = svc.delete_domain(domain_name)
 
             if errors:
                 joined = "; ".join(errors)
@@ -113,6 +147,12 @@ class RegistryDomainSettings:
                     "Registry domain was only partially deleted",
                     detail=joined,
                 )
+            RegistryDomainSettings._delete_github_mirror(
+                domain_name,
+                session_mgr,
+                settings,
+                delete_github=delete_github,
+            )
 
             return {
                 "success": True,
@@ -134,6 +174,7 @@ class RegistryDomainSettings:
         user_role: str,
         session_mgr: SessionManager,
         settings: Settings,
+        delete_github: bool = False,
     ) -> Dict[str, Any]:
         try:
             domain = _ss.get_domain(session_mgr)
@@ -168,12 +209,23 @@ class RegistryDomainSettings:
                     domain.domain_folder == domain_name
                     and domain.current_version == version
                 ),
-                is_latest=version == versions[0],
                 version_count=len(versions),
             )
 
+            last_version = len(versions) == 1
+            pause = github_mirror.paused() if last_version else nullcontext()
             try:
-                deleted, delete_message = svc.delete_version(domain_name, version)
+                with pause:
+                    deleted, delete_message = svc.delete_version(domain_name, version)
+                    domain_deleted = False
+                    if last_version:
+                        domain_errors = svc.delete_domain(domain_name)
+                        if domain_errors:
+                            raise InfrastructureError(
+                                "Version was deleted but the empty domain could not be removed",
+                                detail="; ".join(domain_errors),
+                            )
+                        domain_deleted = True
             except InfrastructureError:
                 # The registry row may already be gone when post-delete
                 # Knowledge Store cleanup fails. Do not leave version-status
@@ -184,10 +236,25 @@ class RegistryDomainSettings:
                 raise InfrastructureError(
                     "Failed to delete registry version", detail=delete_message
                 )
+            if domain_deleted:
+                RegistryDomainSettings._delete_github_mirror(
+                    domain_name,
+                    session_mgr,
+                    settings,
+                    delete_github=delete_github,
+                )
             _ss.clear_version_status_cache()
+            if domain_deleted:
+                message = (
+                    f'Version {version} was the last version; domain '
+                    f'"{domain_name}" deleted'
+                )
+            else:
+                message = f'Version {version} deleted from "{domain_name}"'
             return {
                 "success": True,
-                "message": f'Version {version} deleted from "{domain_name}"',
+                "message": message,
+                "domain_deleted": domain_deleted,
             }
         except OntoBricksError:
             raise

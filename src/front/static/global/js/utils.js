@@ -418,6 +418,8 @@ function showStackedModal(modalEl) {
  *   scrollable bordered panel (for listing affected items, diffs, etc.)
  * @param {string} options.size - Optional Bootstrap modal size class, e.g. 'modal-lg'
  * @param {string} options.headerClass - Optional Bootstrap class for the header, e.g. 'bg-danger text-white'
+ * @param {string} options.checkboxLabel - Optional checkbox shown under the message
+ * @param {boolean} options.checkboxChecked - Initial checkbox state; updated on confirm
  * @returns {Promise<boolean>} Resolves to true if confirmed, false if cancelled
  */
 function showConfirmDialog(options = {}) {
@@ -431,13 +433,21 @@ function showConfirmDialog(options = {}) {
             icon = 'question-circle',
             detailHtml = '',
             size = '',
-            headerClass = ''
+            headerClass = '',
+            checkboxLabel = '',
+            checkboxChecked = false
         } = options;
 
         const modalId = 'confirmDialog_' + Date.now();
         const closeClass = headerClass.includes('text-white') ? 'btn-close-white' : '';
         const detailBlock = detailHtml
             ? `<div class="border rounded p-3 bg-light mt-3" style="max-height: 320px; overflow-y: auto;">${detailHtml}</div>`
+            : '';
+        const checkboxBlock = checkboxLabel
+            ? `<div class="form-check mt-3">
+                    <input class="form-check-input ob-confirm-check" type="checkbox" id="${modalId}_check"${checkboxChecked ? ' checked' : ''}>
+                    <label class="form-check-label" for="${modalId}_check">${checkboxLabel}</label>
+               </div>`
             : '';
 
         const modalHtml = `
@@ -452,6 +462,7 @@ function showConfirmDialog(options = {}) {
                         </div>
                         <div class="modal-body">
                             <p class="mb-0">${message}</p>
+                            ${checkboxBlock}
                             ${detailBlock}
                         </div>
                         <div class="modal-footer">
@@ -477,6 +488,8 @@ function showConfirmDialog(options = {}) {
         let resolved = false;
 
         document.getElementById(`${modalId}_confirm`).addEventListener('click', () => {
+            const box = document.getElementById(`${modalId}_check`);
+            if (box) options.checkboxChecked = box.checked;
             resolved = true;
             modal.hide();
             resolve(true);

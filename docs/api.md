@@ -894,7 +894,7 @@ with `success: false` and nothing is executed. Table-valued functions run as
 #### `POST /api/v1/digitaltwin/nodes/business-rule`
 
 Run one of the SWRL business rules attached to the node's class (Ontology →
-Studio → References → **Business rules**), **scoped to that entity**, and
+Studio → Actions → **Business rules**), **scoped to that entity**, and
 materialise the inferred triples into the graph.
 
 **Body:**
@@ -1060,6 +1060,7 @@ This document describes the REST API endpoints available in OntoBricks.
 | Knowledge Graph API | `/api/v1/digitaltwin` | Stateless access to triple store, builds, triple search, quality, reasoning |
 | Core/Navbar | `/` | Session status, file browsing |
 | Settings | `/settings` | Databricks connection, settings |
+| GitHub mirror | `/settings/github` | Instance repository config, test/claim, sync-all, OBX rebuild (admin) |
 | Scheduled Builds | `/settings/schedules` | Automated triple store build scheduling |
 | Ontology | `/ontology` | Ontology design, OWL operations |
 | SWRL Rules | `/ontology/swrl` | SWRL rule management |
@@ -1323,6 +1324,30 @@ POST /settings/save
   "schema": "default"
 }
 ```
+
+#### GitHub repository mirror (admin)
+
+Instance-wide mirror of the registry into one GitHub repository. The PAT is
+never stored — only a Databricks secret scope/key (or `ONTOBRICKS_GITHUB_TOKEN`
+locally). See [User Guide — GitHub](user-guide.md#configuration--github-repository-mirror).
+
+```http
+GET /settings/github
+POST /settings/github
+POST /settings/github/test
+POST /settings/github/sync-all
+GET /settings/github/obx
+```
+
+| Endpoint | Role |
+|----------|------|
+| `GET /settings/github` | Current `github_config` plus **Last sync** status |
+| `POST /settings/github` | Save owner/repo/branch/base path/secret refs/author/enable flags |
+| `POST /settings/github/test` | Optional body `{"take_over": true}`. Checks push permission and writes `.ontobricks/instance.json` |
+| `POST /settings/github/sync-all` | Rewrite every domain/version into the repository in one commit |
+| `GET /settings/github/obx` | Rebuild an `.obx` envelope from the repository JSON (feeds **Import → Load from GitHub**) |
+
+All five routes require the Administrator role (`CAN_MANAGE`).
 
 #### Get/Set Default Emoji
 

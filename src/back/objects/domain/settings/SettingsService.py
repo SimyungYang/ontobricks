@@ -384,28 +384,17 @@ class SettingsService:
 
 
     @staticmethod
-    def delete_registry_domain_result(
-        domain_name: str,
-        session_mgr: SessionManager,
-        settings: Settings,
-    ) -> Dict[str, Any]:
+    def delete_registry_domain_result(*args, **kwargs) -> Dict[str, Any]:
         from back.objects.domain.settings.RegistryDomainSettings import RegistryDomainSettings
 
-        return RegistryDomainSettings.delete_registry_domain_result(domain_name, session_mgr, settings)
+        return RegistryDomainSettings.delete_registry_domain_result(*args, **kwargs)
 
 
     @staticmethod
-    def delete_registry_version_result(
-        domain_name: str,
-        version: str,
-        *,
-        user_role: str,
-        session_mgr: SessionManager,
-        settings: Settings,
-    ) -> Dict[str, Any]:
+    def delete_registry_version_result(*args, **kwargs) -> Dict[str, Any]:
         from back.objects.domain.settings.RegistryDomainSettings import RegistryDomainSettings
 
-        return RegistryDomainSettings.delete_registry_version_result(domain_name, version, user_role=user_role, session_mgr=session_mgr, settings=settings)
+        return RegistryDomainSettings.delete_registry_version_result(*args, **kwargs)
 
 
     @staticmethod

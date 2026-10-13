@@ -182,21 +182,20 @@ def check_version_deletion(
     user_role: str,
     status: str,
     is_loaded: bool,
-    is_latest: bool,
     version_count: int,
+    is_latest: bool = False,
 ) -> None:
     if user_role != ROLE_ADMIN:
         raise AuthorizationError("Only an application administrator can delete versions")
-    if version_count <= 1:
-        raise ConflictError("A domain must keep at least one version")
-    if is_loaded:
+    _ = is_latest
+    if (status or STATUS_DRAFT).upper() != STATUS_DRAFT:
+        raise ConflictError("Reopen this version as Draft before deleting it")
+    # The last remaining version may be deleted (it removes the domain).
+    # A loaded version may be deleted only when it is that last version.
+    if is_loaded and version_count > 1:
         raise ConflictError(
             "Load another version before deleting this loaded version"
         )
-    if is_latest:
-        raise ConflictError("The latest version cannot be deleted")
-    if (status or STATUS_DRAFT).upper() != STATUS_DRAFT:
-        raise ConflictError("Reopen this version as Draft before deleting it")
 
 
 def version_deletion_capability(
@@ -204,35 +203,34 @@ def version_deletion_capability(
     user_role: str,
     status: str,
     is_loaded: bool,
-    is_latest: bool,
     version_count: int,
+    is_latest: bool = False,
 ) -> dict[str, Any]:
     visible = user_role == ROLE_ADMIN
+    deletes_domain = version_count <= 1
     try:
         check_version_deletion(
             user_role=user_role,
             status=status,
             is_loaded=is_loaded,
-            is_latest=is_latest,
             version_count=version_count,
+            is_latest=is_latest,
         )
     except (AuthorizationError, ConflictError) as exc:
         reason = str(exc)
-        if "keep at least one" in reason:
-            reason = "A domain must keep at least one version."
-        elif "Load another" in reason:
+        if "Load another" in reason:
             reason = "Load another version before deleting this one."
-        elif "latest" in reason:
-            reason = "The latest version cannot be deleted."
         elif "Draft" in reason:
             reason = "Reopen this version as Draft before deleting it."
         return {
             "delete_control_visible": visible,
             "can_delete": False,
             "delete_block_reason": reason,
+            "deletes_domain": deletes_domain,
         }
     return {
         "delete_control_visible": True,
         "can_delete": True,
         "delete_block_reason": "",
+        "deletes_domain": deletes_domain,
     }

@@ -1396,7 +1396,7 @@ src/front/
 
 ```
 back/objects/
-├── registry/         <- UC domain registry, permissions, scheduled builds
+├── registry/         <- UC domain registry, permissions, scheduled builds, gitsync/ GitHub mirror
 ├── session/          <- HTTP session storage, domain state, instance config
 ├── domain/           <- Session-scoped UC/metadata/layout operations
 ├── ontology/         <- Ontology domain class
@@ -1420,6 +1420,7 @@ back/core/
 │                        Consumed by both the registry store and the graph
 │                        triple store (two independent databases).
 ├── graphql/          <- Strawberry GraphQL schema builder
+├── github/           <- GitHub Git Data API client (atomic commits, no git clone)
 ├── w3c/              <- W3C standard parsers/generators (OWL, RDFS, R2RML, SPARQL, SHACL)
 ├── industry/         <- Standard industry ontology importers (CDISC, FIBO, IOF)
 ├── graph_analysis/   <- Community detection (NetworkX backend)
@@ -1846,6 +1847,7 @@ All logging goes through `back/core/logging/LogManager`.
 | Sessions | `src/back/objects/session/` (`middleware.py`, `SessionManager.py`, `DomainSession.py`) |
 | Databricks / volumes | `src/back/core/databricks/`, `src/back/core/helpers/` |
 | Registry / permissions | `src/back/objects/registry/` |
+| GitHub registry mirror | `src/back/core/github/`, `src/back/objects/registry/gitsync/`, `src/back/objects/domain/settings/GitHubSettings.py` |
 | Saved domain / UC layout (`Domain` class) | `src/back/objects/domain/` (`Domain` class); feature services in `src/back/services/` (e.g. `home.py`, `settings.py`) |
 | Tasks | `src/back/core/task_manager/`, `src/api/routers/internal/tasks.py` |
 | UI HTML routes | `src/front/routes/*.py` |

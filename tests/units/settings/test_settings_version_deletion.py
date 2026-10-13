@@ -35,6 +35,7 @@ def _run(
         svc.list_versions.return_value = (True, list(versions), "")
         svc.read_version.return_value = (True, {"info": {"status": status}}, "")
         svc.delete_version.return_value = (True, "")
+        svc.delete_domain.return_value = []
     clear_status = clear_status or MagicMock()
     with (
         patch.object(module, "get_domain", return_value=domain),
@@ -68,9 +69,21 @@ def test_loaded_version_cannot_delete():
         _run(target="2", loaded_version="2")
 
 
-def test_latest_version_cannot_delete():
-    with pytest.raises(ConflictError, match="latest"):
-        _run(target="3", loaded_version="2")
+def test_latest_unloaded_draft_is_deleted():
+    result, svc, _clear = _run(target="3", loaded_version="2")
+    assert result["success"] is True
+    svc.delete_version.assert_called_once_with("acme", "3")
+    svc.delete_domain.assert_not_called()
+
+
+def test_last_remaining_version_deletes_the_domain():
+    result, svc, _clear = _run(
+        target="1", versions=("1",), loaded_folder="other", loaded_version="9"
+    )
+    assert result["success"] is True
+    assert result["domain_deleted"] is True
+    svc.delete_version.assert_called_once_with("acme", "1")
+    svc.delete_domain.assert_called_once_with("acme")
 
 
 def test_non_draft_version_cannot_delete():
