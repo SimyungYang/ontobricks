@@ -652,10 +652,27 @@ async function domainNew() {
  * Save domain to the registry.
  * Persists domain info / design layout first, then saves without a confirmation popup.
  */
-async function domainSave() {
-    try {
-        if (!validateDomainInfoForm()) return;
+let _domainSaving = false;
 
+/** Swap the navbar Save icon for a spinner (and block re-clicks) while saving. */
+function setDomainSaveBusy(busy) {
+    document.querySelectorAll('.ob-subnav-save-btn').forEach((btn) => {
+        btn.classList.toggle('is-saving', busy);
+        btn.setAttribute('aria-busy', busy ? 'true' : 'false');
+        btn.querySelector('i.bi')?.classList.toggle('d-none', busy);
+        btn.querySelector('.ob-save-spinner')?.remove();
+        if (busy) {
+            btn.insertAdjacentHTML('afterbegin',
+                '<span class="spinner-border ob-save-spinner" role="status" aria-hidden="true"></span>');
+        }
+    });
+}
+
+async function domainSave() {
+    if (_domainSaving || !validateDomainInfoForm()) return;
+    _domainSaving = true;
+    setDomainSaveBusy(true);
+    try {
         // First, save domain info from form if on the domain page
         await saveDomainInfoBeforeSave();
         
@@ -696,6 +713,9 @@ async function domainSave() {
     } catch (error) {
         console.error('Error preparing save:', error);
         showNotification('Failed to prepare save: ' + error.message, 'error');
+    } finally {
+        _domainSaving = false;
+        setDomainSaveBusy(false);
     }
 }
 

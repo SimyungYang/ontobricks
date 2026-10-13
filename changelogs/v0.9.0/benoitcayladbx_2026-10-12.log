@@ -120,3 +120,29 @@ Modified files:
 Tests: `uv run --frozen pytest -q -m "not scenario"` → 9052 passed, 326 skipped,
 6 deselected, 1 xfailed, 40 warnings in 54.54s.
 
+## Navbar Save: spinner while the domain is being saved
+================================================================================
+
+Context:
+The top-right "Save" button gave no visual feedback during a registry save,
+apart from a transient toast, and could be clicked again mid-save.
+
+Changes:
+
+1. src/front/static/global/js/navbar.js
+   New setDomainSaveBusy(): hides the Save icon, shows a small spinner, sets
+   aria-busy and an is-saving state. domainSave() validates first, turns the
+   busy state on, and always restores it in finally. A re-entrancy guard
+   ignores extra clicks / Ctrl+S during a save.
+2. src/front/static/global/css/main.css
+   .ob-subnav-save-btn.is-saving (no pointer events, progress cursor) and
+   .ob-save-spinner sizing to match the icon. The existing .disabled fade is
+   left untouched.
+
+Modified files:
+- src/front/static/global/js/navbar.js
+- src/front/static/global/css/main.css
+- changelogs/v0.9.0/benoitcayladbx_2026-10-12.log
+
+Tests: `uv run --frozen pytest -q -m "not scenario"` → 9058 passed, 326 skipped,
+6 deselected, 1 xfailed, 40 warnings in 57.54s.

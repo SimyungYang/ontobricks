@@ -822,6 +822,17 @@ body {
     text-decoration: none;
 }
 
+.ob-subnav-save-btn.is-saving {
+    pointer-events: none;
+    cursor: progress;
+}
+
+.ob-subnav-save-btn .ob-save-spinner {
+    width: 0.8rem;
+    height: 0.8rem;
+    border-width: 0.15em;
+}
+
 .ob-subnav-save-btn.disabled,
 .ob-subnav-save-btn.btn-requires-domain.disabled {
     opacity: 0.45;
