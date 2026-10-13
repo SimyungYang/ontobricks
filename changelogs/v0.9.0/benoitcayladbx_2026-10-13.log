@@ -555,3 +555,30 @@ Modified files:
 Tests: `uv run --frozen pytest -q -m "not scenario"` → 9086 passed, 326 skipped,
 6 deselected, 1 xfailed, 40 warnings in 56.24s.
 
+================================================================================
+## Rename Actions section to UC functions
+================================================================================
+
+Context:
+Ontology Studio entity pane → Actions tab still headed the bindable Unity
+Catalog functions as "Actions", which duplicated the tab name. Rename the
+section to "UC functions". Tab id and Graph Explorer wording stay the same.
+
+Changes:
+
+1. src/front/static/ontology/js/ontology-shared-panels.js
+   Actions-tab section heading: UC functions.
+2. tests/units/front/test_class_actions_ui.py
+   Contract on that heading.
+3. docs/user-guide.md
+   Class-actions steps use Actions tab / UC functions section.
+
+Modified files:
+- src/front/static/ontology/js/ontology-shared-panels.js
+- tests/units/front/test_class_actions_ui.py
+- docs/user-guide.md
+- changelogs/v0.9.0/benoitcayladbx_2026-10-13.log
+
+Tests: PENDING
+
+

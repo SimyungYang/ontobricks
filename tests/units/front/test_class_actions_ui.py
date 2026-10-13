@@ -21,6 +21,17 @@ def test_external_tab_has_actions_box_with_add_button():
     assert "renderSharedEntityActions(viewOnly)" in js
 
 
+def test_actions_tab_section_heading_is_uc_functions():
+    js = PANELS_JS.read_text(encoding="utf-8")
+    pane = js[
+        js.index('data-form-tab-content="actions"') : js.index(
+            'data-form-tab-content="constraints"'
+        )
+    ]
+    assert "<i class=\"bi bi-lightning-charge me-1\"></i>UC functions</span>" in pane
+    assert "<i class=\"bi bi-lightning-charge me-1\"></i>Actions</span>" not in pane
+
+
 def test_refs_tab_keeps_dashboard_dataset_and_bridges():
     js = PANELS_JS.read_text(encoding="utf-8")
     refs_start = js.index('data-form-tab-content="refs"')

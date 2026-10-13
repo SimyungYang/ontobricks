@@ -421,7 +421,7 @@ functions that operate on a single entity and can be run from the Graph Explorer
 or from an MCP client.
 
 1. Go to **Ontology** → **Entities** and select an entity type
-2. Open the **External** tab and find the **Actions** section
+2. Open the **Actions** tab and find the **UC functions** section
 3. Click **Add** to open the function picker, then choose a catalog and schema
 4. Pick a function and type a **description** — the description is what the LLM
    and the end user see, so make it explicit about what the action does

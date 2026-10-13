@@ -746,7 +746,7 @@ async function renderEntityForm(panel, cls, viewOnly = false) {
             <div class="form-tab-pane ${_eTab === 'actions' ? 'active' : ''}" data-form-tab-content="actions">
                 <div class="mb-3">
                     <label class="form-label d-flex justify-content-between align-items-center">
-                        <span><i class="bi bi-lightning-charge me-1"></i>Actions</span>
+                        <span><i class="bi bi-lightning-charge me-1"></i>UC functions</span>
                         ${!viewOnly ? '<button type="button" class="btn btn-sm btn-outline-primary py-0 px-1" onclick="openActionSelectorModal()"><i class="bi bi-plus"></i> Add</button>' : ''}
                     </label>
                     <div id="sharedEntityActions" class="border rounded p-2" style="background: #ffffff;">
