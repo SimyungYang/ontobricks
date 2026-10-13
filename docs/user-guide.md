@@ -456,7 +456,7 @@ is a verb the user clicks; a virtual attribute is declared on the class like any
 other attribute and sits next to the mapped ones.
 
 1. Go to **Ontology** → **Entities** and select an entity type
-2. Open the **Attributes** tab and find the **Virtual Attributes** section
+2. Open the **Attrs.** tab and find the **Virtual Attributes** section
 3. Click **Add** to open the function picker, then choose a catalog and schema
 4. Pick a function — the picker shows what it returns
 5. Fill in the **description** and, optionally, a display **label** per attribute

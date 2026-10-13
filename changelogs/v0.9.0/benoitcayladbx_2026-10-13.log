@@ -526,3 +526,32 @@ Modified files:
 
 Tests: `uv run --frozen pytest -q -m "not scenario"` → 9085 passed, 326 skipped,
 6 deselected, 1 xfailed, 40 warnings in 61.56s.
+
+================================================================================
+## Shorten entity pane Details/Attributes tabs
+================================================================================
+
+Context:
+The Ontology right pane tab strip for a selected entity was wrapping or crowding
+on the compact rail. Rename Details → Infos and Attributes → Attrs. to match
+the existing Refs. abbreviation. Tab ids and context-menu wording stay as they
+are.
+
+Changes:
+
+1. src/front/static/ontology/js/ontology-shared-panels.js
+   Entity form tabs: Infos, Attrs. (relationship pane still Details).
+2. tests/units/front/test_ontology_split_panel_layout.py
+   Contract on the entity tab nav labels.
+3. docs/user-guide.md
+   Virtual-attributes steps point at the Attrs. tab.
+
+Modified files:
+- src/front/static/ontology/js/ontology-shared-panels.js
+- tests/units/front/test_ontology_split_panel_layout.py
+- docs/user-guide.md
+- changelogs/v0.9.0/benoitcayladbx_2026-10-13.log
+
+Tests: `uv run --frozen pytest -q -m "not scenario"` → 9086 passed, 326 skipped,
+6 deselected, 1 xfailed, 40 warnings in 56.24s.
+

@@ -637,8 +637,8 @@ async function renderEntityForm(panel, cls, viewOnly = false) {
         <div id="sharedEntityAssignmentLink"></div>
         <form id="sharedEntityForm">
             ${renderFormTabsNav([
-                { id: 'details', icon: 'bi-info-circle', label: 'Details' },
-                { id: 'attributes', icon: 'bi-tags', label: 'Attributes' },
+                { id: 'details', icon: 'bi-info-circle', label: 'Infos' },
+                { id: 'attributes', icon: 'bi-tags', label: 'Attrs.' },
                 { id: 'refs', icon: 'bi-link-45deg', label: 'Refs.' },
                 { id: 'actions', icon: 'bi-lightning', label: 'Actions' },
                 { id: 'constraints', icon: 'bi-sliders', label: 'Constraints' },
