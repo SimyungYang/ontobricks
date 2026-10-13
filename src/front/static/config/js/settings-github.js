@@ -48,7 +48,7 @@ document.addEventListener('DOMContentLoaded', function () {
             showResult('danger', 'Could not load GitHub settings: ' + err.message);
         } finally {
             $('githubLoading')?.classList.add('d-none');
-            form.classList.remove('d-none');
+            $('githubLoaded')?.classList.remove('d-none');
         }
     }
 

@@ -1,0 +1,30 @@
+================================================================================
+## Hide GitHub settings body while the spinner is showing
+================================================================================
+
+Context:
+Settings → GitHub painted the info banner, Test connection / Take over /
+Sync all toolbar and last-sync row immediately, while only the form waited
+behind the loading spinner. GET /settings/github often takes a few seconds,
+so the toolbar sat idle next to "Loading GitHub settings…". Hide the whole
+section body until the fetch finishes.
+
+Changes:
+
+1. src/front/templates/partials/settings/_settings_github.html
+   Wrap header, info banner, form, toolbar and last-sync in `#githubLoaded`
+   (`d-none`); leave `#githubLoading` as the only visible content.
+2. src/front/static/config/js/settings-github.js
+   Reveal `#githubLoaded` (and hide the spinner) after GET /settings/github.
+3. tests/units/front/test_settings_github_loading.py
+   Contract: toolbar/form/header start inside the hidden wrapper; JS swaps
+   spinner for that wrapper after the fetch.
+
+Modified files:
+- src/front/templates/partials/settings/_settings_github.html
+- src/front/static/config/js/settings-github.js
+- tests/units/front/test_settings_github_loading.py
+- changelogs/v0.9.0/benoitcayladbx_2026-10-13.log
+
+Tests: `uv run --frozen pytest -q -m "not scenario"` → 9061 passed, 326 skipped,
+6 deselected, 1 xfailed, 40 warnings in 53.40s.
