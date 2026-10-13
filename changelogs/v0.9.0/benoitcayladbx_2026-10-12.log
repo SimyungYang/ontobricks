@@ -85,3 +85,38 @@ Modified files:
 Tests: `uv run --frozen pytest -q -m "not scenario"` → 9003 passed, 326 skipped,
 6 deselected, 1 xfailed, 40 warnings in 60.07s.
 
+## OWL generation: percent-encode invalid IRIs instead of failing
+================================================================================
+
+Context:
+GitHub Sync all reported "OWL generation failed" for cafds/V1 and wrfmshell/V2.
+Their stored URIs contain spaces (".../cafds#Affected asset", base URI
+".../WRFM - Shell#"). rdflib refuses to serialize those as Turtle, so the OWL
+view/export and the mirrored <Domain>.owl.ttl failed for such domains.
+
+Changes:
+
+1. src/back/core/w3c/owl/iri.py (new)
+   escape_iri() percent-encodes the characters RFC 3987 forbids in an IRI
+   (whitespace, <>"{}|\^`). Valid and non-ASCII IRIs are left as they are.
+   serialize_turtle() serializes a graph as Turtle and rebuilds it with
+   escaped IRIs (terms and namespace bindings) only when needed, logging a
+   warning.
+2. src/back/core/w3c/owl/OntologyGenerator.py
+   generate() serializes through serialize_turtle() (no class growth).
+3. tests/units/ontology/test_owl_iri_escaping.py (new)
+   escape_iri cases, unchanged output for valid graphs, and generator output
+   with spaces in base and entity URIs that parses back.
+4. docs/sphinx/api/app.core.w3c.rst
+   Document the iri module.
+
+Modified files:
+- src/back/core/w3c/owl/iri.py
+- src/back/core/w3c/owl/OntologyGenerator.py
+- tests/units/ontology/test_owl_iri_escaping.py
+- docs/sphinx/api/app.core.w3c.rst
+- changelogs/v0.9.0/benoitcayladbx_2026-10-12.log
+
+Tests: `uv run --frozen pytest -q -m "not scenario"` → 9052 passed, 326 skipped,
+6 deselected, 1 xfailed, 40 warnings in 54.54s.
+

@@ -9,6 +9,7 @@ from typing import List, Dict
 
 from back.core.logging import get_logger
 from back.core.w3c.owl.OntologyRdfExtras import OntologyRdfExtras
+from back.core.w3c.owl.iri import serialize_turtle
 from shared.config.constants import ONTOBRICKS_NS
 
 logger = get_logger(__name__)
@@ -133,7 +134,7 @@ class OntologyGenerator:
         )
 
         # Serialize to Turtle format
-        return self.graph.serialize(format="turtle")
+        return serialize_turtle(self.graph)
 
     @staticmethod
     def _local_name(ref: str) -> str:
