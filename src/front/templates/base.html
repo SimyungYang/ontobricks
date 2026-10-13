@@ -199,13 +199,17 @@
                                 <a class="dropdown-item"
                                    href="{{ menu.route }}?section={{ item.id }}"
                                    {% if item.admin_only|default(false) %}data-requires-app="admin"{% endif %}>
-                                    <i class="bi {{ item.icon }} me-1"></i> {{ item.label }}
+                                    <span class="ob-dropdown-icon" aria-hidden="true">{% if 'ob-brand-icon' in item.icon %}<i class="{{ item.icon }}"></i>{% else %}<i class="bi {{ item.icon }}"></i>{% endif %}</span><span class="ob-dropdown-label">{{ item.label }}</span>
                                 </a>
                             </li>
                             {% endfor %}
                             {% endfor %}
                             <li><hr class="dropdown-divider"></li>
-                            <li><a class="dropdown-item" href="{{ menu.route }}"><i class="bi bi-arrow-right-circle me-1"></i> Open full settings</a></li>
+                            <li>
+                                <a class="dropdown-item" href="{{ menu.route }}">
+                                    <span class="ob-dropdown-icon" aria-hidden="true"><i class="bi bi-arrow-right-circle"></i></span><span class="ob-dropdown-label">Open full settings</span>
+                                </a>
+                            </li>
                         </ul>
                     </li>
                     {% endif %}

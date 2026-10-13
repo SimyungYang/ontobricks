@@ -416,3 +416,113 @@ Modified files:
 
 Tests: `uv run --frozen pytest -q -m "not scenario"` → 9083 passed, 326 skipped,
 6 deselected, 1 xfailed, 40 warnings in 56.97s.
+
+================================================================================
+## Align Databricks icon in the top-right Settings dropdown
+================================================================================
+
+Context:
+The Settings gear menu rendered brand icons as ``class="bi ob-brand-icon …"``.
+Bootstrap Icons' ``.bi`` ::before plus a 1em background mark sat left of the
+20px column used by Registry / GitHub / Global. Drop the ``bi`` prefix on
+brand marks and size ``.ob-brand-icon`` like the other dropdown icons.
+
+Changes:
+
+1. src/front/templates/base.html
+   Settings gear items: brand-icon classes as-is; Bootstrap icons keep ``bi``.
+2. src/front/static/global/css/main.css
+   Dropdown ``.ob-brand-icon`` shares the 20×20px icon column with ``.bi``.
+3. tests/units/front/test_backend_brand_icons.py
+   Contract: no ``bi`` prefix on brand icons in the gear menu.
+
+Modified files:
+- src/front/templates/base.html
+- src/front/static/global/css/main.css
+- tests/units/front/test_backend_brand_icons.py
+- changelogs/v0.9.0/benoitcayladbx_2026-10-13.log
+
+Tests: `uv run --frozen pytest -q -m "not scenario"` → 9084 passed, 326 skipped,
+6 deselected, 1 xfailed, 40 warnings in 60.71s.
+
+================================================================================
+## Align Settings dropdown labels on a shared icon column
+================================================================================
+
+Context:
+After dropping the ``bi`` prefix on brand marks, Databricks still sat in a
+different box than Bootstrap icons, so labels (Databricks vs Registry vs
+GitHub) did not share a left edge. Wrap every gear-menu icon in a 20px
+``ob-dropdown-icon`` slot and put the label in its own span.
+
+Changes:
+
+1. src/front/templates/base.html
+   Settings gear rows: icon slot + label span (including Open full settings).
+2. src/front/static/global/css/main.css
+   ``flex: 0 0 20px`` icon column; glyphs centered inside it.
+3. tests/units/front/test_backend_brand_icons.py
+   Contract for the slot class and width.
+
+Modified files:
+- src/front/templates/base.html
+- src/front/static/global/css/main.css
+- tests/units/front/test_backend_brand_icons.py
+- changelogs/v0.9.0/benoitcayladbx_2026-10-13.log
+
+Tests: `uv run --frozen pytest -q -m "not scenario"` → 9084 passed, 326 skipped,
+6 deselected, 1 xfailed, 40 warnings in 56.71s.
+
+================================================================================
+## Left-align Settings dropdown labels with the icon column
+================================================================================
+
+Context:
+Icons lined up, but labels still started at different x and sat off the icon
+vertically. Flex ``min-width: auto`` let ``.bi::before`` widen some slots;
+whitespace between icon and label added a second gap. Lock the slot at 20px
+(``min/max-width``, overflow hidden) and give labels ``line-height: 20px``.
+
+Changes:
+
+1. src/front/templates/base.html
+   ``ob-dropdown-label`` on the text; no whitespace between icon and label.
+2. src/front/static/global/css/main.css
+   Rigid 20px icon slot; label line-height matches the slot height.
+3. tests/units/front/test_backend_brand_icons.py
+   Slot min-width / overflow and label line-height.
+
+Modified files:
+- src/front/templates/base.html
+- src/front/static/global/css/main.css
+- tests/units/front/test_backend_brand_icons.py
+- changelogs/v0.9.0/benoitcayladbx_2026-10-13.log
+
+Tests: `uv run --frozen pytest -q -m "not scenario"` → 9084 passed, 326 skipped,
+6 deselected, 1 xfailed, 40 warnings in 53.99s.
+
+================================================================================
+## Restore flex on admin Settings gear rows
+================================================================================
+
+Context:
+The gear menu mixed layout modes. Databricks / Global / Lakebase are not
+``admin_only`` and used the 20px flex icon column. Registry / GitHub / Admin
+items have ``data-requires-app="admin"``; permissions.css restored them with
+``display: block !important`` (Bootstrap default), so labels sat against each
+glyph instead of a shared left edge. Restore ``display: flex !important``.
+
+Changes:
+
+1. src/front/static/global/css/permissions.css
+   Admin-gated ``.dropdown-item`` is flex, matching the navbar menu.
+2. tests/units/front/test_admin_only_domain_create.py
+   Contract: flex, not block.
+
+Modified files:
+- src/front/static/global/css/permissions.css
+- tests/units/front/test_admin_only_domain_create.py
+- changelogs/v0.9.0/benoitcayladbx_2026-10-13.log
+
+Tests: `uv run --frozen pytest -q -m "not scenario"` → 9085 passed, 326 skipped,
+6 deselected, 1 xfailed, 40 warnings in 61.56s.
