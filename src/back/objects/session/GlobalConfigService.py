@@ -657,6 +657,31 @@ class GlobalConfigService:
             host, token, registry_cfg, {"analytics_job_enabled": bool(enabled)}
         )
 
+    def get_github_config(
+        self, host: str, token: str, registry_cfg: Dict[str, str]
+    ) -> Dict[str, Any]:
+        """Return the instance GitHub mirror settings (normalised)."""
+        from back.objects.registry.gitsync import GitHubConfig
+
+        raw = self.load(host, token, registry_cfg).get("github_config")
+        return GitHubConfig.from_dict(raw).to_dict()
+
+    def set_github_config(
+        self,
+        host: str,
+        token: str,
+        registry_cfg: Dict[str, str],
+        config: Dict[str, Any],
+    ) -> Tuple[bool, str]:
+        """Persist the instance GitHub mirror settings (one repository per instance)."""
+        from back.objects.registry.gitsync import GitHubConfig, github_mirror
+
+        normalized = GitHubConfig.from_dict(config).to_dict()
+        ok, msg = self._save(host, token, registry_cfg, {"github_config": normalized})
+        if ok:
+            github_mirror.invalidate_config()
+        return ok, msg
+
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
@@ -683,6 +708,7 @@ class GlobalConfigService:
             "graph_chat_result_cap": 0,
             "data_assets_import_limit": 40,
             "graph_engine_config": {},
+            "github_config": {},
         }
 
 

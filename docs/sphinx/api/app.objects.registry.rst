@@ -56,3 +56,31 @@ OBX Export / Import Format
    :members:
    :undoc-members:
    :show-inheritance:
+
+GitHub Mirror
+-------------
+
+.. automodule:: back.objects.registry.gitsync.GitHubConfig
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+.. automodule:: back.objects.registry.gitsync.DomainRepoLayout
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+.. automodule:: back.objects.registry.gitsync.GitHubSyncService
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+.. automodule:: back.objects.registry.gitsync.GitHubMirror
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+.. automodule:: back.objects.registry.gitsync.GitHubMirrorHooks
+   :members:
+   :undoc-members:
+   :show-inheritance:

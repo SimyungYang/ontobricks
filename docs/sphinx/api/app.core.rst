@@ -48,6 +48,7 @@ Subpackages
    app.core.errors
    app.core.databricks
    app.core.external
+   app.core.github
    app.core.graph_analysis
    app.core.graphdb
    app.core.graphql

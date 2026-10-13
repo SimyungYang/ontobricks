@@ -1,8 +1,9 @@
 /**
  * Domain → Audit trail
  *
- * Ontology and mapping change feeds (plus status and build tabs) from
- * GET /domain/audit-trail. Change events show the asset and, for updates,
+ * Ontology and mapping change feeds (plus status, build and GitHub tabs) from
+ * GET /domain/audit-trail. GitHub mirror pushes are change events with
+ * ``source === 'github'``. Change events show the asset and, for updates,
  * the previous field values from ``meta.before``.
  *
  * Build entries reuse the run-details popup from domain-runs.js
@@ -57,6 +58,13 @@
         mapping_reset: { icon: 'trash', cls: 'text-danger', label: 'Mappings reset' },
         agent_auto_map_run: { icon: 'robot', cls: 'text-info', label: 'Auto-mapping agent run' },
         metadata_table_removed: { icon: 'trash', cls: 'text-danger', label: 'Data asset removed' },
+    };
+
+    const GITHUB_META = {
+        github_pushed: { icon: 'cloud-arrow-up', cls: 'text-success', label: 'Pushed to GitHub' },
+        github_synced: { icon: 'cloud-check', cls: 'text-success', label: 'Synced to GitHub' },
+        github_version_deleted: { icon: 'cloud-minus', cls: 'text-secondary', label: 'Removed from GitHub' },
+        github_push_failed: { icon: 'cloud-slash', cls: 'text-danger', label: 'GitHub push failed' },
     };
 
     // Terminal statuses of an agent run -> chip styling.
@@ -134,6 +142,7 @@
             document.getElementById('auditMappingBody'),
             document.getElementById('auditReviewBody'),
             document.getElementById('auditBuildBody'),
+            document.getElementById('auditGithubBody'),
         ].filter(Boolean);
         if (!bodies.length) return;
         const loading = '<div class="text-center text-muted small py-5">' +
@@ -193,6 +202,7 @@
         const items = [];
         _cache.changes.forEach((c) => {
             if (!matchesVersion(c.version)) return;
+            if (c.source === 'github') return;
             if (isMappingChange(c) !== mapping) return;
             items.push({ ts: c.occurred_at || c.created_at, raw: c });
         });
@@ -235,11 +245,26 @@
         return items;
     }
 
+    function githubItems() {
+        const items = [];
+        _cache.changes.forEach((c) => {
+            if (c.source === 'github' && matchesVersion(c.version)) {
+                items.push({ ts: c.occurred_at || c.created_at, raw: c });
+            }
+        });
+        items.sort((a, b) => tsVal(b.ts) - tsVal(a.ts));
+        return items;
+    }
+
     function renderTimeline() {
         const onto = changeItems(false);
         const maps = changeItems(true);
         const reviews = reviewItems();
         const builds = buildItems();
+        const pushes = githubItems();
+        fillPane('auditGithubBody', pushes.length
+            ? '<div class="audit-timeline">' + pushes.map((it) => githubItem(it.raw)).join('') + '</div>'
+            : emptyState());
         fillPane('auditOntologyBody', onto.length
             ? '<div class="audit-timeline">' + onto.map((it) => changeItem(it.raw)).join('') + '</div>'
             : emptyState());
@@ -570,5 +595,29 @@
             '<span class="audit-time">' + fmtTime(run.started_at || run.finished_at) + '</span>' +
             detailsBtn + '</div>';
         return node('audit-marker-build', cfg[1], head + metaLine + msg, cfg[2]);
+    }
+
+    function githubItem(c) {
+        const meta = GITHUB_META[c.action] || { icon: 'github', cls: 'text-secondary', label: prettyAction(c.action) };
+        const m = c.meta || {};
+        const ver = c.version ? '<span class="badge bg-secondary ms-1">v' + esc(c.version) + '</span>' : '';
+        const sha = m.commit_sha
+            ? (m.commit_url
+                ? '<a class="audit-chip" href="' + esc(m.commit_url) + '" target="_blank" rel="noopener" ' +
+                  'title="Open the commit on GitHub"><i class="bi bi-git me-1"></i>' + esc(m.commit_sha.slice(0, 7)) + '</a>'
+                : '<span class="audit-chip">' + esc(m.commit_sha.slice(0, 7)) + '</span>')
+            : '';
+        const tag = m.tag ? '<span class="audit-chip"><i class="bi bi-tag me-1"></i>' + esc(m.tag) + '</span>' : '';
+        const head = '<div class="audit-head">' +
+            '<span class="audit-title ' + meta.cls + '">' + esc(meta.label) + '</span>' +
+            ver + sha + tag +
+            '<span class="audit-time">' + fmtTime(c.occurred_at || c.created_at) + '</span></div>';
+        const lines = [];
+        if (m.message) lines.push('<div class="text-danger">' + esc(m.message) + '</div>');
+        (m.errors || []).forEach((e) => lines.push('<div class="text-warning">' + esc(e) + '</div>'));
+        const detail = lines.length ? '<div class="audit-comment">' + lines.join('') + '</div>' : '';
+        const who = '<div class="audit-meta">' + esc(c.actor || 'OntoBricks') +
+            (m.repository ? ' &middot; ' + esc(m.repository) : '') + '</div>';
+        return node('audit-marker-github', meta.icon, head + detail + who, meta.label);
     }
 })();

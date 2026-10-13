@@ -26,6 +26,7 @@ from api.routers.internal._helpers import map_route_errors
 from back.core.logging import get_logger, LogManager
 
 from back.objects.domain import SettingsService as config_service
+from back.objects.domain.settings import GitHubSettings
 
 router = APIRouter(prefix="/settings", tags=["Settings"])
 logger = get_logger(__name__)
@@ -527,6 +528,85 @@ async def import_registry_obx(
     return config_service.import_registry_obx_result(
         file_bytes, decisions, session_mgr, settings
     )
+
+
+# ===========================================
+# GitHub repository mirror (one repository per instance)
+# ===========================================
+
+
+@router.get("/github", dependencies=[Depends(require(ROLE_ADMIN))])
+async def get_github_settings(
+    session_mgr: SessionManager = Depends(get_session_manager),
+    settings: Settings = Depends(get_settings),
+):
+    """Return the GitHub mirror settings and the last sync status."""
+    return await run_blocking(GitHubSettings.get_github_result, session_mgr, settings)
+
+
+@router.post("/github", dependencies=[Depends(require(ROLE_ADMIN))])
+async def save_github_settings(
+    request: Request,
+    session_mgr: SessionManager = Depends(get_session_manager),
+    settings: Settings = Depends(get_settings),
+):
+    """Save the GitHub mirror settings (the token stays in a Databricks secret)."""
+    data = await request.json()
+    if not isinstance(data, dict):
+        raise ValidationError("Body must be a JSON object")
+    return await run_blocking(
+        GitHubSettings.save_github_result, data, session_mgr, settings
+    )
+
+
+@router.post("/github/test", dependencies=[Depends(require(ROLE_ADMIN))])
+async def test_github_settings(
+    request: Request,
+    session_mgr: SessionManager = Depends(get_session_manager),
+    settings: Settings = Depends(get_settings),
+):
+    """Check repository access and claim it for this instance.
+
+    Body (optional): ``{"take_over": true}`` to claim a repository already
+    used by another OntoBricks instance.
+    """
+    try:
+        data = await request.json()
+    except Exception:  # noqa: BLE001
+        data = {}
+    take_over = bool(data.get("take_over")) if isinstance(data, dict) else False
+    with map_route_errors("GitHub connection test", logger):
+        return await run_blocking(
+            GitHubSettings.test_github_result, take_over, session_mgr, settings
+        )
+
+
+@router.post("/github/sync-all", dependencies=[Depends(require(ROLE_ADMIN))])
+async def sync_all_github(
+    request: Request,
+    session_mgr: SessionManager = Depends(get_session_manager),
+    settings: Settings = Depends(get_settings),
+):
+    """Rewrite every registry domain/version into the repository in one commit."""
+    email, _, _, _, _ = _settings_request_identity(request)
+    with map_route_errors("GitHub sync all", logger):
+        return await run_blocking(
+            GitHubSettings.sync_all_github_result, email, session_mgr, settings
+        )
+
+
+@router.get("/github/obx", dependencies=[Depends(require(ROLE_ADMIN))])
+async def github_obx_envelope(
+    request: Request,
+    session_mgr: SessionManager = Depends(get_session_manager),
+    settings: Settings = Depends(get_settings),
+):
+    """Rebuild an ``.obx`` envelope from the repository (feeds the import modal)."""
+    email, _, _, _, _ = _settings_request_identity(request)
+    with map_route_errors("GitHub import read", logger):
+        return await run_blocking(
+            GitHubSettings.github_obx_envelope_result, email, session_mgr, settings
+        )
 
 
 # ===========================================

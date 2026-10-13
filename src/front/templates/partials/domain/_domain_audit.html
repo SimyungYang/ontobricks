@@ -63,6 +63,14 @@
                         <i class="bi bi-hdd-stack me-1"></i>Builds
                     </button>
                 </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="audit-tab-github"
+                            data-bs-toggle="tab" data-bs-target="#audit-pane-github"
+                            type="button" role="tab"
+                            aria-controls="audit-pane-github" aria-selected="false">
+                        <i class="bi bi-github me-1"></i>GitHub
+                    </button>
+                </li>
             </ul>
             <div class="tab-content p-3" id="auditTabContent">
                 <div class="tab-pane fade show active" id="audit-pane-ontology"
@@ -85,6 +93,10 @@
                 <div class="tab-pane fade" id="audit-pane-build"
                      role="tabpanel" aria-labelledby="audit-tab-build">
                     <div id="auditBuildBody"></div>
+                </div>
+                <div class="tab-pane fade" id="audit-pane-github"
+                     role="tabpanel" aria-labelledby="audit-tab-github">
+                    <div id="auditGithubBody"></div>
                 </div>
             </div>
         </div>

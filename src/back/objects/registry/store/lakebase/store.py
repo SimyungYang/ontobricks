@@ -62,6 +62,7 @@ from back.core.databricks.lakebase import require_psycopg as _shared_require_psy
 from back.core.databricks.lakebase.constants import APPLICATION_NAME_REGISTRY
 from back.core.errors import InfrastructureError
 from back.core.logging import get_logger
+from back.objects.registry.gitsync.GitHubMirrorHooks import GitHubMirrorHooks
 
 from .Collab import Collab
 from .Documents import Documents
@@ -255,6 +256,7 @@ def reset_lakebase_triplet_cache() -> None:
 
 
 class LakebaseRegistryStore(
+    GitHubMirrorHooks,
     Documents,
     Collab,
     EditLocks,

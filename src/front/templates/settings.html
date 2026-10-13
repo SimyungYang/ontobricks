@@ -1231,6 +1231,13 @@
                 </div>
             </div>
 
+            <!-- ==================== GITHUB SECTION (admin only) ==================== -->
+            <div id="github-section" class="sidebar-section">
+                <div class="content-section">
+                    {% include "partials/settings/_settings_github.html" %}
+                </div>
+            </div>
+
             <!-- ==================== HEALTH SECTION (admin only) ==================== -->
             <div id="health-section" class="sidebar-section">
                 <div class="content-section">
@@ -1359,5 +1366,6 @@
 <script src="{{ url_for('static', filename='config/js/settings-registry-configuration.js') }}?v={{ asset_version }}"></script>
 <script src="{{ url_for('static', filename='config/js/settings-health.js') }}?v={{ asset_version }}"></script>
 <script src="{{ url_for('static', filename='config/js/settings-logs.js') }}?v={{ asset_version }}"></script>
+<script src="{{ url_for('static', filename='config/js/settings-github.js') }}?v={{ asset_version }}"></script>
 {% endif %}
 {% endblock %}

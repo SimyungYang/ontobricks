@@ -394,6 +394,14 @@
                             "admin_only": true
                         },
                         {
+                            "id": "github",
+                            "label": "GitHub",
+                            "icon": "bi-github",
+                            "default": false,
+                            "requires": null,
+                            "admin_only": true
+                        },
+                        {
                             "id": "global",
                             "label": "Global",
                             "icon": "bi-sliders",

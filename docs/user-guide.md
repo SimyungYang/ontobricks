@@ -1870,6 +1870,83 @@ results across all sizes.
 
 ---
 
+### Configuration → GitHub (repository mirror)
+
+> **Required role:** Administrator.
+
+**Settings → Configuration → GitHub** mirrors every registry domain into **one
+GitHub repository per OntoBricks instance**. Lakebase remains the source of
+truth; GitHub gives you a reviewable, diffable history plus ready-to-use Turtle
+files for external tools.
+
+**Setup**
+
+1. Create a repository (an empty one is fine) and a fine-grained personal
+   access token (or GitHub App token) limited to it with **Contents: read and
+   write**.
+2. Store the token in a Databricks secret and grant the app service principal
+   `READ` on the scope (`databricks secrets put-acl --scope <scope> --principal <app-sp> --permission READ`).
+3. In **Settings → GitHub** fill in *Owner*, *Repository*, *Branch* (default
+   `main`), an optional *Base path*, pick the token *secret scope* / *secret
+   name*, tick **Enable GitHub mirror**, then **Save** and **Test connection**.
+
+The token is never stored by OntoBricks — only the secret scope/key. For local
+development without a secret, the `ONTOBRICKS_GITHUB_TOKEN` environment
+variable is used instead.
+
+**One repository per instance.** *Test connection* writes
+`.ontobricks/instance.json` (instance id, workspace host, app name). If the
+repository is already claimed by another instance the test fails; tick
+**Take over** to claim it deliberately.
+
+**What is pushed, and when.** With **Push on every save** on, every registry
+write (save, new version, lifecycle change, OBX import, deletion) queues an
+asynchronous push; saves made within a couple of seconds are coalesced into a
+single commit (`save(<Domain>/V<n>): by <user>`). A failing push never blocks
+the save — the latest outcome is shown under **Last sync**. **Sync all now** rewrites
+the whole `domains/` tree from the registry in one commit. Published versions
+are tagged `<Domain>/V<n>`.
+
+**History in the Audit trail.** Every push that produced a commit (or a
+warning) is logged on the **GitHub** tab of **Domain → Audit trail**, per
+version: who triggered it, a link to the commit, the release tag for published
+versions, and any OWL / R2RML / SHACL generation warnings. Failed pushes are
+logged there too with the error. Pushes that change nothing are not logged.
+
+**Repository layout**
+
+```text
+README.md                              # generated index of domains/versions
+.ontobricks/
+  instance.json                        # instance claim
+  global_config.json                   # non-secret instance defaults (Sync all)
+domains/<Domain>/
+  domain.json                          # summary: name, description, versions
+  README.md                            # readable summary: base URI, classes, version links
+  versions/V<n>/
+    manifest.json                      # status, layout format, sha256 per file
+    info.json                          # domain options (LLM endpoint, MCP, graph backend, ...)
+    ontology/ontology.json             # classes, properties, groups, base URI, ...
+    ontology/constraints.json | axioms.json | expressions.json | shacl_shapes.json
+    ontology/rules/swrl.json | sparql.json | decision_tables.json | aggregate.json | cohort.json
+    ontology/<Domain>.owl.ttl          # OWL ontology (Turtle, generated)
+    ontology/shacl.ttl                 # SHACL shapes (Turtle, when shapes exist)
+    mapping/assignment.json            # entity / relationship mappings
+    mapping/<Domain>.r2rml.ttl         # R2RML mapping (Turtle, when mappings exist)
+    layout/design.json                 # current view + view index
+    layout/views/<View>.json           # one file per design canvas view
+    layout/map.json                    # map layout
+    metadata/tables.json               # imported Unity Catalog tables
+```
+
+The JSON files are the source of truth; the `.ttl` files are regenerated on
+every push so they always match the JSON in the same commit.
+
+**Restore / migrate.** **Registry → Browse → Import → Load from GitHub
+repository** rebuilds the domains from the repository JSON files and opens the
+usual import preview (Skip / Overwrite / Rename). Turtle files are ignored on
+import.
+
 ## Troubleshooting
 
 ### Connection Issues
@@ -2726,6 +2803,7 @@ After import you can:
 - **Navbar domain identity**: Top bar name/version invalidate cached `/navbar/state` (and related caches) after domain mutations so reloads and navigations do not show stale labels for up to 15 seconds.
 - **Import/Export**: Import OWL and RDFS ontologies, import industry-standard ontologies (FIBO, CDISC, IOF, HL7 FHIR R4/R4B/R5), import/export R2RML mappings, and export OWL files.
 - **Registry OBX Export/Import**: Export one or more registry domains to a portable `.obx` file directly from **Registry → Browse** with per-domain version-mode selection (Latest / Active / All / Choose). Import with per-domain selection checkboxes plus conflict resolution (Skip / Overwrite / Rename). An integer `format_version` field ensures backward compatibility as the format evolves.
+- **GitHub Repository Mirror**: One GitHub repository per instance (**Settings → GitHub**) receives a commit on every registry save, organised by domain and version, with the OWL and R2RML Turtle files next to the JSON sources (ontology, rules, mappings, layouts, options). Restore with **Import → Load from GitHub repository**. See [Configuration → GitHub](#configuration--github-repository-mirror).
 - **Project Save/Load**: Save and load projects as JSON for backup or sharing.
 
 ### Databricks Integration

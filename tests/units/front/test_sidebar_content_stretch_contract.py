@@ -87,6 +87,7 @@ SECTION_INVENTORY = {
         "teams",
         "locks",
         "registry",
+        "github",
         "health",
         "logs",
         "runs",

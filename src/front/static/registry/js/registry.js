@@ -845,9 +845,13 @@ document.addEventListener('DOMContentLoaded', function () {
         if (btn) btn.disabled = checkedCount === 0;
     }
 
+    // The file being imported: either the picked .obx or one rebuilt from GitHub.
+    let pendingImportFile = null;
+
     function openImportObxModal() {
         const modalEl = document.getElementById('importObxModal');
         if (!modalEl) return;
+        pendingImportFile = null;
         document.getElementById('importObxStep1').classList.remove('d-none');
         document.getElementById('importObxStep2').classList.add('d-none');
         document.getElementById('importObxFile').value = '';
@@ -863,14 +867,41 @@ document.addEventListener('DOMContentLoaded', function () {
         showStackedModal(modalEl);
     }
 
-    document.getElementById('importObxFile')?.addEventListener('change', async (e) => {
+    document.getElementById('importObxFile')?.addEventListener('change', (e) => {
         const file = e.target.files?.[0];
+        if (file) previewImportFile(file);
+    });
+
+    document.getElementById('btnImportFromGithub')?.addEventListener('click', async (e) => {
+        const btn = e.currentTarget;
+        const errEl = document.getElementById('importObxPreviewError');
+        errEl.classList.add('d-none');
+        btn.disabled = true;
+        try {
+            const resp = await fetch('/settings/github/obx', { credentials: 'same-origin' });
+            const data = await resp.json();
+            if (!resp.ok || data.success === false) {
+                errEl.textContent = data.message || 'Could not read the GitHub repository';
+                errEl.classList.remove('d-none');
+                return;
+            }
+            const file = new File([JSON.stringify(data)], 'github.obx', { type: 'application/json' });
+            await previewImportFile(file);
+        } catch (err) {
+            errEl.textContent = 'Network error: ' + err.message;
+            errEl.classList.remove('d-none');
+        } finally {
+            btn.disabled = false;
+        }
+    });
+
+    async function previewImportFile(file) {
         const errEl = document.getElementById('importObxPreviewError');
         const busyEl = document.getElementById('importObxPreviewBusy');
-        if (!file) return;
+        const input = document.getElementById('importObxFile');
         errEl.classList.add('d-none');
         busyEl?.classList.remove('d-none');
-        e.target.disabled = true;
+        input.disabled = true;
         try {
             const form = new FormData();
             form.append('file', file);
@@ -885,15 +916,16 @@ document.addEventListener('DOMContentLoaded', function () {
                 errEl.classList.remove('d-none');
                 return;
             }
+            pendingImportFile = file;
             renderImportObxPreview(data);
         } catch (err) {
             errEl.textContent = 'Network error: ' + err.message;
             errEl.classList.remove('d-none');
         } finally {
             busyEl?.classList.add('d-none');
-            e.target.disabled = false;
+            input.disabled = false;
         }
-    });
+    }
 
     function renderImportObxPreview(data) {
         document.getElementById('importObxStep1').classList.add('d-none');
@@ -984,7 +1016,7 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     document.getElementById('btnImportObxConfirm')?.addEventListener('click', async () => {
-        const file = document.getElementById('importObxFile')?.files?.[0];
+        const file = pendingImportFile;
         if (!file) { showNotification('Pick a .obx file first', 'warning'); return; }
 
         const decisions = [];
