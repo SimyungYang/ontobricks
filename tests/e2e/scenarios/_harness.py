@@ -16,6 +16,43 @@ from __future__ import annotations
 import json
 import os
 import time
+from typing import Optional
+from urllib.parse import urlparse
+
+# ``GET /health`` runs warehouse + Lakebase + Graph DB probes. After a
+# long KG build that can exceed 20s; a skip here aborts the rest of the
+# campaign via pytest-dependency. Budget a full minute.
+PROBE_TIMEOUT_S = 60.0
+PROBE_PATHS = ("/health", "/healthz")
+
+
+def is_loopback_base(url: str) -> bool:
+    """True when *url* points at this machine (local campaign, not Apps)."""
+    host = (urlparse(url).hostname or "").lower()
+    return host in {"localhost", "127.0.0.1", "::1"}
+
+
+def needs_apps_gateway_token(base: Optional[str]) -> bool:
+    """Deployed Databricks Apps need a workspace bearer; localhost does not."""
+    if not base:
+        return False
+    return not is_loopback_base(base)
+
+
+def probe_app(base: str, *, timeout: float = PROBE_TIMEOUT_S) -> None:
+    """Hit ``/health`` then ``/healthz``; raise the last error if neither is 200."""
+    import httpx
+
+    last_exc: Exception | None = None
+    for probe in PROBE_PATHS:
+        try:
+            resp = httpx.get(f"{base}{probe}", timeout=timeout)
+            if resp.status_code == 200:
+                return
+            last_exc = RuntimeError(f"{probe} → HTTP {resp.status_code}")
+        except Exception as exc:  # noqa: BLE001 — surface as the skip reason
+            last_exc = exc
+    raise last_exc or RuntimeError("non-200 health")
 
 
 def base_url() -> str:

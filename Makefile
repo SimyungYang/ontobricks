@@ -85,8 +85,10 @@ test-cov:
 	. .venv/bin/activate && pytest --cov=src --cov-report=html --cov-report=term
 
 # ── Integration test campaign (live, opt-in scenario suites) ─────────────
-# Runs every `scenario`-marked suite under tests/e2e/scenarios/ end-to-end,
-# in filename order (test_scenario_1 → 2 → 3 → … → test_scenario_validation),
+# Runs the live `test_scenario_*.py` suites end-to-end, in filename
+# order (test_scenario_01 → 02 → 03 → 04 → test_scenario_validation).
+# ``test_full_lifecycle.py`` stays out: it is the isolated Playwright
+# server journey and is not a live-app campaign.
 # against a RUNNING app and writes machine + human reports to
 # $(SCENARIO_ARTIFACTS)/ (campaign.xml for CI, campaign.html to open).
 #
@@ -116,10 +118,11 @@ scenario-campaign:
 	done
 	@mkdir -p $(SCENARIO_ARTIFACTS)
 	@echo "Running live scenarios (JUnit + HTML → $(SCENARIO_ARTIFACTS)/)..."
+	set -a && [ -f "$(CURDIR)/.env" ] && . "$(CURDIR)/.env"; set +a; \
 	cd "$(CURDIR)" && env -u VIRTUAL_ENV \
 	  ONTOBRICKS_SCENARIO_LIVE=1 ONTOBRICKS_SCENARIO_CHAIN=1 \
 	  ONTOBRICKS_LIVE_BASE="$(ONTOBRICKS_LIVE_BASE)" \
-	  uv run --frozen pytest tests/e2e/scenarios -m scenario -v -s --no-cov -p no:randomly \
+	  uv run --frozen pytest tests/e2e/scenarios/test_scenario_*.py -m scenario -v -s --no-cov -p no:randomly \
 	    --junitxml=$(SCENARIO_ARTIFACTS)/campaign.xml \
 	    --html=$(SCENARIO_ARTIFACTS)/campaign.html --self-contained-html
 	@echo "Reports: $(SCENARIO_ARTIFACTS)/campaign.html  (JUnit: $(SCENARIO_ARTIFACTS)/campaign.xml)"

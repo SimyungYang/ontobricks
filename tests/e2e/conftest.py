@@ -369,6 +369,10 @@ def _live_bearer() -> Optional[str]:
     """
     if not _live_base():
         return None
+    from tests.e2e.scenarios._harness import needs_apps_gateway_token
+
+    if not needs_apps_gateway_token(_live_base()):
+        return None
     profile = os.environ.get("DATABRICKS_CONFIG_PROFILE") or os.environ.get(
         "ONTOBRICKS_E2E_PROFILE", DEFAULT_E2E_PROFILE
     )

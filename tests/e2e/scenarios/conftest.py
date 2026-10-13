@@ -19,7 +19,7 @@ import pathlib
 
 import pytest
 
-from tests.e2e.scenarios._harness import base_url
+from tests.e2e.scenarios._harness import base_url, probe_app
 
 _SCENARIOS_DIR = pathlib.Path(__file__).parent.resolve()
 
@@ -47,21 +47,15 @@ def pytest_collection_modifyitems(items):
 @pytest.fixture(scope="module")
 def scenario_base() -> str:
     """Resolve and smoke-check the target app before the browser spins up."""
-    import httpx
-
     base = base_url()
-    last_exc: Exception | None = None
-    for probe in ("/health", "/healthz"):  # local serves /health; deployed /healthz
-        try:
-            resp = httpx.get(f"{base}{probe}", timeout=20.0)
-            if resp.status_code == 200:
-                return base
-        except Exception as exc:  # noqa: BLE001
-            last_exc = exc
-    pytest.skip(
-        f"No OntoBricks app reachable at {base} ({last_exc or 'non-200 health'}). "
-        f"Start it with `scripts/start.sh` or set ONTOBRICKS_LIVE_BASE."
-    )
+    try:
+        probe_app(base)
+    except Exception as exc:  # noqa: BLE001 — skip with the probe's reason
+        pytest.skip(
+            f"No OntoBricks app reachable at {base} ({exc}). "
+            f"Start it with `scripts/start.sh` or set ONTOBRICKS_LIVE_BASE."
+        )
+    return base
 
 
 @pytest.fixture

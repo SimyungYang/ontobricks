@@ -50,6 +50,18 @@ class TestCampaignUsesThisWorktreeInterpreter:
         recipe = _campaign_recipe()
         assert "env -u VIRTUAL_ENV" in recipe
 
+    def test_the_recipe_sources_dotenv_so_warehouse_creds_reach_pytest(self):
+        """Scenario 4 creates scratch UC tables in the pytest process."""
+        recipe = _campaign_recipe()
+        assert ".env" in recipe
+        assert "DATABRICKS_SQL_WAREHOUSE_ID" in recipe or "set -a" in recipe
+
+    def test_the_recipe_collects_only_the_live_scenario_files(self):
+        """``test_full_lifecycle`` is the isolated Playwright server journey."""
+        recipe = _campaign_recipe()
+        assert "tests/e2e/scenarios/test_scenario_" in recipe
+        assert "pytest tests/e2e/scenarios -m scenario" not in recipe
+
 
 class TestScenario1DrivesTheStagedWizard:
     def test_it_detects_then_posts_complete(self):
@@ -67,3 +79,30 @@ class TestScenario1DrivesTheStagedWizard:
         src = _read(SCENARIO_01)
         assert "_poll_task(" in src
         assert "wizardReviewContinueBtn" not in src
+
+
+class TestCampaignSurvivesASlowHealthEndpoint:
+    def test_probe_timeout_is_at_least_a_minute(self):
+        from tests.e2e.scenarios._harness import PROBE_TIMEOUT_S
+
+        assert PROBE_TIMEOUT_S >= 60
+
+
+class TestLoopbackLiveBaseDoesNotNeedAppsToken:
+    def test_localhost_does_not_require_a_gateway_bearer(self):
+        from tests.e2e.scenarios._harness import needs_apps_gateway_token
+
+        assert needs_apps_gateway_token(None) is False
+        assert needs_apps_gateway_token("http://localhost:8000") is False
+        assert needs_apps_gateway_token("http://127.0.0.1:8000") is False
+
+    def test_a_deployed_app_url_still_requires_a_gateway_bearer(self):
+        from tests.e2e.scenarios._harness import needs_apps_gateway_token
+
+        assert needs_apps_gateway_token(
+            "https://ontobricks-xxxx.aws.databricksapps.com"
+        ) is True
+
+    def test_the_e2e_bearer_fixture_uses_the_loopback_gate(self):
+        src = _read(REPO_ROOT / "tests/e2e/conftest.py")
+        assert "needs_apps_gateway_token" in src

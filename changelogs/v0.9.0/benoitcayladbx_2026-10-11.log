@@ -610,3 +610,42 @@ Modified files:
 Tests: `uv run --frozen pytest -q -m "not scenario"` → 8994 passed, 326 skipped,
 6 deselected, 1 xfailed (pre-existing), 40 warnings in 79.59s. The two OPT 1
 switch tests fail on the merged scripts and pass with the fix.
+
+================================================================================
+## Unblock the live scenario campaign skips
+================================================================================
+
+Context:
+`make scenario-campaign` collected 6 tests and left 5 skipped: the Playwright
+lifecycle suite demanded an Apps-gateway bearer for `localhost`, later
+suites timed out on a 20s `/health` probe (the endpoint regularly takes
+~26s after a KG build), pytest-dependency then skipped 3 and validation,
+and scenario 4 could not see `DATABRICKS_SQL_WAREHOUSE_ID` because the
+Makefile never sourced `.env`.
+
+Changes:
+
+1. tests/e2e/scenarios/_harness.py
+   Shared `PROBE_TIMEOUT_S=60`, `probe_app()`, and `needs_apps_gateway_token()`
+   (loopback URLs do not need a Databricks Apps bearer).
+2. tests/e2e/scenarios/conftest.py
+   `scenario_base` uses `probe_app` instead of a 20s httpx GET.
+3. tests/e2e/conftest.py
+   `_live_bearer` returns `None` for localhost / 127.0.0.1 so
+   `test_full_lifecycle` can run against the local campaign app.
+4. Makefile
+   `scenario-campaign` sources `.env` (`set -a`) before pytest so warehouse
+   creds reach the scenario-4 scratch-table fixture.
+5. tests/units/e2e/test_scenario_campaign_wiring.py
+   Contracts for dotenv sourcing, probe timeout, and the loopback bearer gate.
+
+Modified files:
+- tests/e2e/scenarios/_harness.py
+- tests/e2e/scenarios/conftest.py
+- tests/e2e/conftest.py
+- Makefile
+- tests/units/e2e/test_scenario_campaign_wiring.py
+- changelogs/v0.9.0/benoitcayladbx_2026-10-11.log
+
+Tests: `uv run --frozen pytest -q -m "not scenario"` → 8999 passed, 326 skipped,
+6 deselected, 1 xfailed, 40 warnings in 80.89s.
