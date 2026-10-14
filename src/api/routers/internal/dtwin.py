@@ -38,6 +38,7 @@ from back.objects.digitaltwin import (
     GraphFilter,
     NodeBusinessRuleService,
     NodeContextService,
+    NodeShaclService,
     TwinAssistantCache,
     TwinDataQualityRun,
     TwinGraphAccess,
@@ -1940,6 +1941,19 @@ async def dtwin_nodes_virtual_attributes(
         entity_uri=entity_uri,
         function_full_name=function,
     )
+
+
+@router.get("/nodes/shacl")
+async def dtwin_nodes_shacl(
+    request: Request,
+    entity_uri: str,
+    session_mgr: SessionManager = Depends(get_session_manager),
+    settings: Settings = Depends(get_settings),
+):
+    """Evaluate the SHACL shapes related to a node, for the Graph Explorer popup."""
+    assert_domain_graph_read(request)
+    domain = get_domain(session_mgr)
+    return await NodeShaclService.evaluate(domain, settings, entity_uri=entity_uri)
 
 
 # Session key for the Graph Chat cache (history + limit + pending actions).

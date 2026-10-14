@@ -111,6 +111,7 @@ var SigmaGraph = (function () {
     var _clusterAssignments = null;  // node ID → cluster integer, or null
     var _clusterCount = 0;
     var _clusterColorByActive = false;
+    var _showQualityRings = true;  // SHACL facet ring on checked nodes
     var _clusterResolution = 1.0;
     var _collapsedClusters = new Set();
     var _clusterCollapseActive = false;
@@ -1237,6 +1238,16 @@ var SigmaGraph = (function () {
             res.color = _metricPalette[tier];
         }
 
+        // SHACL facet ring: set before the seed / path highlights so they win.
+        if (_showQualityRings && typeof getShaclFacetStatus === 'function'
+            && !data._isGroup && !data._isClusterNode) {
+            var qStatus = getShaclFacetStatus(node);
+            if (qStatus && typeof shaclStatusColor === 'function') {
+                res.borderColor = shaclStatusColor(qStatus);
+                res.borderSize = 3;
+            }
+        }
+
         if (_highlightedSeeds && _highlightedSeeds.has(node)) {
             res.highlighted = true;
             res.size = (data.size || 6) * 1.5;
@@ -1639,6 +1650,12 @@ var SigmaGraph = (function () {
             }, 0);
             html += _sec('bi bi-magic', 'Virtual Attributes (' + vaCount + ')',
                 renderVirtualAttributeSection(entity.id, virtualGroups), true);
+        }
+
+        var shaclCount = (classInfo && classInfo.shaclShapeCount) || 0;
+        if (shaclCount > 0 && typeof renderShaclFacetSection === 'function') {
+            html += _sec('bi bi-shield-check', 'Data quality',
+                renderShaclFacetSection(entity.id, shaclCount), true);
         }
 
         if (dashboardUrl && typeof buildDashboardUrl === 'function') {
@@ -2483,8 +2500,9 @@ var SigmaGraph = (function () {
         var actions = (entityMapping && entityMapping.actions) || (classInfo && classInfo.actions) || [];
         var businessRules = (classInfo && classInfo.businessRules) || [];
         var virtualAttributes = (entityMapping && entityMapping.virtualAttributes) || (classInfo && classInfo.virtualAttributes) || [];
+        var shaclShapeCount = (classInfo && classInfo.shaclShapeCount) || 0;
 
-        return { bridges: bridges, dashboardUrl: dashboardUrl, dashboardParams: dashboardParams, dataset: dataset, actions: actions, businessRules: businessRules, virtualAttributes: virtualAttributes, entity: entity, actualIdValue: actualIdValue, classInfo: classInfo, entityMapping: entityMapping };
+        return { bridges: bridges, dashboardUrl: dashboardUrl, dashboardParams: dashboardParams, dataset: dataset, actions: actions, businessRules: businessRules, virtualAttributes: virtualAttributes, shaclShapeCount: shaclShapeCount, entity: entity, actualIdValue: actualIdValue, classInfo: classInfo, entityMapping: entityMapping };
     }
 
     function _showNodeContextMenu(nodeId, mouseEvent) {
@@ -2583,6 +2601,13 @@ var SigmaGraph = (function () {
             items += '<div class="ctx-header">Virtual attributes</div>';
             items += '<div class="ctx-item" data-sg-node-action="virtual-attributes" data-uri="' + esc(meta.entity.id) + '">' +
                 '<i class="bi bi-magic"></i> Compute virtual attributes (' + vaCount + ')</div>';
+        }
+
+        if (meta.shaclShapeCount > 0 && meta.entity && meta.entity.id) {
+            if (items) items += '<div class="ctx-divider"></div>';
+            items += '<div class="ctx-header">Data quality</div>';
+            items += '<div class="ctx-item" data-sg-node-action="shacl-facets" data-uri="' + esc(meta.entity.id) + '">' +
+                '<i class="bi bi-shield-check"></i> Check SHACL facets (' + meta.shaclShapeCount + ')</div>';
         }
 
         if (meta.bridges.length > 0) {
@@ -3520,6 +3545,11 @@ var SigmaGraph = (function () {
             if (typeof showNotification === 'function') showNotification('Clusters cleared.', 'info');
         },
 
+        toggleQualityRings: function () {
+            _showQualityRings = document.getElementById('sgShowQualityRings')?.checked || false;
+            if (_renderer) _renderer.refresh();
+        },
+
         toggleClusterColorBy: function () {
             var checked = document.getElementById('sgClusterColorBy')?.checked || false;
             _clusterColorByActive = checked;
@@ -3905,6 +3935,10 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     });
 
+    document.addEventListener('shacl-facets:updated', function () {
+        if (_renderer) _renderer.refresh();
+    });
+
     document.addEventListener('input', function (e) {
         var el = e.target;
         if (!_sgUiContains(el)) return;
@@ -3996,6 +4030,13 @@ document.addEventListener('DOMContentLoaded', function () {
                     computeVirtualAttributesForNode(vaUri);
                 } else if (typeof showNotification === 'function') {
                     showNotification('Virtual attribute computation is unavailable.', 'warning');
+                }
+            } else if (action === 'shacl-facets') {
+                var shUri = nodeItem.getAttribute('data-uri');
+                if (shUri && typeof openShaclFacetsModal === 'function') {
+                    openShaclFacetsModal(shUri);
+                } else if (typeof showNotification === 'function') {
+                    showNotification('SHACL facet check is unavailable.', 'warning');
                 }
             } else if (action === 'bridge') {
                 var url = nodeItem.getAttribute('data-url');

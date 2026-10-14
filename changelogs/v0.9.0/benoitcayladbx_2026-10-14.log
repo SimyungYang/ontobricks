@@ -1,0 +1,159 @@
+================================================================================
+## Add test-first contracts for entity SHACL facets
+================================================================================
+
+Context:
+New feature: for one Graph Explorer entity (right-click, detail panel, canvas
+ring) or via a new MCP tool, evaluate every SHACL shape related to its type
+(own class, ancestors, global) against that entity only. Spec lives in
+`.planning/entity-shacl-facets/SPEC.md`. Tests are written first (TDD) and
+are intentionally red until the implementation lands; no production code is
+changed in this section.
+
+Changes:
+
+1. tests/units/dtwin/test_node_shacl_service.py
+   New. NodeShaclService contract: shape selection, inherited-shape class
+   substitution, entity-filtered UNION ALL batch (escaping, hostile shape
+   IDs), five statuses, observed values across the #// URI separator with a
+   20-value cap, ordering, summary, per-shape fallback, rdf:type fallback.
+2. tests/units/api/test_node_shacl_endpoint.py
+   New. Public and internal `/nodes/shacl` routes (GET-only, entity_uri
+   required) and `shacl_shape_count` on `/nodes/context` and
+   `/api/v1/domain/classes`.
+3. tests/units/mcp/test_shacl_facets_formatting.py
+   New. `_format_shacl_facets_response` text contract and the `[Context]`
+   hint in node and class blocks; unchecked shapes never read as PASS.
+4. tests/units/mcp/test_domain_policy_gating.py
+   Tool count 14 → 15; `check_entity_shacl_facets` backend call, hidden on
+   select and refused at call time when disabled, hint gating, GRAPH_TOOLS.
+5. tests/units/core/test_mcp_tools_policy.py
+   The tool is a configurable graph tool.
+6. tests/units/front/test_shacl_facets_ui.py
+   New. Structural contract for the popup partial, menu gating, loader
+   count, detail-panel section, status icons/labels, and the canvas ring
+   (drawn before seed / Find-Path highlights). Follows `.cursor/11` modal
+   and status rules.
+7. .planning/entity-shacl-facets/SPEC.md
+   Shape count on `/api/v1/domain/classes`, client-side menu gating via
+   `shaclShapeCountFor`, and the test plan updated to the written tests.
+
+Modified files:
+- tests/units/dtwin/test_node_shacl_service.py
+- tests/units/api/test_node_shacl_endpoint.py
+- tests/units/mcp/test_shacl_facets_formatting.py
+- tests/units/mcp/test_domain_policy_gating.py
+- tests/units/core/test_mcp_tools_policy.py
+- tests/units/front/test_shacl_facets_ui.py
+- .planning/entity-shacl-facets/SPEC.md
+- changelogs/v0.9.0/benoitcayladbx_2026-10-14.log
+
+Tests: `uv run --frozen pytest -q -m "not scenario"` → 39 failed, 9133 passed, 326 skipped, 6 deselected, 1 xfailed, 40 warnings, 42 errors in 67.50s. All 81 failures/errors are the new SHACL-facet contracts (feature not implemented yet); no pre-existing test regressed.
+
+================================================================================
+## Implement entity SHACL facets (Explorer popup, panel, ring + MCP tool)
+================================================================================
+
+Context:
+Implementation of `.planning/entity-shacl-facets/SPEC.md` against the
+test-first contracts above. One entity is checked against every enabled SHACL
+shape on its class, its ancestors and the whole graph, as entity-scoped SQL.
+Surfaces: Graph Explorer right-click menu, detail-panel section, popup and
+canvas ring; MCP tool `check_entity_shacl_facets`; REST `/nodes/shacl`.
+
+Changes:
+
+1. src/back/objects/digitaltwin/node/NodeShaclService.py
+   New. Shape selection (own class, `parent` lineage, global), inherited
+   shapes re-targeted to the entity's own class URI, one `UNION ALL` batch
+   filtered on the entity with a per-shape fallback, five statuses, observed
+   values (20-value cap), summary. An unreadable graph (never built) raises
+   InfrastructureError with the engine message instead of a 500.
+2. src/back/objects/digitaltwin/node/NodeShaclResponse.py
+   New. Pydantic response contract of `/nodes/shacl` (own file: the router is
+   capped by the class-per-file ratchet).
+3. src/back/objects/digitaltwin/node/__init__.py, src/back/objects/digitaltwin/__init__.py
+   Export NodeShaclService and NodeShaclResponse.
+4. src/api/routers/digitaltwin.py, src/api/routers/internal/dtwin.py
+   New `GET /api/v1/digitaltwin/nodes/shacl` (registry domain, public graph
+   read check) and `GET /dtwin/nodes/shacl` (session domain, graph read
+   check); `shacl_shape_count` on NodeContextResponse.
+5. src/back/objects/digitaltwin/node/NodeContextService.py, src/api/routers/domains.py
+   `shacl_shape_count` on `/nodes/context` and per class on
+   `/api/v1/domain/classes`.
+6. src/back/core/mcp_tools.py, src/mcp-server/server/constants.py, src/mcp-server/server/app.py
+   Catalog entry (graph tool, policy-configurable), GRAPH_TOOLS mirror,
+   `API_V1_DT_NODE_SHACL`, re-exports.
+7. src/mcp-server/server/tools.py
+   `check_entity_shacl_facets` tool (15 tools); hint count cleared when the
+   policy disables the tool. Extracted `_http_error_message` (four identical
+   HTTP-error blocks) and `_register_shacl_tool` to keep `register_tools`
+   within its size budget.
+8. src/mcp-server/server/formatting.py
+   `_format_shacl_facets_response` (never reports unchecked shapes as PASS),
+   `SHACL shapes (N)` hint in node and class context blocks; extracted
+   `_class_virtual_lines` and `_node_business_rule_lines` to keep both
+   context formatters within their size budget.
+9. src/front/static/query/js/query-shacl-facets.js, src/front/static/query/css/query-shacl-facets.css,
+   src/front/templates/partials/dtwin/_query_shacl_facets_modal.html
+   New. Popup (status chips as filters, accordion per category, values,
+   inheritance, Re-check, Open Data Quality), per-entity cache with
+   `shacl-facets:updated` event, detail-panel section, ring status and
+   token-based colours, client-side `shaclShapeCountFor`.
+10. src/front/static/query/js/query-sigmagraph.js, src/front/static/query/js/query-loaders.js,
+    src/front/templates/partials/dtwin/_query_sigmagraph.html, src/front/templates/dtwin.html
+    "Data quality → Check SHACL facets (N)" menu item, detail-panel section,
+    ring in `_nodeReducer` before seed / Find-Path highlights, "Quality"
+    toolbar toggle, shape counts loaded from `/ontology/dataquality/list`,
+    asset wiring.
+11. tests/units/dtwin/test_node_shacl_service.py
+    Added the unreadable-graph case (regression found while probing the
+    local server).
+12. tests/units/core/test_mcp_tools_policy.py, examples/mcp_client.py
+    Catalog size 10 → 11; curated description for the new tool.
+13. tests/units/architecture/baseline.json
+    Ratchet tightened (`register_tools` 900 → 882, `resolve_context`
+    139 → 138, `_format_class_context_block` 117 → 102,
+    `_format_node_context_response` 117 → 103, SettingsService 1400 → 1389).
+14. tests/eval/datasets/mcp/entity_shacl_facets.jsonl
+    New. 10-example eval dataset (SPEC §7).
+15. docs/mcp.md, docs/api.md, docs/architecture.md, docs/user-guide.md,
+    docs/sphinx/api/app.objects.digitaltwin.rst, .planning/entity-shacl-facets/SPEC.md
+    Tool, endpoint, Explorer feature and Sphinx entries; sign-off status.
+
+Modified files:
+- src/back/objects/digitaltwin/node/NodeShaclService.py
+- src/back/objects/digitaltwin/node/NodeShaclResponse.py
+- src/back/objects/digitaltwin/node/__init__.py
+- src/back/objects/digitaltwin/__init__.py
+- src/back/objects/digitaltwin/node/NodeContextService.py
+- src/api/routers/digitaltwin.py
+- src/api/routers/internal/dtwin.py
+- src/api/routers/domains.py
+- src/back/core/mcp_tools.py
+- src/mcp-server/server/constants.py
+- src/mcp-server/server/app.py
+- src/mcp-server/server/tools.py
+- src/mcp-server/server/formatting.py
+- src/front/static/query/js/query-shacl-facets.js
+- src/front/static/query/css/query-shacl-facets.css
+- src/front/templates/partials/dtwin/_query_shacl_facets_modal.html
+- src/front/static/query/js/query-sigmagraph.js
+- src/front/static/query/js/query-loaders.js
+- src/front/templates/partials/dtwin/_query_sigmagraph.html
+- src/front/templates/dtwin.html
+- tests/units/dtwin/test_node_shacl_service.py
+- tests/units/core/test_mcp_tools_policy.py
+- tests/units/architecture/baseline.json
+- tests/eval/datasets/mcp/entity_shacl_facets.jsonl
+- examples/mcp_client.py
+- docs/mcp.md
+- docs/api.md
+- docs/architecture.md
+- docs/user-guide.md
+- docs/sphinx/api/app.objects.digitaltwin.rst
+- .planning/entity-shacl-facets/SPEC.md
+- changelogs/v0.9.0/benoitcayladbx_2026-10-14.log
+
+Tests: `uv run --frozen pytest -q -m "not scenario"` → 9215 passed, 326 skipped, 6 deselected, 1 xfailed, 40 warnings in 55.91s (full working tree). The committed snapshot alone (without the uncommitted Job-action work) → 9171 passed, 326 skipped, 6 deselected, 1 xfailed.
+Manual: on the local server, new assets serve (200), `/api/v1/domain/classes` returns real counts (cust360auto: Customer 22, Contract 11), and `/dtwin/nodes/shacl` on an unbuilt graph returns a readable 502. No local domain has a built graph, so a live facet evaluation was not possible.

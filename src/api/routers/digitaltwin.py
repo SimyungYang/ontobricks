@@ -37,7 +37,14 @@ from back.core.helpers import (
     effective_graph_query_table,
     run_blocking,
 )
-from back.objects.digitaltwin import CohortService, DigitalTwin, DomainSnapshot, NodeContextService
+from back.objects.digitaltwin import (
+    CohortService,
+    DigitalTwin,
+    DomainSnapshot,
+    NodeContextService,
+    NodeShaclResponse,
+    NodeShaclService,
+)
 
 # Tests may patch ``api.routers.digitaltwin`` for registry resolution helpers.
 _resolve_registry = DigitalTwin.resolve_registry
@@ -284,6 +291,7 @@ class NodeContextResponse(BaseModel):
     actions: Optional[List[NodeContextAction]] = None
     business_rules: Optional[List[NodeContextBusinessRule]] = None
     virtual_attributes: Optional[List[NodeContextVirtualAttributeGroup]] = None
+    shacl_shape_count: Optional[int] = None
     message: Optional[str] = None
 
 
@@ -1882,6 +1890,47 @@ async def dt_nodes_business_rule(
         context_policy=NodeContextService.resolve_context_policy(domain),
     )
     return NodeBusinessRuleResponse(**result)
+
+
+# ---------------------------------------------------------------------------
+# GET /nodes/shacl
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/nodes/shacl",
+    response_model=NodeShaclResponse,
+    response_model_exclude_none=True,
+    summary="Evaluate the SHACL shapes related to a node",
+    description="Check every enabled SHACL shape that targets the entity's "
+    "class, one of its ancestors, or no class, against that entity only. "
+    "Each facet reports pass, fail, not_applicable, not_evaluated or error, "
+    "with the values the entity carries on the constrained property. "
+    "Read-only; shapes are always read from the domain.",
+)
+async def dt_nodes_shacl(
+    request: Request,
+    entity_uri: str = Query(..., description="Full URI of the entity node"),
+    domain_name: Optional[str] = Query(
+        None,
+        validation_alias=AliasChoices("domain_name", "project_name"),
+        description="Domain name in the registry",
+    ),
+    domain_version: Optional[str] = Query(None),
+    registry_catalog: Optional[str] = Query(None),
+    registry_schema: Optional[str] = Query(None),
+    registry_volume: Optional[str] = Query(None),
+    session_mgr: SessionManager = Depends(get_session_manager),
+    settings: Settings = Depends(get_settings),
+):
+    domain = DigitalTwin.resolve_domain(
+        domain_name, session_mgr, settings,
+        registry_catalog, registry_schema, registry_volume,
+        domain_version, read_only=True,
+    )
+    assert_public_graph_read(request, domain, settings)
+    payload = await NodeShaclService.evaluate(domain, settings, entity_uri=entity_uri)
+    return NodeShaclResponse(**payload)
 
 
 # ---------------------------------------------------------------------------

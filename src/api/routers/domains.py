@@ -23,6 +23,7 @@ from back.objects.digitaltwin.node.NodeBusinessRuleService import (
     BUSINESS_RULES_FEATURE,
     NodeBusinessRuleService,
 )
+from back.objects.digitaltwin.node.NodeShaclService import NodeShaclService
 from back.objects.digitaltwin.node.VirtualAttributeService import VirtualAttributeService
 from back.objects.registry import RegistryCfg, RegistryService
 from back.objects.session import SessionManager, get_domain, get_session_manager
@@ -149,6 +150,7 @@ class ClassActionsItem(BaseModel):
     actions: List[dict] = Field(default_factory=list)
     business_rules: List[dict] = Field(default_factory=list)
     virtualAttributes: List[dict] = Field(default_factory=list)
+    shacl_shape_count: int = 0
 
 
 class ClassActionsResponse(BaseModel):
@@ -560,6 +562,9 @@ async def get_domain_classes(
                 actions=actions,
                 business_rules=business_rules,
                 virtualAttributes=virtual_attributes,
+                shacl_shape_count=NodeShaclService.count_applicable(
+                    domain, cls.get("name", "")
+                ),
             )
         )
 

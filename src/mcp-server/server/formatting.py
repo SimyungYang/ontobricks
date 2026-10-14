@@ -90,7 +90,8 @@ def _format_class_context_block(
     actions = cls_actions.get("actions") or []
     business_rules = cls_actions.get("business_rules") or []
     virtual = cls_actions.get("virtualAttributes") or []
-    if not dataset and not bridges and not actions and not business_rules and not virtual:
+    shacl_count = cls_actions.get("shacl_shape_count") or 0
+    if not (dataset or bridges or actions or business_rules or virtual or shacl_count):
         return ""
 
     lines: list[str] = []
@@ -176,28 +177,43 @@ def _format_class_context_block(
         )
 
     if virtual:
-        names = [
-            attr.get("name", "")
-            for group in virtual
-            for attr in (group.get("attributes") or [])
-        ]
-        lines.append(
-            f"  Virtual attributes ({len(names)}, computed on demand): "
-            + ", ".join(n for n in names if n)
-        )
-        lines.append(
-            _hint(
-                context_policy,
-                "virtual_attributes",
-                directive="    → ALWAYS call compute_virtual_attributes("
-                "entity_uri) before answering — these values are not in the "
-                "graph and are computed live",
-                neutral="    → call compute_virtual_attributes(entity_uri) "
-                "to compute their values",
-            )
-        )
+        lines.extend(_class_virtual_lines(virtual, context_policy))
+
+    if shacl_count:
+        lines.extend(_shacl_hint_lines(shacl_count, "  "))
 
     return "\n".join(lines)
+
+
+def _class_virtual_lines(virtual: list, context_policy: Optional[dict]) -> list[str]:
+    """List a class's virtual attributes and point at their computation."""
+    names = [
+        attr.get("name", "")
+        for group in virtual
+        for attr in (group.get("attributes") or [])
+    ]
+    return [
+        f"  Virtual attributes ({len(names)}, computed on demand): "
+        + ", ".join(n for n in names if n),
+        _hint(
+            context_policy,
+            "virtual_attributes",
+            directive="    → ALWAYS call compute_virtual_attributes("
+            "entity_uri) before answering — these values are not in the "
+            "graph and are computed live",
+            neutral="    → call compute_virtual_attributes(entity_uri) "
+            "to compute their values",
+        ),
+    ]
+
+
+def _shacl_hint_lines(count: int, indent: str) -> list[str]:
+    """Advertise the SHACL shapes an entity's class is checked against."""
+    return [
+        f"{indent}SHACL shapes ({count}) apply to this class.",
+        f"{indent}  → call check_entity_shacl_facets(entity_uri) to check this "
+        "entity against them",
+    ]
 
 
 def _format_node_context_response(
@@ -289,26 +305,7 @@ def _format_node_context_response(
 
     business_rules = data.get("business_rules") or []
     if business_rules:
-        lines.append("Business rules (SWRL):")
-        for br in business_rules:
-            lines.append(f"  → {br.get('name', '')}")
-            desc = (br.get("description") or "").strip()
-            if desc:
-                lines.append(f"    Description: {desc}")
-            lines.append(
-                f"    Rule: {br.get('antecedent', '')} -> {br.get('consequent', '')}"
-            )
-        lines.append(
-            _hint(
-                context_policy,
-                "business_rules",
-                directive="  → when asked to apply a rule, call "
-                "run_entity_business_rule(entity_uri, rule) — it writes the "
-                "inferred facts to the graph",
-                neutral="  → call run_entity_business_rule(entity_uri, rule) to "
-                "apply one (writes inferred facts to the graph)",
-            )
-        )
+        lines.extend(_node_business_rule_lines(business_rules, context_policy))
         lines.append("")
 
     virtual = data.get("virtual_attributes") or []
@@ -316,6 +313,112 @@ def _format_node_context_response(
         lines.extend(_format_virtual_attribute_lines(virtual, context_policy))
         lines.append("")
 
+    shacl_count = data.get("shacl_shape_count") or 0
+    if shacl_count:
+        lines.extend(_shacl_hint_lines(shacl_count, ""))
+        lines.append("")
+
+    return "\n".join(lines)
+
+
+def _node_business_rule_lines(
+    business_rules: list, context_policy: Optional[dict]
+) -> list[str]:
+    """Render a node's SWRL business rules and point at their execution."""
+    lines = ["Business rules (SWRL):"]
+    for br in business_rules:
+        lines.append(f"  → {br.get('name', '')}")
+        desc = (br.get("description") or "").strip()
+        if desc:
+            lines.append(f"    Description: {desc}")
+        lines.append(
+            f"    Rule: {br.get('antecedent', '')} -> {br.get('consequent', '')}"
+        )
+    lines.append(
+        _hint(
+            context_policy,
+            "business_rules",
+            directive="  → when asked to apply a rule, call "
+            "run_entity_business_rule(entity_uri, rule) — it writes the "
+            "inferred facts to the graph",
+            neutral="  → call run_entity_business_rule(entity_uri, rule) to "
+            "apply one (writes inferred facts to the graph)",
+        )
+    )
+    return lines
+
+
+_SHACL_STATUS_TEXT = {
+    "fail": "FAIL",
+    "pass": "PASS",
+    "not_applicable": "NOT APPLICABLE",
+    "not_evaluated": "NOT EVALUATED",
+    "error": "ERROR",
+}
+
+
+def _format_shacl_facets_response(data: dict) -> str:
+    """Format the /nodes/shacl JSON response as LLM-friendly text.
+
+    Only ``pass`` means the entity was checked and conforms: shapes that
+    could not be evaluated or errored are named as such, never as passing.
+    """
+    if not data.get("success"):
+        return data.get("message") or "Could not check the SHACL facets."
+
+    entity_uri = data.get("entity_uri", "")
+    local_id = data.get("entity_local_id", "") or _local_name(entity_uri)
+    class_names = [c.get("name", "") for c in data.get("classes") or []]
+    class_str = ", ".join(n for n in class_names if n) or "Unknown"
+
+    lines: list[str] = [
+        f"SHACL Facets — {local_id}  ({class_str})",
+        f"URI: {entity_uri}",
+    ]
+    label = data.get("entity_label")
+    if label:
+        lines.append(f"Label: {label}")
+    lineage = data.get("lineage") or []
+    if len(lineage) > 1:
+        lines.append("Lineage: " + " → ".join(lineage))
+    lines.append("")
+
+    facets = data.get("facets") or []
+    if not facets:
+        lines.append(f"No SHACL shape applies to {class_str}.")
+        return "\n".join(lines)
+
+    s = data.get("summary") or {}
+    lines.append(
+        f"{s.get('fail', 0)} failed, {s.get('pass', 0)} passed, "
+        f"{s.get('not_applicable', 0)} not applicable, "
+        f"{s.get('not_evaluated', 0)} not evaluated, {s.get('error', 0)} errors"
+    )
+    lines.append("")
+
+    for f in facets:
+        status = f.get("status", "")
+        head = _SHACL_STATUS_TEXT.get(status, status.upper())
+        if status == "fail":
+            severity = (f.get("severity") or "sh:Violation").removeprefix("sh:")
+            head = f"{head}  [{severity}]"
+        lines.append(f"{head}  {f.get('label') or f.get('shape_id', '')}")
+
+        target = f.get("property_path") or ""
+        constraint = f.get("constraint") or ""
+        if target or constraint:
+            lines.append("  " + "  ".join(p for p in (target, constraint) if p))
+        if f.get("inherited_from"):
+            lines.append(f"  inherited from {f['inherited_from']}")
+        if status in ("fail", "pass") and target:
+            values = f.get("values") or []
+            found = ", ".join(f'"{v}"' for v in values) if values else "(none)"
+            if f.get("values_truncated"):
+                found += " (more values not shown)"
+            lines.append(f"  found: {found}")
+        message = (f.get("message") or "").strip()
+        if message and status in ("fail", "not_evaluated", "error", "not_applicable"):
+            lines.append(f"  {message}")
     return "\n".join(lines)
 
 

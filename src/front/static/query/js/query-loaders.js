@@ -150,8 +150,19 @@ async function loadOntologyClasses() {
             } catch (e) {
                 console.log('No SWRL rules loaded:', e.message);
             }
+            // SHACL shapes: only their count per class is needed up front, to
+            // gate the "Check SHACL facets" menu item without a round-trip.
+            let shaclShapes = [];
+            try {
+                const shaclResp = await fetch('/ontology/dataquality/list', { credentials: 'same-origin' });
+                const shaclData = await shaclResp.json();
+                if (shaclData && Array.isArray(shaclData.shapes)) shaclShapes = shaclData.shapes;
+            } catch (e) {
+                console.log('No SHACL shapes loaded:', e.message);
+            }
+            const allClasses = data.config.classes || [];
             // Load classes
-            for (const cls of (data.config.classes || [])) {
+            for (const cls of allClasses) {
                 const classInfo = {
                     name: cls.name || '',
                     label: cls.label || cls.name || '',
@@ -166,6 +177,8 @@ async function loadOntologyClasses() {
                             || (swrlByName[ref.name] && swrlByName[ref.name].enabled !== false)))
                         .map(ref => ({ name: ref.name, description: (swrlByName[ref.name] || {}).description || '' })),
                     virtualAttributes: cls.virtualAttributes || [],
+                    shaclShapeCount: (typeof shaclShapeCountFor === 'function')
+                        ? shaclShapeCountFor(cls.name, allClasses, shaclShapes) : 0,
                     description: cls.description || cls.comment || '',
                     dataProperties: cls.dataProperties || []
                 };

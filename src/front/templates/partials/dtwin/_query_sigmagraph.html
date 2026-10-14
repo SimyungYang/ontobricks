@@ -24,6 +24,10 @@
             <input class="form-check-input" type="checkbox" id="sgShowInferred" checked data-sg-change="toggleInferred">
             <label class="form-check-label small" for="sgShowInferred">Inferred</label>
         </div>
+        <div class="form-check form-check-inline mb-0" title="Ring the entities whose SHACL facets were checked">
+            <input class="form-check-input" type="checkbox" id="sgShowQualityRings" checked data-sg-change="toggleQualityRings">
+            <label class="form-check-label small" for="sgShowQualityRings">Quality</label>
+        </div>
         <div class="d-inline-flex align-items-center gap-1 mb-0">
             <label class="form-label small mb-0 text-muted" for="sgMaxEntities"><i class="bi bi-speedometer2"></i></label>
             <select class="form-select form-select-sm py-0 sg-compact-select" id="sgMaxEntities" title="Max entities returned by graph search">
@@ -418,3 +422,5 @@
         </div>
     </div>
 </div>
+
+{% include "partials/dtwin/_query_shacl_facets_modal.html" %}

@@ -117,6 +117,13 @@ MCP_DOMAIN_TOOLS: tuple[Dict[str, Any], ...] = (
         "class and write the inferred triples to the graph (Builder role).",
         "requires_graph": True,
     },
+    {
+        "name": "check_entity_shacl_facets",
+        "label": "Check entity SHACL facets",
+        "description": "Evaluate the SHACL shapes targeting an entity's class, "
+        "its ancestors and the whole graph against that entity only.",
+        "requires_graph": True,
+    },
 )
 
 MCP_DOMAIN_TOOL_NAMES: frozenset[str] = frozenset(

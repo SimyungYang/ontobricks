@@ -947,6 +947,39 @@ function fails carries an `error` and leaves the others intact.
 > This is deliberately independent of whether the `compute_virtual_attributes`
 > MCP tool is still published.
 
+#### `GET /api/v1/digitaltwin/nodes/shacl`
+
+Check one entity against every enabled SHACL shape that applies to it: shapes
+targeting the entity's class, any of its ancestor classes (`parent` chain), or
+no class at all. Read-only.
+
+**Parameters:**
+- `entity_uri` (query): Full URI of the entity node
+- `domain_name` / `domain_version` (optional): Registry domain and version
+
+Each shape is translated to SQL and restricted to the entity; all of them run
+as one `UNION ALL` batch, with a per-shape retry when the batch fails. The
+response carries the entity header (`entity_local_id`, `entity_label`,
+`classes`, `lineage`), a `summary` (count per status plus `fail_by_severity`)
+and one `facets` entry per shape with its `status`:
+
+| Status | Meaning |
+|--------|---------|
+| `pass` | Checked; the entity conforms |
+| `fail` | Checked; the entity violates the shape (see `severity`, `details`) |
+| `not_applicable` | The shape's guard condition does not hold for this entity |
+| `not_evaluated` | The shape has no SQL translation (e.g. `sh:closed`) |
+| `error` | The SQL failed; `message` carries the engine error |
+
+`values` lists what the entity carries on the constrained property (at most
+20, `values_truncated` beyond). Inherited shapes name their ancestor in
+`inherited_from`. A graph that cannot be read (typically never built) returns
+502 with a readable `message`.
+
+`/api/v1/digitaltwin/nodes/context` and `/api/v1/domain/classes` expose the
+matching `shacl_shape_count`. The Graph Explorer calls the internal twin
+`GET /dtwin/nodes/shacl` on the session domain.
+
 ---
 
 ## Example Usage

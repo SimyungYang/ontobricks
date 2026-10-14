@@ -1,6 +1,6 @@
 """MCP tool registration for the OntoBricks server.
 
-``register_tools(mcp, session)`` binds all 14 ``@mcp.tool`` handlers to a
+``register_tools(mcp, session)`` binds all 15 ``@mcp.tool`` handlers to a
 :class:`~server.session.MCPServerSession`. The handlers are thin: they enforce
 the per-domain policy gate, issue the HTTP call through
 :mod:`server.http_client` (late-bound for monkeypatching) and hand the JSON to
@@ -26,6 +26,7 @@ from server.constants import (
     API_V1_DT_NODE_ACTION,
     API_V1_DT_NODE_BUSINESS_RULE,
     API_V1_DT_NODE_CONTEXT,
+    API_V1_DT_NODE_SHACL,
     API_V1_DT_NODE_VIRTUAL_ATTRIBUTES,
     API_V1_DT_STATS,
     API_V1_DT_STATUS,
@@ -38,12 +39,15 @@ from server.formatting import (
     _format_node_action_response,
     _format_node_business_rule_response,
     _format_node_context_response,
+    _format_shacl_facets_response,
     _format_virtual_attributes_response,
 )
 from server.session import MCPServerSession
 from server.uri_helpers import _local_name, _pretty_predicate
 
 logger = logging.getLogger(__name__)
+
+SHACL_TOOL = "check_entity_shacl_facets"
 
 
 def register_tools(mcp: FastMCP, session: MCPServerSession) -> None:
@@ -243,6 +247,7 @@ def register_tools(mcp: FastMCP, session: MCPServerSession) -> None:
                     API_V1_DOMAIN_CLASSES,
                     params={**session.registry_params(), "domain_name": domain_name},
                 )
+                shacl_on = session.ensure_tool_allowed(SHACL_TOOL) is None
                 for cls in cls_data.get("classes", []):
                     uri = cls.get("uri", "")
                     if uri:
@@ -253,6 +258,9 @@ def register_tools(mcp: FastMCP, session: MCPServerSession) -> None:
                             "actions": cls.get("actions") or [],
                             "business_rules": cls.get("business_rules") or [],
                             "virtualAttributes": cls.get("virtualAttributes") or [],
+                            "shacl_shape_count": (
+                                (cls.get("shacl_shape_count") or 0) if shacl_on else 0
+                            ),
                         }
                 logger.info(
                     "select_domain: loaded class Actions for %d classes",
@@ -793,6 +801,9 @@ def register_tools(mcp: FastMCP, session: MCPServerSession) -> None:
         async with session.client() as client:
             data = await _http._get(client, API_V1_DT_NODE_CONTEXT, params=params)
 
+        # Never point the model at a tool its policy refuses.
+        if session.ensure_tool_allowed(SHACL_TOOL):
+            data = {**data, "shacl_shape_count": 0}
         return _format_node_context_response(data, session.active_context_policy())
 
     @mcp.tool()
@@ -842,18 +853,7 @@ def register_tools(mcp: FastMCP, session: MCPServerSession) -> None:
                     client, API_V1_DT_NODE_VIRTUAL_ATTRIBUTES, params=params
                 )
         except httpx.HTTPStatusError as exc:
-            try:
-                err_body = exc.response.json()
-            except Exception:
-                err_body = {}
-            return (
-                err_body.get("message")
-                or err_body.get("error")
-                or (
-                    f"Could not compute virtual attributes "
-                    f"(HTTP {exc.response.status_code})."
-                )
-            )
+            return _http_error_message(exc, "compute virtual attributes")
 
         return _format_virtual_attributes_response(data, session.active_context_policy())
 
@@ -889,15 +889,7 @@ def register_tools(mcp: FastMCP, session: MCPServerSession) -> None:
             async with session.client() as client:
                 data = await _http._post(client, API_V1_DT_NODE_ACTION, json=body)
         except httpx.HTTPStatusError as exc:
-            try:
-                err_body = exc.response.json()
-            except Exception:
-                err_body = {}
-            return (
-                err_body.get("message")
-                or err_body.get("error")
-                or f"Could not invoke the action (HTTP {exc.response.status_code})."
-            )
+            return _http_error_message(exc, "invoke the action")
 
         return _format_node_action_response(data)
 
@@ -935,14 +927,58 @@ def register_tools(mcp: FastMCP, session: MCPServerSession) -> None:
             async with session.client() as client:
                 data = await _http._post(client, API_V1_DT_NODE_BUSINESS_RULE, json=body)
         except httpx.HTTPStatusError as exc:
-            try:
-                err_body = exc.response.json()
-            except Exception:
-                err_body = {}
-            return (
-                err_body.get("message")
-                or err_body.get("error")
-                or f"Could not run the business rule (HTTP {exc.response.status_code})."
-            )
+            return _http_error_message(exc, "run the business rule")
 
         return _format_node_business_rule_response(data)
+
+    _register_shacl_tool(mcp, session)
+
+
+def _http_error_message(exc: httpx.HTTPStatusError, what: str) -> str:
+    """The backend's own error message, else a generic one naming *what* failed."""
+    try:
+        err_body = exc.response.json()
+    except Exception:
+        err_body = {}
+    return (
+        err_body.get("message")
+        or err_body.get("error")
+        or f"Could not {what} (HTTP {exc.response.status_code})."
+    )
+
+
+def _register_shacl_tool(mcp: FastMCP, session: MCPServerSession) -> None:
+    """Register ``check_entity_shacl_facets`` on *mcp*, bound to *session*."""
+
+    @mcp.tool()
+    async def check_entity_shacl_facets(entity_uri: str) -> str:
+        """Check one entity against every SHACL shape that applies to it.
+
+        Requires a domain to be selected first via select_domain. The shapes
+        are those targeting the entity's class, any of its ancestor classes,
+        or the whole graph. Each one is evaluated against this entity only and
+        reported as PASS, FAIL (with its severity), NOT APPLICABLE (its guard
+        condition does not hold), NOT EVALUATED (no SQL translation, e.g.
+        sh:closed) or ERROR, along with the values the entity carries on the
+        constrained property.
+
+        Use it when the user asks whether an entity is valid, complete or
+        conforms to the data-quality rules. Only PASS means the entity was
+        checked and conforms — never report a NOT EVALUATED or ERROR shape as
+        satisfied. Read-only.
+
+        Args:
+            entity_uri: Full URI of the entity (e.g. from describe_entity).
+        """
+        blocked = session.require_domain(SHACL_TOOL)
+        if blocked:
+            return blocked
+
+        params = session.domain_params({"entity_uri": entity_uri})
+        try:
+            async with session.client() as client:
+                data = await _http._get(client, API_V1_DT_NODE_SHACL, params=params)
+        except httpx.HTTPStatusError as exc:
+            return _http_error_message(exc, "check the SHACL facets")
+
+        return _format_shacl_facets_response(data)

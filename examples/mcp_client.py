@@ -80,6 +80,9 @@ _TOOL_DESCRIPTIONS: dict[str, str] = {
     "run_entity_business_rule":
         "Trigger a SWRL business rule declared on an entity's class; WRITES the "
         "inferred triples. Needs the Builder role.",
+    "check_entity_shacl_facets":
+        "Check one entity against the SHACL shapes of its class, ancestors and "
+        "graph; only PASS means checked and conforming. Read-only.",
     "get_status":
         "Diagnostics: triple count, view name, graph name.",
     "get_graphql_schema":

@@ -193,6 +193,22 @@ VirtualAttributeService class
    :undoc-members:
    :show-inheritance:
 
+NodeShaclService class
+----------------------
+
+.. automodule:: back.objects.digitaltwin.node.NodeShaclService
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+NodeShaclResponse class
+-----------------------
+
+.. automodule:: back.objects.digitaltwin.node.NodeShaclResponse
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 Models
 ------
 

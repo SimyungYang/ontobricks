@@ -67,6 +67,7 @@ is the fallback, so a node reached through the Graph Explorer always resolves.
 | `GET /api/v1/digitaltwin/nodes/shacl` | **New.** Public, `assert_public_graph_read`. Query: `entity_uri`, `domain_name`, `domain_version`, registry overrides |
 | `GET /dtwin/nodes/shacl` | **New.** Internal (UI), `assert_domain_graph_read`, session domain |
 | `GET …/nodes/context` | Gains `shacl_shape_count` (int, shapes selected per §1.1 using the class already resolved by `match_ontology_class`; no evaluation, no extra warehouse query) |
+| `GET /api/v1/domain/classes` | Each class gains `shacl_shape_count`, so MCP `describe_entity` can emit the hint from the cached class listing |
 | Graph Explorer node menu | New **Data quality** section with **Check SHACL facets (N)**, rendered only when `shacl_shape_count > 0` — see §3.5 |
 | Graph Explorer detail panel | New **Data quality** section with a Check button and, once checked, a one-line summary — see §3.5 |
 | Graph Explorer canvas | Checked nodes get a session-only status ring, with a toggle — see §3.5 |
@@ -198,8 +199,15 @@ three.
 - New section **Data quality** after **Business rules**, one item
   `<i class="bi bi-shield-check"></i> Check SHACL facets (N)` with
   `data-sg-node-action="shacl-facets"`.
-- Rendered only when `meta.shaclShapeCount > 0` (from `shacl_shape_count`)
-  and the node is not a group/cluster super-node.
+- Rendered only when `meta.shaclShapeCount > 0` and the node is not a
+  group/cluster super-node.
+- The menu is built from client-side class info (`query-loaders.js`), not
+  from `/nodes/context`. The loader fetches `/ontology/dataquality/list`
+  alongside the SWRL list and stores `shaclShapeCount` on each class via
+  `shaclShapeCountFor(className, classes, shapes)` in
+  `query-shacl-facets.js`, which mirrors §1.1 (own + `parent` chain +
+  global, enabled only). It only gates the menu item; the server stays
+  authoritative for selection and evaluation.
 - Click ⇒ `openShaclFacetsModal(uri, meta)`; it reuses the cached result when
   present, otherwise checks.
 
@@ -405,14 +413,25 @@ pastes the run URI under "MLflow eval run" per `.cursor/12`.
 
 ## 9. Test plan
 
-- `tests/units/…/test_node_shacl_service.py` — shape selection (§1.1),
-  class substitution, status mapping, ordering, summary, batch-failure
-  fallback (store mocked).
-- SQL snapshot test for the `UNION ALL` batch, including escaping of a URI
-  containing `'`.
-- Route tests for both endpoints (public guard, missing entity, no shapes).
-- `tests/…/mcp` formatting test for `check_entity_shacl_facets` and the
-  `[Context]` hint, plus the disabled-tool case.
+Written test-first; all red until implemented.
+
+- `tests/units/dtwin/test_node_shacl_service.py` — shape selection (§1.1),
+  class substitution, batch SQL (branches, escaping, hostile shape IDs),
+  status mapping, values across the `#`/`/` separator and their cap,
+  ordering, summary, batch-failure fallback, `rdf:type` fallback, empty and
+  no-store cases. Store faked; `get_graphdb` and
+  `NodeShaclService.triplestore_table` are the patch points.
+- `tests/units/api/test_node_shacl_endpoint.py` — both endpoints (service
+  stubbed), `entity_uri` required, GET-only, and `shacl_shape_count` on
+  `/nodes/context` and `/api/v1/domain/classes`.
+- `tests/units/mcp/test_shacl_facets_formatting.py` —
+  `_format_shacl_facets_response` and the `[Context]` hint in node and class
+  blocks.
+- `tests/units/mcp/test_domain_policy_gating.py` (extended) — tool count
+  15, backend call, hidden on select and refused at call time when
+  disabled, hint present / omitted, member of `GRAPH_TOOLS`.
+- `tests/units/core/test_mcp_tools_policy.py` (extended) — the tool is in
+  `MCP_DOMAIN_TOOL_NAMES` and `MCP_GRAPH_TOOL_NAMES`.
 - `tests/units/front/test_shacl_facets_ui.py` — structural contract: the
   modal partial is included once, uses `getOrCreateInstance` and no inline
   styles; the menu item and the panel section are gated on
@@ -426,6 +445,7 @@ pastes the run URI under "MLflow eval run" per `.cursor/12`.
 
 - [ ] Contracts in §3 reviewed.
 - [ ] Rendering in §3.5 reviewed.
-- [ ] Eval dataset committed (10 examples).
+- [ ] Eval dataset committed (10 examples) — written at
+      `tests/eval/datasets/mcp/entity_shacl_facets.jsonl`, not yet committed.
 - [ ] Baseline eval run URI pasted into PR body.
 - [ ] Aggregate threshold ≥ `0.90`.

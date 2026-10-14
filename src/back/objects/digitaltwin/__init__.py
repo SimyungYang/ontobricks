@@ -26,6 +26,8 @@ from back.objects.digitaltwin.build.TwinInferredMaterialize import TwinInferredM
 from back.objects.digitaltwin.TwinGraphStats import TwinGraphStats
 from back.objects.digitaltwin.node.NodeContextService import NodeContextService
 from back.objects.digitaltwin.node.NodeBusinessRuleService import NodeBusinessRuleService
+from back.objects.digitaltwin.node.NodeShaclResponse import NodeShaclResponse
+from back.objects.digitaltwin.node.NodeShaclService import NodeShaclService
 from back.objects.digitaltwin.node.VirtualAttributeService import VirtualAttributeService
 
 __all__ = [
@@ -37,6 +39,8 @@ __all__ = [
     "GraphFind",
     "NodeBusinessRuleService",
     "NodeContextService",
+    "NodeShaclResponse",
+    "NodeShaclService",
     "QualitySqlBuilder",
     "SqlQualityChecks",
     "TwinAnalytics",

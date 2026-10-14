@@ -28,6 +28,7 @@ from back.objects.digitaltwin.node.NodeBusinessRuleService import (
     BUSINESS_RULES_FEATURE,
     NodeBusinessRuleService,
 )
+from back.objects.digitaltwin.node.NodeShaclService import NodeShaclService
 from back.objects.digitaltwin.node.VirtualAttributeService import (
     VIRTUAL_ATTRIBUTES_FEATURE,
     VirtualAttributeService,
@@ -387,9 +388,7 @@ class NodeContextService:
         logger.info(
             "nodes/context: entity=%s class=%s domain=%s dataset=%s bridges=%d "
             "actions=%d business_rules=%d virtual=%d computed=%s",
-            local_id,
-            class_name,
-            dname,
+            local_id, class_name, dname,
             bool(dataset_out),
             len(bridges_out),
             len(actions_out),
@@ -408,6 +407,7 @@ class NodeContextService:
             "actions": actions_out or None,
             "business_rules": business_rules_out or None,
             "virtual_attributes": virtual_out or None,
+            "shacl_shape_count": NodeShaclService.count_applicable(domain, class_name),
             "message": fetch_error,
         }
 
