@@ -6,6 +6,7 @@ reasoning engine and quality-check pipeline.
 
 from typing import Dict, List, Optional
 
+from back.core.helpers import sql_escape
 from back.core.logging import get_logger
 from back.core.reasoning.constants import RDF_TYPE
 from back.core.reasoning.swrl.SWRLBuiltinRegistry import SWRLBuiltinRegistry
@@ -17,10 +18,7 @@ logger = get_logger(__name__)
 class SWRLSQLTranslator:
     """Build SQL from SWRL rules for the flat triple-store table."""
 
-    @staticmethod
-    def _escape(val: str) -> str:
-        """Escape a string value for safe SQL embedding."""
-        return val.replace("'", "''").replace("\\", "\\\\")
+    _escape = staticmethod(sql_escape)
 
     @staticmethod
     def _resolve_arg(token: str, var_bindings: Dict[str, tuple]) -> str:

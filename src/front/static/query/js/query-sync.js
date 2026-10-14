@@ -595,30 +595,6 @@ async function initSyncSection() {
     }
 }
 
-/**
- * Check whether the ontology or assignments have changed since the last
- * Knowledge Graph build. Shows a warning banner when a rebuild is recommended.
- */
-async function checkConfigChanges() {
-    var warning = document.getElementById('syncRebuildWarning');
-    if (!warning) return;
-    try {
-        var resp = await fetch('/dtwin/sync/changes', { credentials: 'same-origin' });
-        var data = await resp.json();
-        if (data.needs_rebuild) {
-            warning.classList.remove('d-none');
-            warning.classList.add('d-flex');
-        } else {
-            warning.classList.remove('d-flex');
-            warning.classList.add('d-none');
-        }
-    } catch (e) {
-        console.warn('[Sync] Failed to check config changes:', e);
-        warning.classList.remove('d-flex');
-        warning.classList.add('d-none');
-    }
-}
-
 
 /**
  * Check if the triple store has data.

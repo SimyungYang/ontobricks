@@ -7,14 +7,11 @@ client without changing callers.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Callable, Optional
 
 if TYPE_CHECKING:
     from agents.agent_auto_assignment.engine import AgentResult as AutoAssignAgentResult
     from agents.agent_mapping_pge.engine import AgentResult as MappingPGEAgentResult
-    from agents.agent_auto_icon_assign.engine import (
-        AgentResult as IconAssignAgentResult,
-    )
 
 from back.core.logging import get_logger
 
@@ -156,85 +153,6 @@ class AgentClient:
             max_iterations=max_iterations,
         )
 
-    def run_icon_assign(
-        self,
-        *,
-        host: str,
-        token: str,
-        endpoint_name: str,
-        entity_names: List[str],
-        metadata: Optional[Dict] = None,
-        ontology: Optional[Dict] = None,
-        on_step: Optional[Callable] = None,
-    ) -> "IconAssignAgentResult":
-        """Assign icons to ontology entity names using the icon-assignment agent.
-
-        Args:
-            host: Databricks workspace host (with or without ``https://``).
-            token: Bearer token for the workspace APIs.
-            endpoint_name: Model serving endpoint name for the agent.
-            entity_names: Human-readable entity names to receive icon suggestions.
-            metadata: Optional schema or glossary context for disambiguation.
-            ontology: Optional ontology dict for class/label context.
-            on_step: Optional progress callback for long runs.
-
-        Returns:
-            Agent result from ``agents.agent_auto_icon_assign`` with suggested
-            icons or explanations per entity.
-
-        Raises:
-            Exception: Propagates any failure raised by ``run_agent``.
-        """
-        from agents.agent_auto_icon_assign import run_agent
-
-        return run_agent(
-            host=host,
-            token=token,
-            endpoint_name=endpoint_name,
-            entity_names=entity_names,
-            metadata=metadata,
-            ontology=ontology,
-            on_step=on_step,
-        )
-
-    def run_ontology_assistant(
-        self,
-        *,
-        host: str,
-        token: str,
-        endpoint_name: str,
-        messages: List[Dict[str, str]],
-        ontology_context: Dict[str, Any],
-        on_step: Optional[Callable] = None,
-    ) -> Any:
-        """Run a conversational ontology assistant turn with model grounding.
-
-        Args:
-            host: Databricks workspace host (with or without ``https://``).
-            token: Bearer token for the workspace APIs.
-            endpoint_name: Model serving endpoint name for the assistant.
-            messages: Chat history as a list of role/content dicts (OpenAI-style).
-            ontology_context: Serialized ontology and session facts passed to the
-                assistant as system or tool context.
-            on_step: Optional progress callback for streaming-style updates.
-
-        Returns:
-            Assistant output (structure defined by ``agents.agent_ontology_assistant``;
-            often a message dict or completion payload).
-
-        Raises:
-            Exception: Propagates any failure raised by ``run_agent``.
-        """
-        from agents.agent_ontology_assistant import run_agent
-
-        return run_agent(
-            host=host,
-            token=token,
-            endpoint_name=endpoint_name,
-            messages=messages,
-            ontology_context=ontology_context,
-            on_step=on_step,
-        )
 
 
 _default_client: Optional[AgentClient] = None

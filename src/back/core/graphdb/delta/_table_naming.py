@@ -143,10 +143,6 @@ def inferred_suffix() -> str:
     return _SUFFIX_INFERRED
 
 
-def analytics_suffix() -> str:
-    return _SUFFIX_ANALYTICS
-
-
 def adj_out_suffix() -> str:
     return _SUFFIX_ADJ_OUT
 

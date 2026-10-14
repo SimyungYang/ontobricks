@@ -13,6 +13,7 @@ Each rule defines:
 import time
 from typing import Any, Dict, List, Optional
 
+from back.core.helpers import is_sql_numeric, sql_escape
 from back.core.logging import get_logger
 from back.core.w3c.rdf_utils import uri_local_name
 from back.core.reasoning.constants import AGG_FUNCTIONS, AGG_OPERATORS, RDF_TYPE
@@ -184,19 +185,18 @@ class AggregateRuleEngine:
 
         if not target_uri or agg_func not in AGG_FUNCTIONS:
             return None
+        if not is_sql_numeric(threshold):
+            return None
         sql_op = AGG_OPERATORS.get(operator, ">")
         func = agg_func.upper()
-
-        def esc(v: str) -> str:
-            return v.replace("'", "''")
 
         if group_prop_uri and agg_prop_uri:
             return (
                 f"SELECT t0.subject AS s, {func}(TRY_CAST(t_agg.object AS DOUBLE)) AS agg_val\n"
                 f"FROM {table} t0\n"
-                f"JOIN {table} t_grp ON t_grp.subject = t0.subject AND t_grp.predicate = '{esc(group_prop_uri)}'\n"
-                f"JOIN {table} t_agg ON t_agg.subject = t_grp.object AND t_agg.predicate = '{esc(agg_prop_uri)}'\n"
-                f"WHERE t0.predicate = '{RDF_TYPE}' AND t0.object = '{esc(target_uri)}'\n"
+                f"JOIN {table} t_grp ON t_grp.subject = t0.subject AND t_grp.predicate = '{sql_escape(group_prop_uri)}'\n"
+                f"JOIN {table} t_agg ON t_agg.subject = t_grp.object AND t_agg.predicate = '{sql_escape(agg_prop_uri)}'\n"
+                f"WHERE t0.predicate = '{RDF_TYPE}' AND t0.object = '{sql_escape(target_uri)}'\n"
                 f"GROUP BY t0.subject\n"
                 f"HAVING {func}(TRY_CAST(t_agg.object AS DOUBLE)) {sql_op} {threshold}"
             )
@@ -204,8 +204,8 @@ class AggregateRuleEngine:
             return (
                 f"SELECT t0.subject AS s, {func}(TRY_CAST(t_agg.object AS DOUBLE)) AS agg_val\n"
                 f"FROM {table} t0\n"
-                f"JOIN {table} t_agg ON t_agg.subject = t0.subject AND t_agg.predicate = '{esc(agg_prop_uri)}'\n"
-                f"WHERE t0.predicate = '{RDF_TYPE}' AND t0.object = '{esc(target_uri)}'\n"
+                f"JOIN {table} t_agg ON t_agg.subject = t0.subject AND t_agg.predicate = '{sql_escape(agg_prop_uri)}'\n"
+                f"WHERE t0.predicate = '{RDF_TYPE}' AND t0.object = '{sql_escape(target_uri)}'\n"
                 f"GROUP BY t0.subject\n"
                 f"HAVING {func}(TRY_CAST(t_agg.object AS DOUBLE)) {sql_op} {threshold}"
             )
@@ -218,16 +218,16 @@ class AggregateRuleEngine:
             return (
                 f"SELECT t0.subject AS s, {agg_expr} AS agg_val\n"
                 f"FROM {table} t0\n"
-                f"JOIN {table} t_grp ON t_grp.subject = t0.subject AND t_grp.predicate = '{esc(group_prop_uri)}'\n"
-                f"WHERE t0.predicate = '{RDF_TYPE}' AND t0.object = '{esc(target_uri)}'\n"
+                f"JOIN {table} t_grp ON t_grp.subject = t0.subject AND t_grp.predicate = '{sql_escape(group_prop_uri)}'\n"
+                f"WHERE t0.predicate = '{RDF_TYPE}' AND t0.object = '{sql_escape(target_uri)}'\n"
                 f"GROUP BY t0.subject\n"
                 f"HAVING {agg_expr} {sql_op} {threshold}"
             )
         else:
             return (
-                f"SELECT '{esc(target_uri)}' AS s, COUNT(t0.subject) AS agg_val\n"
+                f"SELECT '{sql_escape(target_uri)}' AS s, COUNT(t0.subject) AS agg_val\n"
                 f"FROM {table} t0\n"
-                f"WHERE t0.predicate = '{RDF_TYPE}' AND t0.object = '{esc(target_uri)}'\n"
+                f"WHERE t0.predicate = '{RDF_TYPE}' AND t0.object = '{sql_escape(target_uri)}'\n"
                 f"HAVING COUNT(t0.subject) {sql_op} {threshold}"
             )
 
@@ -245,6 +245,9 @@ class AggregateRuleEngine:
         op = rule.get("operator", "")
         if op and op not in AGG_OPERATORS:
             errors.append(f"Invalid operator: {op}")
+        threshold = rule.get("threshold", "0")
+        if not is_sql_numeric(threshold):
+            errors.append(f"Threshold must be a number: {threshold}")
         if not rule.get("group_by_property") and not rule.get("aggregate_property"):
             if func and func != "count":
                 errors.append(

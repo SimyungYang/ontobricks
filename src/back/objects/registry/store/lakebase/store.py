@@ -405,21 +405,6 @@ class LakebaseRegistryStore(
             return int(row.get("total") or 0)
         return int(row[0] or 0)
 
-    def domain_folder_id(self, folder: str) -> Optional[str]:
-        try:
-            with self._connect() as conn, conn.cursor() as cur:
-                cur.execute(
-                    f"""
-                    SELECT id FROM {self._q(self._schema)}.domains
-                    WHERE registry_id = %s AND folder = %s
-                    """,
-                    (self._registry(), folder),
-                )
-                row = cur.fetchone()
-            return str(row[0]) if row else None
-        except Exception:  # noqa: BLE001
-            return None
-
     def describe(self) -> Dict[str, Any]:
         c = self._cfg
         try:

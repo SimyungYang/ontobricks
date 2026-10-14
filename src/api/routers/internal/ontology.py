@@ -627,9 +627,7 @@ async def export_shacl(session_mgr: SessionManager = Depends(get_session_manager
         domain.ontology.get("base_uri", ""),
     )
     export_name = (
-        domain._data.get("domain", domain._data.get("project", {}))
-        .get("info", {})
-        .get("name", DEFAULT_GRAPH_NAME)
+        domain._data["domain"].get("info", {}).get("name", DEFAULT_GRAPH_NAME)
     )
     filename = f"{export_name}_shacl_shapes.ttl"
     return Response(
@@ -974,9 +972,7 @@ async def export_swrl(session_mgr: SessionManager = Depends(get_session_manager)
     domain = get_domain(session_mgr)
     text = serialize_rules(domain.swrl_rules)
     export_name = (
-        domain._data.get("domain", domain._data.get("project", {}))
-        .get("info", {})
-        .get("name", DEFAULT_GRAPH_NAME)
+        domain._data["domain"].get("info", {}).get("name", DEFAULT_GRAPH_NAME)
     )
     filename = f"{export_name}_swrl_rules.swrl"
     return Response(

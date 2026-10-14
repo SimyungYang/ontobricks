@@ -1,7 +1,7 @@
 # OntoBricks — Release Notes V0.9.0
 
 **Release window:** September–October 2026<br>
-**Test status:** all changes shipped with the non-scenario suite green: 9221 passed, 326 skipped, 6 deselected, 1 xfailed, 40 warnings.
+**Test status:** all changes shipped with the non-scenario suite green: 9400 passed, 326 skipped, 6 deselected, 1 xfailed, 40 warnings.
 
 ---
 
@@ -215,6 +215,19 @@ The documentation hub and Help Center were recategorized; small guides fold into
 
 ---
 
+## Security hardening (code review)
+
+- **CSRF:** unsafe requests to the web app now need both the `csrf_token` cookie and a matching `X-CSRF-Token` header (constant-time comparison); a missing cookie no longer slips through. `/api/` and `/graphql/` stay exempt.
+- **`/health`:** now a public liveness probe that leaks no paths, catalog names or exception text. The full readiness probes moved to the admin-only `/settings/diagnostics/readiness`. A failed startup no longer shows the traceback to anonymous callers.
+- **SQL literals:** one dialect-aware escape (Spark doubles backslashes, Postgres doesn't) across SPARQL rules, decision tables, aggregate rules, SHACL, the SPARQL translator and the graph stores. A value ending in a backslash can no longer close a literal early; `nan`, `inf` and `1_000` are no longer emitted as bare numbers; a non-numeric aggregate `threshold` is rejected instead of pasted into `HAVING`.
+- **Front-end XSS:** one DOMPurify-sanitised `renderMarkdown` for comments, chat and audit; `escapeHtml` escapes quotes and is the only definition; untrusted ontology and metadata values are escaped before `innerHTML`.
+- **Tokens out of the session:** the warehouse settings no longer persist a posted token; a token left in an old session file is dropped on load and masked in the session debug view.
+- **Permissions and reviews:** permission updates lock the row (no lost update); a Lakebase read failure raises instead of reading as "no permissions"; review quorum fails closed.
+- **MCP:** GraphQL paths URL-encode the domain name and forward the caller's identity; HTTP failures in tools and resources return a short message instead of a stack trace.
+- **Honest errors:** an unparseable SHACL report and failed Unity Catalog listings now raise instead of reading as "conforms" or an empty schema.
+
+---
+
 ## Security (Dependabot)
 
 Raised uv constraint floors and relocked `uv.lock` / `src/mcp-server/uv.lock` against patched releases:
@@ -243,6 +256,13 @@ Raised uv constraint floors and relocked `uv.lock` / `src/mcp-server/uv.lock` ag
 v0.9.0 adds global-config keys (`warehouse_use_sea`, Lakehouse query warehouse / `use_sea`, `use_cloud_fetch`, GitHub mirror settings). Existing v0.8.0 domains keep working: Query mirrors Build, SEA defaults off, CloudFetch defaults on, GitHub mirror defaults off.
 
 Knowledge Store uses a new Lakebase `domain_documents` table created by the standard registry bootstrap / initialize path. The registry Unity Catalog Volume is no longer used for documents; previously stored Volume binaries are not migrated automatically — re-upload documents that must remain in Generate or Mapping context.
+
+### Behaviour changes from the security hardening
+
+- **Health probes:** anything that parsed the `checks` list from `GET /health` must call the admin-only `GET /settings/diagnostics/readiness` instead. Probes that only need HTTP 200 are unaffected.
+- **Scripts posting to web routes:** non-browser clients must use `/api/v1/` or `/graphql/`; internal routes now reject requests without the CSRF cookie and header.
+- **SHACL `sh:pattern`:** backslashes now reach Spark `RLIKE` as written. Before, `\d+` was silently read as `d+`, so pattern rules may report different (correct) violation counts after the upgrade.
+- **Unity Catalog errors:** a failed table or column listing now surfaces as an error (502) instead of an empty list.
 
 ### Enabling Lakehouse//RT reads
 

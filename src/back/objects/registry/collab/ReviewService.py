@@ -669,11 +669,17 @@ class ReviewService:
 
     @staticmethod
     def _quorum(svc: RegistryService, folder: str) -> int:
-        """Per-domain review sign-off quorum (>= 1)."""
+        """Per-domain review sign-off quorum (>= 1).
+
+        Raises :class:`InfrastructureError` when the quorum cannot be read
+        so the publish gate fails closed.
+        """
         try:
             return max(1, int(svc.store.get_domain_quorum(folder)))
-        except Exception:  # noqa: BLE001
-            return _DEFAULT_QUORUM
+        except Exception as exc:  # noqa: BLE001
+            raise InfrastructureError(
+                "Failed to read the domain review quorum", detail=str(exc)
+            ) from exc
 
     @staticmethod
     def _email(request) -> str:

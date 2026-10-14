@@ -748,7 +748,7 @@ class SparqlTranslator:
                 continue
             col_ref = f"{column_qualifier}{column}" if column_qualifier else column
             operator = vf["operator"]
-            value = vf["value"].replace("'", "''")
+            value = _escape_sql(vf["value"], dialect)
             if operator == "contains":
                 where_conditions.append(f"LOWER({col_ref}) LIKE '%{value}%'")
             elif operator == "equals":

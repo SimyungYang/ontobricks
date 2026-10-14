@@ -6,6 +6,7 @@ Handles loading, merging, and managing Unity Catalog metadata
 
 from typing import Any, Dict, List, Optional, Tuple
 
+from back.core.errors import InfrastructureError
 from back.core.logging import get_logger
 from ..DatabricksAuth import DatabricksAuth
 from .UnityCatalog import UnityCatalog
@@ -208,7 +209,19 @@ class MetadataService:
                     {"tables": existing_tables, "table_count": len(existing_tables)},
                 )
 
-            listing = self._catalog.list_tables_and_views(catalog, schema)
+            # The typed listing only refines object_kind here; the selected
+            # names are already known, so a listing failure degrades to "table".
+            try:
+                listing = self._catalog.list_tables_and_views(catalog, schema)
+            except InfrastructureError as exc:
+                logger.warning(
+                    "Typed listing unavailable for %s.%s, defaulting object kinds "
+                    "to table: %s",
+                    catalog,
+                    schema,
+                    exc.detail or exc.message,
+                )
+                listing = []
             type_by_name = {t["name"]: t.get("table_type", "") for t in listing}
             new_tables = self._fetch_tables_metadata(
                 catalog, schema, capped, type_by_name

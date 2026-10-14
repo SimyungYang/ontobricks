@@ -555,7 +555,7 @@ End-to-end HTTP tests using Starlette's `TestClient`. These verify that routes a
 
 | Test Class | Endpoints Covered |
 |------------|-------------------|
-| `TestHealthRoutes` | `GET /health` (readiness probe — verifies the response shape and that `/health/detailed` has been retired) |
+| `TestHealthRoutes` | `GET /health` (public liveness probe — minimal payload, `/health/detailed` retired) and the admin-only `GET /settings/diagnostics/readiness` |
 | `TestMainPages` | `GET /`, `GET /about`, `GET /session-status`, `GET /ontology-status`, `GET /validate/*` |
 | `TestSettingsRoutes` | `GET /settings`, `GET /settings/current`, `POST /settings/save`, `GET /settings/get-default-emoji`, `GET /settings/get-base-uri` |
 | `TestOntologyRoutes` | Page loads, load/save config, class/property CRUD, generate/import OWL, constraints list/save, SWRL list/save, axioms list |

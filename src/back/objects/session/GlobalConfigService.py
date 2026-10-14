@@ -198,16 +198,6 @@ class GlobalConfigService:
         """Return the globally configured default class icon."""
         return self.get(host, token, registry_cfg, "default_emoji")
 
-    def get_navbar_logo(
-        self, host: str, token: str, registry_cfg: Dict[str, str]
-    ) -> str:
-        """Return the globally configured navbar logo as a ``data:`` URL.
-
-        Empty string means "no custom logo" — the UI falls back to the
-        bundled default (``static/global/img/favicon.svg``).
-        """
-        return self.get_ui_branding(host, token, registry_cfg).get("logo_data_url", "")
-
     def get_ui_branding(
         self, host: str, token: str, registry_cfg: Dict[str, str]
     ) -> Dict[str, Any]:

@@ -879,16 +879,6 @@ class RegistryStore(ABC):
     # Optional helpers
     # ------------------------------------------------------------------
 
-    def health_check(self) -> Tuple[bool, str]:
-        """Cheap probe used by the settings UI / startup wake-up.
-
-        Default implementation defers to :meth:`is_initialized`.
-        """
-        try:
-            return (True, "ok") if self.is_initialized() else (False, "not initialized")
-        except Exception as exc:  # noqa: BLE001
-            return False, str(exc)
-
     def describe(self) -> Dict[str, Any]:
         """Return a JSON-serialisable description of the backend.
 
@@ -911,11 +901,3 @@ class RegistryStore(ABC):
 
     def close(self) -> None:
         """Release any held resources. Default: nothing to do."""
-
-    @abstractmethod
-    def domain_folder_id(self, folder: str) -> Optional[str]:
-        """Return a stable internal identifier for *folder* (or ``None``).
-
-        Used by the UI's "rename folder" admin action. The Lakebase
-        backend returns the row's ``id`` (UUID).
-        """

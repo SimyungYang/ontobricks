@@ -11,7 +11,7 @@ import json
 
 import pytest
 
-from back.core.errors import ConflictError
+from back.core.errors import ConflictError, InfrastructureError
 
 from ._v090_fake_pg import (
     DICT_ROW,
@@ -158,10 +158,11 @@ def test_get_domain_quorum_clamps_and_defaults(rows, expected):
     assert make_store(db).get_domain_quorum("acme") == expected
 
 
-def test_get_domain_quorum_defaults_to_one_on_error():
+def test_get_domain_quorum_raises_on_read_error():
     db = FakeDB().on("SELECT review_quorum", raises=RuntimeError("down"))
 
-    assert make_store(db).get_domain_quorum("acme") == 1
+    with pytest.raises(InfrastructureError):
+        make_store(db).get_domain_quorum("acme")
 
 
 def test_delete_domain_is_parameterised_and_reports_errors():
@@ -385,10 +386,18 @@ def test_load_domain_permissions_maps_rows(fake_psycopg):
     assert "ORDER BY lower(p.principal)" in db.calls[0].sql
 
 
-def test_load_domain_permissions_error_returns_empty(fake_psycopg):
+def test_load_domain_permissions_missing_domain_returns_empty(fake_psycopg):
+    assert make_store(FakeDB()).load_domain_permissions("acme") == {
+        "version": 1,
+        "permissions": [],
+    }
+
+
+def test_load_domain_permissions_read_error_raises(fake_psycopg):
     db = FakeDB().on("domain_permissions", raises=RuntimeError("e"))
 
-    assert make_store(db).load_domain_permissions("acme") == {"version": 1, "permissions": []}
+    with pytest.raises(InfrastructureError):
+        make_store(db).load_domain_permissions("acme")
 
 
 def test_save_domain_permissions_replaces_entries_with_defaults():
@@ -398,6 +407,7 @@ def test_save_domain_permissions_replaces_entries_with_defaults():
     ok, msg = make_store(db).save_domain_permissions("acme", data)
 
     assert ok and msg == "Domain permissions saved"
+    assert db.transactions == 1, "DELETE + INSERTs run in a single transaction"
     assert db.one("DELETE FROM").params == ("dom-1",)
     inserts = db.sql_with("INSERT INTO")
     assert [c.params for c in inserts] == [

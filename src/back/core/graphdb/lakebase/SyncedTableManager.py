@@ -1039,42 +1039,6 @@ class SyncedTableManager:
             create_database_objects_if_missing=create_database_objects_if_missing,
         )
 
-    def _build_synced_table_sdk(
-        self,
-        *,
-        name: str,
-        source_table_full_name: str,
-        primary_key_columns: List[str],
-        sync_mode: str,
-        create_database_objects_if_missing: bool,
-    ) -> Any:
-        sync_mode_norm = (sync_mode or "snapshot").upper()
-        scheduling_policy_cls = getattr(_db_svc, "SyncedTableSchedulingPolicy", None)
-        if scheduling_policy_cls is not None:
-            policy = getattr(scheduling_policy_cls, sync_mode_norm, None) or getattr(
-                scheduling_policy_cls, "SNAPSHOT"
-            )
-        else:
-            policy = sync_mode_norm
-
-        spec = _db_svc.SyncedTableSpec(  # type: ignore[union-attr]
-            source_table_full_name=source_table_full_name,
-            primary_key_columns=list(primary_key_columns),
-            scheduling_policy=policy,
-            create_database_objects_if_missing=create_database_objects_if_missing,
-        )
-        # NOTE: _build_synced_table_payload always returns a plain dict now
-        # (see its docstring), so this method is never called from the hot path.
-        # It is kept for completeness.  The SDK SyncedDatabaseTable object does
-        # not expose database_branch, so we cannot use it for branch-targeted
-        # creation.
-        return _db_svc.SyncedDatabaseTable(  # type: ignore[union-attr]
-            name=name,
-            database_instance_name=self._project or None,
-            logical_database_name=self._logical_db or None,
-            spec=spec,
-        )
-
     def _build_synced_table_dict(
         self,
         *,

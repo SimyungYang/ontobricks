@@ -106,18 +106,6 @@
         return div.innerHTML;
     }
 
-    function renderMd(text) {
-        if (!text) return '';
-        if (typeof window.marked !== 'undefined' && window.marked.parse) {
-            try {
-                window.marked.setOptions({ breaks: true, gfm: true });
-                return window.marked.parse(text);
-            } catch (e) { /* fall through */ }
-        }
-        // Fallback: escape and convert newlines to <br>
-        return esc(text).replace(/\n/g, '<br>');
-    }
-
     function fmtTime(iso) {
         if (!iso) return '';
         const d = new Date(iso);
@@ -304,7 +292,7 @@
             : '';
         const ver = e.version ? '<span class="badge bg-secondary ms-1">v' + esc(e.version) + '</span>' : '';
         const comment = e.comment
-            ? '<div class="audit-comment oc-md">' + renderMd(e.comment) + '</div>'
+            ? '<div class="audit-comment oc-md">' + renderMarkdown(e.comment) + '</div>'
             : '';
         const head = '<div class="audit-head">' +
             '<span class="audit-title ' + meta.cls + '">' + esc(meta.label) + '</span>' +
@@ -585,7 +573,7 @@
         const metaLine = bits.length ? '<div class="audit-meta">' + bits.join(' &middot; ') + '</div>' : '';
         const msg = run.error
             ? '<div class="audit-comment text-danger">' + esc(run.error) + '</div>'
-            : (run.message ? '<div class="audit-comment oc-md">' + renderMd(run.message) + '</div>' : '');
+            : (run.message ? '<div class="audit-comment oc-md">' + renderMarkdown(run.message) + '</div>' : '');
         const detailsBtn = '<button type="button" class="btn btn-sm btn-outline-primary audit-details" ' +
             'data-run-idx="' + idx + '" title="View build run details">' +
             '<i class="bi bi-eye"></i></button>';

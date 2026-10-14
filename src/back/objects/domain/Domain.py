@@ -1762,11 +1762,10 @@ class Domain:
                 "session-debug is only available when LOG_LEVEL=DEBUG"
             )
         data = self._s._data.copy()
-        if "databricks" in data:
-            db = data["databricks"].copy()
-            if db.get("token"):
-                db["token"] = "***MASKED***"
-            data["databricks"] = db
+        db = (data.get("settings") or {}).get("databricks") or {}
+        if db.get("token"):
+            masked = {**db, "token": "***MASKED***"}
+            data["settings"] = {**data["settings"], "databricks": masked}
         if "generated" in data:
             gen = data["generated"].copy()
             if gen.get("owl") and len(gen["owl"]) > 500:

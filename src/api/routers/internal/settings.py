@@ -1785,11 +1785,27 @@ async def run_diagnostics(settings: Settings = Depends(get_settings)):
     * **Delta Triple Store** — Delta warehouse, UC objects, Accelerated Sync
 
     Each group contains individual ``{name, label, status, detail, duration_ms}``
-    checks that mirror the shape used by ``GET /health``.
+    checks that mirror the shape used by ``GET /settings/diagnostics/readiness``.
     """
     from shared.fastapi.health import run_diagnostics_checks
 
     return await run_blocking(run_diagnostics_checks, settings)
+
+
+@router.get(
+    "/diagnostics/readiness",
+    dependencies=[Depends(require(ROLE_ADMIN))],
+)
+async def run_readiness(settings: Settings = Depends(get_settings)):
+    """Run the flat dependency readiness probes (admin only).
+
+    Warehouse ``SELECT 1``, registry view DDL, Databricks auth and
+    Lakebase probes; their details name hosts, catalogs and schemas, so
+    they are never exposed on the anonymous ``GET /health``.
+    """
+    from shared.fastapi.health import run_readiness_checks
+
+    return await run_blocking(run_readiness_checks, settings)
 
 
 # ===========================================

@@ -164,20 +164,6 @@ class DigitalTwin:
 
         return GraphDBFactory._resolve_graph_engine(domain, settings) or "lakebase"
 
-    async def fetch_digital_twin_existence(self, settings) -> Dict[str, Any]:
-        from back.objects.digitaltwin.cache.TwinStoreCache import TwinStoreCache
-
-        return await TwinStoreCache(self._domain).fetch_digital_twin_existence(settings)
-
-
-    async def _fetch_neo4j_existence(
-        self, settings, result: Dict[str, Any], graph_name: str, run_blocking
-    ) -> Dict[str, Any]:
-        from back.objects.digitaltwin.cache.TwinStoreCache import TwinStoreCache
-
-        return await TwinStoreCache(self._domain)._fetch_neo4j_existence(settings, result, graph_name, run_blocking)
-
-
     # ------------------------------------------------------------------
     # SPARQL execution pipeline (instance method)
     # ------------------------------------------------------------------
@@ -231,34 +217,6 @@ class DigitalTwin:
 
 
     @staticmethod
-    def _count_violations_sql(store, sql: str) -> Optional[int]:
-        from back.objects.digitaltwin.quality.SqlQualityChecks import SqlQualityChecks
-
-        return SqlQualityChecks._count_violations_sql(store, sql)
-
-
-    @staticmethod
-    def _apply_sql_violation_limit(store, sql: str, violation_limit, row_mapper=None):
-        from back.objects.digitaltwin.quality.SqlQualityChecks import SqlQualityChecks
-
-        return SqlQualityChecks._apply_sql_violation_limit(store, sql, violation_limit, row_mapper)
-
-
-    @staticmethod
-    def _load_predicates_from_table(store, table: str) -> set:
-        from back.objects.digitaltwin.quality.SqlQualityChecks import SqlQualityChecks
-
-        return SqlQualityChecks._load_predicates_from_table(store, table)
-
-
-    @staticmethod
-    def _resolve_shape_uri_for_sql(shape: dict, available_predicates: set) -> dict:
-        from back.objects.digitaltwin.quality.SqlQualityChecks import SqlQualityChecks
-
-        return SqlQualityChecks._resolve_shape_uri_for_sql(shape, available_predicates)
-
-
-    @staticmethod
     def _sql_error_detail(exc: Exception) -> str:
         from back.objects.digitaltwin.quality.SqlQualityChecks import SqlQualityChecks
 
@@ -279,20 +237,6 @@ class DigitalTwin:
         from back.objects.digitaltwin.quality.SqlQualityChecks import SqlQualityChecks
 
         return SqlQualityChecks._rule_check_id(prefix, rule, index)
-
-
-    @staticmethod
-    def _swrl_target_class_uri(rule, base_uri, uri_map):
-        from back.objects.digitaltwin.quality.SqlQualityChecks import SqlQualityChecks
-
-        return SqlQualityChecks._swrl_target_class_uri(rule, base_uri, uri_map)
-
-
-    @staticmethod
-    def _swrl_antecedent_population_sql(translator, store, table, params):
-        from back.objects.digitaltwin.quality.SqlQualityChecks import SqlQualityChecks
-
-        return SqlQualityChecks._swrl_antecedent_population_sql(translator, store, table, params)
 
 
     # ------------------------------------------------------------------
@@ -317,59 +261,6 @@ class DigitalTwin:
         from back.objects.digitaltwin.quality.SqlQualityChecks import SqlQualityChecks
 
         return SqlQualityChecks.run_sql_checks(tm, task, shapes, triplestore_table, store, t0, total, swrl_rules, ontology, decision_tables, aggregate_rules, violation_limit)
-
-
-    @staticmethod
-    def _run_swrl_sql_checks(
-        tm,
-        task,
-        results,
-        swrl_rules,
-        ontology,
-        triplestore_table,
-        store,
-        total,
-        violation_limit=None,
-    ):
-        from back.objects.digitaltwin.quality.SqlQualityChecks import SqlQualityChecks
-
-        return SqlQualityChecks._run_swrl_sql_checks(tm, task, results, swrl_rules, ontology, triplestore_table, store, total, violation_limit)
-
-
-    @staticmethod
-    def _run_dt_sql_checks(
-        tm,
-        task,
-        results,
-        decision_tables,
-        ontology,
-        triplestore_table,
-        store,
-        total,
-        shape_count,
-        violation_limit=None,
-    ):
-        from back.objects.digitaltwin.quality.SqlQualityChecks import SqlQualityChecks
-
-        return SqlQualityChecks._run_dt_sql_checks(tm, task, results, decision_tables, ontology, triplestore_table, store, total, shape_count, violation_limit)
-
-
-    @staticmethod
-    def _run_agg_sql_checks(
-        tm,
-        task,
-        results,
-        aggregate_rules,
-        ontology,
-        triplestore_table,
-        store,
-        total,
-        shape_count,
-        violation_limit=None,
-    ):
-        from back.objects.digitaltwin.quality.SqlQualityChecks import SqlQualityChecks
-
-        return SqlQualityChecks._run_agg_sql_checks(tm, task, results, aggregate_rules, ontology, triplestore_table, store, total, shape_count, violation_limit)
 
 
     # ------------------------------------------------------------------
@@ -472,27 +363,6 @@ class DigitalTwin:
         )
 
     @staticmethod
-    def _analytics_run_entry(
-        *,
-        status: str,
-        class_filter: List[str],
-        task_id: str,
-        duration_ms: int,
-        computed_at: str,
-        stats: Optional[Dict[str, Any]] = None,
-        error: str = "",
-    ) -> Dict[str, Any]:
-        return TwinBackgroundTasks._analytics_run_entry(
-            status=status,
-            class_filter=class_filter,
-            task_id=task_id,
-            duration_ms=duration_ms,
-            computed_at=computed_at,
-            stats=stats,
-            error=error,
-        )
-
-    @staticmethod
     def run_metrics_task(
         tm,
         task_id: str,
@@ -536,34 +406,6 @@ class DigitalTwin:
     @staticmethod
     def build_quality_sql(check_type: str, table: str, params: dict) -> Optional[str]:
         return QualitySqlBuilder.build_quality_sql(check_type, table, params)
-
-    @staticmethod
-    def _build_cardinality_sql(table, params):
-        return QualitySqlBuilder._build_cardinality_sql(table, params)
-
-    @staticmethod
-    def _build_value_sql(table, params):
-        return QualitySqlBuilder._build_value_sql(table, params)
-
-    @staticmethod
-    def _build_property_sql(table, check_type, params):
-        return QualitySqlBuilder._build_property_sql(table, check_type, params)
-
-    @staticmethod
-    def _build_require_labels_sql(table, params):
-        return QualitySqlBuilder._build_require_labels_sql(table, params)
-
-    @staticmethod
-    def _build_no_orphans_sql(table, params):
-        return QualitySqlBuilder._build_no_orphans_sql(table, params)
-
-    @staticmethod
-    def _get_swrl_translator():
-        return QualitySqlBuilder._get_swrl_translator()
-
-    @staticmethod
-    def _build_swrl_sql(table, params):
-        return QualitySqlBuilder._build_swrl_sql(table, params)
 
     # ------------------------------------------------------------------
     # Registry / domain resolution (static -- API helpers)
@@ -634,25 +476,6 @@ class DigitalTwin:
         from back.objects.digitaltwin.explorer.GraphFind import GraphFind
 
         return GraphFind.expand_uri_aliases(store, table_name, uris)
-
-    @staticmethod
-    def build_find_seed_where(
-        table: str,
-        *,
-        entity_type: Optional[str] = None,
-        search: Optional[str] = None,
-    ) -> str:
-        """Build the SQL ``WHERE`` clause that seeds a triples/find BFS.
-
-        Shared by the public ``/api/v1/digitaltwin/triples/find`` route and the
-        session-aware ``/dtwin/triples/find`` Graph Chat route so the two
-        surfaces cannot drift on seed semantics.
-        """
-        from back.objects.digitaltwin.explorer.GraphFind import GraphFind
-
-        return GraphFind.build_find_seed_where(
-            table, entity_type=entity_type, search=search
-        )
 
     @staticmethod
     def find_triples_bfs(
@@ -885,17 +708,6 @@ class DigitalTwin:
     ) -> Dict[str, Any]:
         return self._cohort_service().sample_values(
             class_uri, property_uri, store, graph_name, limit=limit
-        )
-
-    def cohort_explain(
-        self,
-        rule_dict: Dict[str, Any],
-        target: str,
-        store: Any,
-        graph_name: str,
-    ) -> Dict[str, Any]:
-        return self._cohort_service().explain(
-            rule_dict, target, store, graph_name
         )
 
     def cohort_suggest_uc_target(

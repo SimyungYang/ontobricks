@@ -1,8 +1,21 @@
-"""Readiness probe for OntoBricks — ``GET /health``.
+"""Health probes for OntoBricks.
 
-This endpoint replaces the previous static dummy with a real
-end-to-end check of every external dependency the application needs
-to operate correctly:
+Two surfaces with different audiences:
+
+* ``GET /health`` — anonymous liveness probe for load balancers and
+  uptime monitors (:func:`run_liveness_checks`). Local filesystem checks
+  only; no network, no DDL, and the payload is limited to
+  ``{status, version, service, timestamp}`` so it leaks no host,
+  catalog, schema or exception text. ``/health`` is in the bypass list of
+  :class:`PermissionMiddleware`, :class:`CSRFMiddleware` and
+  :class:`RequestTimingMiddleware`.
+* ``GET /settings/diagnostics/readiness`` (admin-only, in
+  ``api/routers/internal/settings.py``) — the full readiness probe
+  (:func:`run_readiness_checks`), alongside the grouped deep-dive
+  ``GET /settings/diagnostics`` (:func:`run_diagnostics_checks`).
+
+The readiness probe checks every external dependency the application
+needs to operate correctly:
 
 * local filesystem — ``/tmp``, the session directory and the log
   directory must be writable, with enough free disk space;
@@ -23,14 +36,6 @@ to operate correctly:
 
 Each probe returns ``{name, label, status, detail, duration_ms}``;
 the top-level ``status`` is the worst severity across all probes.
-``GET /health/detailed`` was removed — its information is now part of
-``GET /health``.
-
-The endpoint stays anonymous: ``/health`` is in the bypass list of
-:class:`PermissionMiddleware`, :class:`CSRFMiddleware` and
-:class:`RequestTimingMiddleware`, so external uptime probes (load
-balancer, k8s liveness/readiness, Datadog) can call it without a
-session cookie.
 """
 
 from __future__ import annotations
@@ -40,6 +45,7 @@ import shutil
 import sys
 import time
 import uuid
+from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from fastapi import APIRouter, Depends
@@ -85,6 +91,15 @@ def _safely_run(name: str, label: str, fn: Callable[[], Tuple[str, str]]) -> Dic
         "detail": detail,
         "duration_ms": int((time.monotonic() - started) * 1000),
     }
+
+
+def _worst_status(checks: List[Dict[str, Any]]) -> str:
+    """Roll up the most severe ``status`` across *checks* (``ok`` when empty)."""
+    return max(
+        (c["status"] for c in checks),
+        key=lambda s: _SEVERITY_RANK.get(s, 0),
+        default=_OK,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -606,6 +621,12 @@ def _check_lakebase_accelerated_sync(settings: Optional[Settings] = None) -> Tup
 # ---------------------------------------------------------------------------
 
 
+def _exc_text(exc: Exception) -> str:
+    """Message plus ``detail`` — UC errors keep the raw cause in ``detail``."""
+    detail = getattr(exc, "detail", None)
+    return f"{exc}: {detail}" if detail else str(exc)
+
+
 def _check_uc_catalog_privileges(settings: Settings) -> Tuple[str, str]:
     """Verify the app identity can USE the registry UC catalog (list its schemas)."""
     cfg = _resolve_registry_cfg(settings)
@@ -628,7 +649,7 @@ def _check_uc_catalog_privileges(settings: Settings) -> Tuple[str, str]:
             )
         return _WARNING, "Could not determine catalog access — unexpected response from UC API"
     except Exception as exc:
-        err = str(exc)
+        err = _exc_text(exc)
         if any(k in err.upper() for k in ("PERMISSION_DENIED", "CATALOG_NOT_FOUND", "UNAUTHORIZED")):
             return (
                 _ERROR,
@@ -658,7 +679,7 @@ def _check_uc_schema_privileges(settings: Settings) -> Tuple[str, str]:
             )
         return _WARNING, "Could not determine schema access — unexpected response from UC API"
     except Exception as exc:
-        err = str(exc)
+        err = _exc_text(exc)
         if any(k in err.upper() for k in ("PERMISSION_DENIED", "SCHEMA_NOT_FOUND", "UNAUTHORIZED")):
             return (
                 _ERROR,
@@ -1519,11 +1540,7 @@ def run_diagnostics_checks(settings: Optional[Settings] = None) -> Dict[str, Any
         "warnings": sum(1 for c in all_checks if c["status"] == _WARNING),
         "errors": sum(1 for c in all_checks if c["status"] == _ERROR),
     }
-    overall = max(
-        (c["status"] for c in all_checks),
-        key=lambda s: _SEVERITY_RANK.get(s, 0),
-        default=_OK,
-    )
+    overall = _worst_status(all_checks)
     return {
         "status": overall,
         "version": APP_VERSION,
@@ -1635,11 +1652,7 @@ def run_readiness_checks(settings: Optional[Settings] = None) -> Dict[str, Any]:
         "warnings": sum(1 for c in checks if c["status"] == _WARNING),
         "errors": sum(1 for c in checks if c["status"] == _ERROR),
     }
-    overall = max(
-        (c["status"] for c in checks),
-        key=lambda s: _SEVERITY_RANK.get(s, 0),
-        default=_OK,
-    )
+    overall = _worst_status(checks)
     return {
         "status": overall,
         "version": APP_VERSION,
@@ -1650,6 +1663,29 @@ def run_readiness_checks(settings: Optional[Settings] = None) -> Dict[str, Any]:
     }
 
 
+def run_liveness_checks(settings: Optional[Settings] = None) -> Dict[str, Any]:
+    """Cheap, anonymous-safe probe: local filesystem checks only.
+
+    Per-check details (paths, disk sizes, exception text) are dropped so
+    the public payload exposes nothing about the deployment.
+    """
+    settings = settings or get_settings()
+    checks = [
+        _safely_run("filesystem.tmp", "/tmp writable", _check_tmp),
+        _safely_run(
+            "filesystem.session_dir",
+            "Session directory writable",
+            lambda: _check_session_dir(settings),
+        ),
+    ]
+    return {
+        "status": _worst_status(checks),
+        "version": APP_VERSION,
+        "service": "OntoBricks",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+
+
 # ---------------------------------------------------------------------------
 # Route
 # ---------------------------------------------------------------------------
@@ -1657,12 +1693,10 @@ def run_readiness_checks(settings: Optional[Settings] = None) -> Dict[str, Any]:
 
 @router.get("/health")
 async def health_check(settings: Settings = Depends(get_settings)):
-    """Readiness probe — returns ``200`` even when individual checks fail.
+    """Public liveness probe — returns ``200`` even when a local check fails.
 
-    External probes / load balancers should look at the top-level
-    ``status`` field (``ok`` / ``warning`` / ``error``) and the
-    ``summary.errors`` count. Returning a non-200 HTTP status would
-    take the app out of rotation as soon as a *single* dependency
-    flickered, which is rarely what you want for an analytical app.
+    Probes should read the top-level ``status`` (``ok`` / ``warning`` /
+    ``error``). Dependency readiness (warehouse, Lakebase, UC DDL) is
+    admin-only at ``GET /settings/diagnostics/readiness``.
     """
-    return await run_blocking(run_readiness_checks, settings)
+    return await run_blocking(run_liveness_checks, settings)

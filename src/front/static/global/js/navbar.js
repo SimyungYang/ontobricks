@@ -1557,52 +1557,6 @@ async function doDomainLoad(domainSlug, version) {
 }
 
 /**
- * Handle the selected domain export file - parse and check for versions
- */
-async function handleDomainFile(input) {
-    const file = input.files[0];
-    if (!file) return;
-    
-    try {
-        // Read the file content first
-        const content = await file.text();
-        let importedDomain;
-        
-        try {
-            importedDomain = JSON.parse(content);
-        } catch (e) {
-            showNotification('Error: Invalid JSON in domain file', 'error');
-            input.value = '';
-            return;
-        }
-        
-        // Check if file has versions
-        if (importedDomain.versions && Object.keys(importedDomain.versions).length > 0) {
-            const versions = Object.keys(importedDomain.versions).sort().reverse();
-            
-            if (versions.length > 1) {
-                // Show version selection dialog
-                showVersionSelectionDialog(versions, importedDomain, async (selectedVersion) => {
-                    await importDomainWithVersion(importedDomain, selectedVersion);
-                });
-            } else {
-                // Only one version, load it directly
-                await importDomainWithVersion(importedDomain, versions[0]);
-            }
-        } else {
-            // Legacy format without versions - load directly
-            await importDomainDirect(importedDomain);
-        }
-    } catch (error) {
-        console.error('Error loading domain file:', error);
-        showNotification('Failed to load domain: ' + error.message, 'error');
-    }
-    
-    // Reset file input
-    input.value = '';
-}
-
-/**
  * Show version selection dialog
  */
 function showVersionSelectionDialog(versions, importedDomain, onSelect) {

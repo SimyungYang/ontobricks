@@ -9,6 +9,8 @@ from back.core.helpers.DatabricksHelpers import (  # noqa: F401
 from back.core.helpers.SQLHelpers import (  # noqa: F401
     SAFE_COL_IDENT,
     SAFE_SQL_IDENT,
+    SQL_DIALECT_POSTGRES,
+    SQL_DIALECT_SPARK,
     SQLHelpers,
 )
 from back.core.helpers.URIHelpers import URIHelpers  # noqa: F401
@@ -28,6 +30,8 @@ from back.core.helpers.UIBranding import (  # noqa: F401
 # imports can pull ``back.core.helpers`` again while this module is still
 # initializing (e.g. triplestore → helpers for ``sql_escape``).
 sql_escape = SQLHelpers.sql_escape
+sql_literal = SQLHelpers.sql_literal
+is_sql_numeric = SQLHelpers.is_sql_numeric
 sql_like_escape = SQLHelpers.sql_like_escape
 LIKE_ESCAPE = SQLHelpers.LIKE_ESCAPE
 sql_numeric = SQLHelpers.sql_numeric
@@ -100,6 +104,10 @@ __all__ = [
     "require_domain_llm",
     "effective_uc_version_path",
     "sql_escape",
+    "sql_literal",
+    "is_sql_numeric",
+    "SQL_DIALECT_SPARK",
+    "SQL_DIALECT_POSTGRES",
     "sql_like_escape",
     "LIKE_ESCAPE",
     "sql_numeric",

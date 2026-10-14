@@ -12,7 +12,12 @@ import re
 import time
 from typing import Any, Dict, List, Optional
 
-from back.core.helpers import sql_numeric
+from back.core.helpers import (
+    SQL_DIALECT_SPARK,
+    is_sql_numeric,
+    sql_literal,
+    sql_numeric,
+)
 from back.core.logging import get_logger
 from back.core.w3c.rdf_utils import uri_local_name
 from back.core.reasoning.constants import (
@@ -123,7 +128,10 @@ class SPARQLRuleEngine:
         result = ReasoningResult()
 
         sql = self._construct_to_sql(
-            query, store.sql_table_reference(table_name), ontology
+            query,
+            store.sql_table_reference(table_name),
+            ontology,
+            dialect=store.sql_flavor() or SQL_DIALECT_SPARK,
         )
 
         if not sql:
@@ -156,6 +164,7 @@ class SPARQLRuleEngine:
         query: str,
         table: str,
         ontology: Dict,
+        dialect: str = SQL_DIALECT_SPARK,
     ) -> Optional[str]:
         """Translate a CONSTRUCT query to a SELECT for the flat triple table.
 
@@ -199,7 +208,7 @@ class SPARQLRuleEngine:
             wp_resolved = self._resolve_term(wp, base_uri, um)
             if wp_resolved == "a":
                 wp_resolved = RDF_TYPE
-            conditions.append(f"{alias}.predicate = '{wp_resolved}'")
+            conditions.append(f"{alias}.predicate = {sql_literal(wp_resolved, dialect)}")
 
             if ws.startswith("?"):
                 var = ws
@@ -208,9 +217,8 @@ class SPARQLRuleEngine:
                 else:
                     var_bindings[var] = f"{alias}.subject"
             else:
-                conditions.append(
-                    f"{alias}.subject = '{self._resolve_term(ws, base_uri, um)}'"
-                )
+                subject = sql_literal(self._resolve_term(ws, base_uri, um), dialect)
+                conditions.append(f"{alias}.subject = {subject}")
 
             if wo.startswith("?"):
                 var = wo
@@ -219,31 +227,19 @@ class SPARQLRuleEngine:
                 else:
                     var_bindings[var] = f"{alias}.object"
             else:
-                conditions.append(
-                    f"{alias}.object = '{self._resolve_term(wo, base_uri, um)}'"
-                )
+                obj = sql_literal(self._resolve_term(wo, base_uri, um), dialect)
+                conditions.append(f"{alias}.object = {obj}")
 
         filter_match = re.search(r"FILTER\s*\((.+?)\)", where_part, re.IGNORECASE)
         if filter_match:
             filter_expr = filter_match.group(1).strip()
-            sql_filter = self._translate_filter(filter_expr, var_bindings)
+            sql_filter = self._translate_filter(filter_expr, var_bindings, dialect)
             if sql_filter:
                 conditions.append(sql_filter)
 
-        s_sql = (
-            var_bindings.get(s_expr, f"'{s_expr}'")
-            if s_expr.startswith("?")
-            else f"'{s_expr}'"
-        )
-        if p_expr == "a":
-            p_sql = f"'{RDF_TYPE}'"
-        else:
-            p_sql = f"'{p_expr}'"
-        o_sql = (
-            var_bindings.get(o_expr, f"'{o_expr}'")
-            if o_expr.startswith("?")
-            else f"'{o_expr}'"
-        )
+        s_sql = self._term_sql(s_expr, var_bindings, dialect)
+        p_sql = sql_literal(RDF_TYPE if p_expr == "a" else p_expr, dialect)
+        o_sql = self._term_sql(o_expr, var_bindings, dialect)
 
         from_clause = joins[0] if joins else table
         join_clause = "\n".join(joins[1:]) if len(joins) > 1 else ""
@@ -258,6 +254,13 @@ class SPARQLRuleEngine:
             sql += f"WHERE {' AND '.join(conditions)}"
 
         return sql
+
+    @staticmethod
+    def _term_sql(term: str, var_bindings: Dict[str, str], dialect: str) -> str:
+        """SQL for a CONSTRUCT term: its bound column, else a string literal."""
+        if term.startswith("?") and term in var_bindings:
+            return var_bindings[term]
+        return sql_literal(term, dialect)
 
     @staticmethod
     def _resolve_term(
@@ -290,7 +293,9 @@ class SPARQLRuleEngine:
         return term
 
     @staticmethod
-    def _translate_filter(expr: str, var_bindings: Dict[str, str]) -> Optional[str]:
+    def _translate_filter(
+        expr: str, var_bindings: Dict[str, str], dialect: str = SQL_DIALECT_SPARK
+    ) -> Optional[str]:
         """Translate a simple FILTER expression to SQL."""
         m = re.match(r"\?\w+\s*([><=!]+)\s*(.+)", expr.strip())
         if not m:
@@ -304,11 +309,9 @@ class SPARQLRuleEngine:
             return None
         op = m.group(1)
         val = m.group(2).strip().strip('"').strip("'")
-        try:
-            float(val)
+        if is_sql_numeric(val):
             return f"{sql_numeric(ref)} {op} {val}"
-        except ValueError:
-            return f"{ref} {op} '{val}'"
+        return f"{ref} {op} {sql_literal(val, dialect)}"
 
     @staticmethod
     def validate_rule(rule: Dict) -> List[str]:

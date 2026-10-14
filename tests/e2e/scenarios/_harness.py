@@ -19,9 +19,9 @@ import time
 from typing import Optional
 from urllib.parse import urlparse
 
-# ``GET /health`` runs warehouse + Lakebase + Graph DB probes. After a
-# long KG build that can exceed 20s; a skip here aborts the rest of the
-# campaign via pytest-dependency. Budget a full minute.
+# ``GET /health`` is a local liveness check, but the server can still be
+# slow to answer right after a long KG build; a skip here aborts the rest
+# of the campaign via pytest-dependency. Budget a full minute.
 PROBE_TIMEOUT_S = 60.0
 PROBE_PATHS = ("/health", "/healthz")
 

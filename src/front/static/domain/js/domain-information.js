@@ -201,65 +201,6 @@ async function browseLlmEndpoints() {
     kindInput.dispatchEvent(new Event('change', { bubbles: true }));
 }
 
-// Rollback to the saved version (discard all local changes)
-async function rollbackVersion() {
-    const versionSelect = document.getElementById('domainVersionSelect');
-    const currentVersion = versionSelect ? versionSelect.value : '1';
-    
-    try {
-        // Determine the domain folder from version-status or domain info
-        let domainFolder = currentDomainFolder;
-        if (!domainFolder) {
-            const statusData = await fetchOnce('/domain/version-status');
-            const folder = statusData.success && (statusData.domain_folder || statusData.project_folder);
-            if (folder) {
-                domainFolder = folder;
-                currentDomainFolder = domainFolder;
-            }
-        }
-
-        if (!domainFolder) {
-            showNotification('Domain must be saved to the registry first to rollback', 'warning');
-            return;
-        }
-
-        const confirmed = await showConfirmDialog({
-            title: 'Rollback Version',
-            message: `This will reload version ${currentVersion} from Unity Catalog and discard ALL unsaved changes. Are you sure?`,
-            confirmText: 'Rollback',
-            confirmClass: 'btn-warning',
-            icon: 'arrow-counterclockwise'
-        });
-        if (!confirmed) return;
-
-        showNotification('Rolling back to saved version...', 'info', 3000);
-
-        const response = await fetch('/domain/load-from-uc', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                domain: domainFolder,
-                version: currentVersion
-            }),
-            credentials: 'same-origin'
-        });
-        
-        const data = await response.json();
-        
-        if (data.success) {
-            showNotification(`Rolled back to version ${currentVersion} successfully!`, 'success');
-            if (typeof invalidateDomainCaches === 'function') invalidateDomainCaches();
-            // Reload page to refresh all data
-            window.location.reload();
-        } else {
-            showNotification('Error: ' + data.message, 'error');
-        }
-    } catch (error) {
-        console.error('Rollback error:', error);
-        showNotification('Error: ' + error.message, 'error');
-    }
-}
-
 // Create a new version
 async function createNewVersion() {
     try {
@@ -294,59 +235,6 @@ async function createNewVersion() {
             versionSelect.value = data.new_version;
             if (typeof invalidateDomainCaches === 'function') invalidateDomainCaches();
             // Reload page to refresh status
-            window.location.reload();
-        } else {
-            showNotification('Error: ' + data.message, 'error');
-        }
-    } catch (error) {
-        showNotification('Error: ' + error.message, 'error');
-    }
-}
-
-// Handle version change
-async function onVersionChange(version) {
-    if (!currentDomainFolder) {
-        showNotification('Domain must be saved to Unity Catalog first', 'warning');
-        return;
-    }
-    
-    const confirmed = await showConfirmDialog({
-        title: 'Switch Version',
-        message: `Load version ${version}? Unsaved changes will be lost.`,
-        confirmText: 'Load Version',
-        confirmClass: 'btn-primary',
-        icon: 'arrow-repeat'
-    });
-    
-    if (!confirmed) {
-        // Reset select to current version
-        const statusResponse = await fetch('/domain/version-status', { credentials: 'same-origin' });
-        const statusData = await statusResponse.json();
-        if (statusData.success) {
-            document.getElementById('domainVersionSelect').value = statusData.version;
-        }
-        return;
-    }
-    
-    try {
-        showNotification('Loading version...', 'info', 3000);
-        
-        const response = await fetch('/domain/load-from-uc', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                domain: currentDomainFolder,
-                version: version
-            }),
-            credentials: 'same-origin'
-        });
-        
-        const data = await response.json();
-        
-        if (data.success) {
-            showNotification(data.message || 'Version loaded successfully!', 'success');
-            if (typeof invalidateDomainCaches === 'function') invalidateDomainCaches();
-            // Reload page to refresh all data
             window.location.reload();
         } else {
             showNotification('Error: ' + data.message, 'error');
@@ -414,17 +302,6 @@ function updateVersionStatusUI(isActive, version, hasRegistry) {
     
     if (typeof applyBaseUriMode === 'function') {
         applyBaseUriMode();
-    }
-}
-
-function updateRegistryLocationDisplay(registry, domainFolder) {
-    const ucRow = document.getElementById('ucLocationRow');
-    const displayEl = document.getElementById('registryLocationDisplay');
-    if (!ucRow || !displayEl) return;
-
-    if (registry && registry.catalog && domainFolder) {
-        displayEl.textContent = `${registry.catalog}.${registry.schema}.${registry.volume}/domains/${domainFolder}`;
-        ucRow.style.display = 'flex';
     }
 }
 
@@ -653,12 +530,6 @@ function refreshDtNamesFromForm() {
         const tsName = 'triplestore_' + safe + '_V' + v;
         tsEl.value = prefix ? prefix.catalog + '.' + prefix.schema + '.' + tsName : (safe ? tsName : '');
     }
-}
-
-// Backwards-compatible alias: callers and tests still reference the
-// old name; keep it working as a thin wrapper over the new function.
-function updateGraphPaths() {
-    refreshDtNamesFromForm();
 }
 
 

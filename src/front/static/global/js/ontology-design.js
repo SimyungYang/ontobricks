@@ -379,8 +379,9 @@ async function saveDesignLayoutOnly() {
 }
 
 /**
- * Beacon-based layout save for page unload.
- * navigator.sendBeacon guarantees delivery even during page teardown.
+ * Layout save for page unload.
+ * fetch with keepalive survives page teardown and, unlike
+ * navigator.sendBeacon, carries the X-CSRF-Token header the server requires.
  */
 function saveDesignLayoutBeacon() {
     if (!ontologyDesigner || !layoutDirty || isLoadingData) return;
@@ -406,11 +407,13 @@ function saveDesignLayoutBeacon() {
             visibility: design.visibility
         };
         
-        const blob = new Blob(
-            [JSON.stringify(cleanedDesign)],
-            { type: 'application/json' }
-        );
-        navigator.sendBeacon('/domain/design-views/save-current', blob);
+        fetch('/domain/design-views/save-current', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(cleanedDesign),
+            credentials: 'same-origin',
+            keepalive: true
+        });
         layoutDirty = false;
     } catch (error) {
         console.warn('[BEACON] Failed to save layout:', error);

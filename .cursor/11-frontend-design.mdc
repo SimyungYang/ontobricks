@@ -1329,7 +1329,7 @@ Every modal that's not produced by a helper above must:
 Before adding a new modal, check whether one of these can be reused:
 
 - `partials/layout/uc_file_browser_modal.html` — Unity Catalog file
-  picker (`window.openUCFileBrowser(...)`).
+  picker (`UCFileDialog.open({ mode: 'load' | 'save', ... })`).
 - `partials/layout/help_modal.html` — Help Center.
 - `DocumentPreview.open(filename)` — generic document viewer
   (PDF / image / text).

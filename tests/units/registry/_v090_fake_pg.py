@@ -65,6 +65,7 @@ class FakeDB:
     calls: List[Call] = field(default_factory=list)
     rules: List[_Rule] = field(default_factory=list)
     connections: int = 0
+    transactions: int = 0
     connect_error: Optional[BaseException] = None
 
     def on(self, needle, *, rows=None, rowcount=None, raises=None, once=True):
@@ -111,6 +112,11 @@ class _FakeConn:
 
     def cursor(self, row_factory=None):
         return _FakeCursor(self._db, row_factory)
+
+    @contextmanager
+    def transaction(self):
+        self._db.transactions += 1
+        yield
 
 
 class _FakeCursor:

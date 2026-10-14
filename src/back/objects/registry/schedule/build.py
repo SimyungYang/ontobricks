@@ -34,10 +34,7 @@ def _generate_sql_from_r2rml(domain, domain_name: str):
     Returns ``(sql_text, view_table, graph_name, base_uri, ent, rels)``.
     """
     from back.core.w3c import sparql
-    from back.objects.digitaltwin import (
-        augment_mappings_from_config,
-        augment_relationships_from_config,
-    )
+    from back.objects.digitaltwin import DigitalTwin
 
     r2rml = domain.get_r2rml()
     if not r2rml:
@@ -60,8 +57,10 @@ def _generate_sql_from_r2rml(domain, domain_name: str):
 
     logger.info("Scheduled build [%s]: generating SQL from R2RML", domain_name)
     ent, rels = sparql.extract_r2rml_mappings(r2rml)
-    ent = augment_mappings_from_config(ent, mapping_config, base_uri, ontology_config)
-    rels = augment_relationships_from_config(
+    ent = DigitalTwin.augment_mappings_from_config(
+        ent, mapping_config, base_uri, ontology_config
+    )
+    rels = DigitalTwin.augment_relationships_from_config(
         rels, mapping_config, base_uri, ontology_config
     )
     if not ent and not rels:

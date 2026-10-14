@@ -64,6 +64,7 @@ State-changing requests (POST, PUT, PATCH, DELETE) to internal endpoints require
 2. Include the cookie value in the `X-CSRF-Token` request header.
 3. The `fetch()` wrapper in the frontend attaches this header automatically.
 4. External API endpoints (`/api/v1/`) and GraphQL are exempted.
+5. A request with no cookie, no header, or mismatching values is rejected with `403`.
 
 ## Response Format
 

@@ -20,6 +20,7 @@ from __future__ import annotations
 import re
 from typing import Any, Dict, List, Optional
 
+from back.core.databricks.uc.identifiers import quote_uc_identifier
 from back.core.errors import NotFoundError, ValidationError
 from back.core.helpers import extract_local_name
 from back.core.logging import get_logger
@@ -500,6 +501,7 @@ class CohortService:
 
         Returns ``{ok, checks: [{name, status, message}]}``.  Never writes
         any data.  Backed by the SQL Warehouse via ``client.execute_query``.
+        Raises :class:`ValidationError` on unsafe UC identifiers.
         """
         if client is None:
             return {
@@ -527,11 +529,14 @@ class CohortService:
                     }
                 ],
             }
+        catalog_q = quote_uc_identifier(catalog, role="catalog")
+        schema_fqn = f"{catalog_q}.{quote_uc_identifier(schema, role='schema')}"
+        table_fqn = f"{schema_fqn}.{quote_uc_identifier(table_name, role='table')}"
 
         checks: List[Dict[str, str]] = []
 
         try:
-            client.execute_query(f"DESCRIBE CATALOG `{catalog}`")
+            client.execute_query(f"DESCRIBE CATALOG {catalog_q}")
             checks.append(
                 {"name": "catalog", "status": "ok", "message": "Catalog exists"}
             )
@@ -542,7 +547,7 @@ class CohortService:
             return {"ok": False, "checks": checks}
 
         try:
-            client.execute_query(f"DESCRIBE SCHEMA `{catalog}`.`{schema}`")
+            client.execute_query(f"DESCRIBE SCHEMA {schema_fqn}")
             checks.append(
                 {"name": "schema", "status": "ok", "message": "Schema exists"}
             )
@@ -553,9 +558,7 @@ class CohortService:
             return {"ok": False, "checks": checks}
 
         try:
-            describe = client.execute_query(
-                f"DESCRIBE TABLE `{catalog}`.`{schema}`.`{table_name}`"
-            )
+            describe = client.execute_query(f"DESCRIBE TABLE {table_fqn}")
             cols = {(row.get("col_name") or "").strip() for row in (describe or [])}
             required = {"rule_id", "cohort_uri", "member_uri", "cohort_size"}
             missing = sorted(required - cols)
@@ -580,9 +583,7 @@ class CohortService:
                 )
         except Exception:
             try:
-                client.execute_query(
-                    f"SHOW GRANTS ON SCHEMA `{catalog}`.`{schema}`"
-                )
+                client.execute_query(f"SHOW GRANTS ON SCHEMA {schema_fqn}")
                 checks.append(
                     {
                         "name": "table",

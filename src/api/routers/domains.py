@@ -354,9 +354,7 @@ async def get_domain_design_status(
         has_owl=has_owl,
     )
 
-    meta = domain._data.get("domain", domain._data.get("project", {})).get(
-        "metadata", {}
-    )
+    meta = domain._data["domain"].get("metadata", {})
     tables = meta.get("tables", [])
     metadata_status = MetadataStatus(
         ready=len(tables) > 0,

@@ -590,13 +590,13 @@ async function renderEntityForm(panel, cls, viewOnly = false) {
     
     const parentOptions = OntologyState.config.classes
         .filter(c => !cls || c.name !== cls.name)
-        .map(c => `<option value="${c.name}" ${cls && cls.parent === c.name ? 'selected' : ''}>${c.emoji || '📦'} ${c.name}</option>`)
+        .map(c => `<option value="${escapeHtml(c.name)}" ${cls && cls.parent === c.name ? 'selected' : ''}>${escapeHtml(c.emoji || '📦')} ${escapeHtml(c.name)}</option>`)
         .join('');
     
     // Options for disjoint/equivalent (exclude current class)
     const otherClassOptions = OntologyState.config.classes
         .filter(c => !cls || c.name !== cls.name)
-        .map(c => `<option value="${c.name}">${c.emoji || '📦'} ${c.name}</option>`)
+        .map(c => `<option value="${escapeHtml(c.name)}">${escapeHtml(c.emoji || '📦')} ${escapeHtml(c.name)}</option>`)
         .join('');
     
     const emoji = cls?.emoji || OntologyState.defaultClassEmoji || '📦';
@@ -633,7 +633,7 @@ async function renderEntityForm(panel, cls, viewOnly = false) {
                 if (isMember) currentGroup = g.name;
                 const sel = isMember ? 'selected' : '';
                 const icon = g.icon || '';
-                groupOptions += `<option value="${g.name}" ${sel}>${icon} ${g.label || g.name}</option>`;
+                groupOptions += `<option value="${escapeHtml(g.name)}" ${sel}>${escapeHtml(icon)} ${escapeHtml(g.label || g.name)}</option>`;
             });
         }
     } catch (e) {
@@ -664,32 +664,32 @@ async function renderEntityForm(panel, cls, viewOnly = false) {
                 <div class="mb-3 p-2 bg-light rounded border">
                     <label for="sharedEntityGroup" class="form-label"><i class="bi bi-collection"></i> Group</label>
                     <select class="form-select form-select-sm" id="sharedEntityGroup" ${disabled}
-                        data-entity="${(cls?.name || '').replace(/"/g, '&quot;')}"
-                        data-prev-group="${currentGroup.replace(/"/g, '&quot;')}"
+                        data-entity="${escapeHtml(cls?.name || '')}"
+                        data-prev-group="${escapeHtml(currentGroup)}"
                         onchange="onSharedEntityGroupChange(this.dataset.entity, this.value, this.dataset.prevGroup)">
                         ${groupOptions}
                     </select>
                 </div>
                 <div class="mb-3">
                     <label for="sharedEntityName" class="form-label">Name <span class="text-danger">*</span></label>
-                    <input type="text" class="form-control form-control-sm" id="sharedEntityName" value="${cls?.name || ''}" ${disabled} required>
+                    <input type="text" class="form-control form-control-sm" id="sharedEntityName" value="${escapeHtml(cls?.name || '')}" ${disabled} required>
                 </div>
                 <div class="mb-3">
                     <label for="sharedEntityLabel" class="form-label">Label</label>
-                    <input type="text" class="form-control form-control-sm" id="sharedEntityLabel" value="${cls?.label || cls?.name || ''}" ${disabled} placeholder="Defaults to name if empty">
+                    <input type="text" class="form-control form-control-sm" id="sharedEntityLabel" value="${escapeHtml(cls?.label || cls?.name || '')}" ${disabled} placeholder="Defaults to name if empty">
                 </div>
                 <div class="mb-3">
                     <label class="form-label">Icon</label>
                     <div class="input-group input-group-sm">
-                        <span class="input-group-text" id="sharedEntityEmojiPreview">${emoji}</span>
-                        <input type="text" class="form-control" id="sharedEntityIcon" value="${emoji}" ${disabled} maxlength="2" style="width: 45px;">
+                        <span class="input-group-text" id="sharedEntityEmojiPreview">${escapeHtml(emoji)}</span>
+                        <input type="text" class="form-control" id="sharedEntityIcon" value="${escapeHtml(emoji)}" ${disabled} maxlength="2" style="width: 45px;">
                         <button type="button" class="btn btn-outline-secondary" id="sharedEntityEmojiBtn" ${disabled}><i class="bi bi-emoji-smile"></i></button>
                     </div>
                     <div id="sharedEntityEmojiPickerMount"></div>
                 </div>
                 <div class="mb-3">
                     <label for="sharedEntityDescription" class="form-label">Description</label>
-                    <textarea class="form-control form-control-sm" id="sharedEntityDescription" rows="2" ${disabled}>${cls?.comment || cls?.description || ''}</textarea>
+                    <textarea class="form-control form-control-sm" id="sharedEntityDescription" rows="2" ${disabled}>${escapeHtml(cls?.comment || cls?.description || '')}</textarea>
                 </div>
             </div>
 
@@ -3543,7 +3543,7 @@ function refreshSharedRelDirectionLabels() {
 
 async function renderRelationshipForm(panel, prop, viewOnly = false) {
     const body = panel.querySelector('#sharedPanelBody');
-    const classOptions = OntologyState.config.classes.map(c => `<option value="${c.name}">${c.emoji || '📦'} ${c.name}</option>`).join('');
+    const classOptions = OntologyState.config.classes.map(c => `<option value="${escapeHtml(c.name)}">${escapeHtml(c.emoji || '📦')} ${escapeHtml(c.name)}</option>`).join('');
     const disabled = viewOnly ? 'disabled' : '';
     
     // Load constraints from server (the ONLY source of truth for constraints)
@@ -3587,11 +3587,11 @@ async function renderRelationshipForm(panel, prop, viewOnly = false) {
             <div class="form-tab-pane ${_rTab === 'details' ? 'active' : ''}" data-form-tab-content="details">
                 <div class="mb-3">
                     <label for="sharedRelName" class="form-label">Name <span class="text-danger">*</span></label>
-                    <input type="text" class="form-control form-control-sm" id="sharedRelName" value="${prop?.name || ''}" ${disabled} required>
+                    <input type="text" class="form-control form-control-sm" id="sharedRelName" value="${escapeHtml(prop?.name || '')}" ${disabled} required>
                 </div>
                 <div class="mb-3">
                     <label for="sharedRelLabel" class="form-label">Label</label>
-                    <input type="text" class="form-control form-control-sm" id="sharedRelLabel" value="${prop?.label || prop?.name || ''}" ${disabled} placeholder="Defaults to name if empty">
+                    <input type="text" class="form-control form-control-sm" id="sharedRelLabel" value="${escapeHtml(prop?.label || prop?.name || '')}" ${disabled} placeholder="Defaults to name if empty">
                 </div>
                 <div class="mb-3">
                     <label for="sharedRelDomain" class="form-label">Source (Domain) <span class="text-danger">*</span></label>
@@ -3607,7 +3607,7 @@ async function renderRelationshipForm(panel, prop, viewOnly = false) {
                 </div>
                 <div class="mb-3">
                     <label class="form-label">Direction</label>
-                    <input type="hidden" id="sharedRelDirection" value="${prop?.direction || 'forward'}">
+                    <input type="hidden" id="sharedRelDirection" value="${escapeHtml(prop?.direction || 'forward')}">
                     <div class="rel-direction-picker" id="sharedRelDirectionPicker" role="radiogroup" aria-label="Relationship direction">
                         ${_relDirectionOption('forward', 'bi-arrow-right', viewOnly)}
                         ${_relDirectionOption('reverse', 'bi-arrow-left', viewOnly)}
@@ -3616,7 +3616,7 @@ async function renderRelationshipForm(panel, prop, viewOnly = false) {
                 </div>
                 <div class="mb-3">
                     <label for="sharedRelDescription" class="form-label">Description</label>
-                    <textarea class="form-control form-control-sm" id="sharedRelDescription" rows="2" ${disabled}>${prop?.comment || prop?.description || ''}</textarea>
+                    <textarea class="form-control form-control-sm" id="sharedRelDescription" rows="2" ${disabled}>${escapeHtml(prop?.comment || prop?.description || '')}</textarea>
                 </div>
             </div>
 
@@ -4081,7 +4081,7 @@ async function openMetadataAttributePicker() {
         renderMetaAttrTableList();
         
     } catch (error) {
-        tableList.innerHTML = `<div class="text-danger small p-2"><i class="bi bi-exclamation-triangle me-1"></i>${error.message}</div>`;
+        tableList.innerHTML = `<div class="text-danger small p-2"><i class="bi bi-exclamation-triangle me-1"></i>${escapeHtml(error.message)}</div>`;
     }
 }
 
@@ -4112,13 +4112,13 @@ function renderMetaAttrTableList() {
         const alreadyCount = table.columns ? table.columns.filter(c => allAttrs.has(columnToCamelCase(c.name).toLowerCase())).length : 0;
         
         html += `
-            <a href="#" class="list-group-item list-group-item-action py-2 px-2" onclick="metaAttrSelectTable('${tableFqn.replace(/'/g, "\\'")}'); return false;">
+            <a href="#" class="list-group-item list-group-item-action py-2 px-2" onclick="metaAttrSelectTable('${escapeHtml(tableFqn.replace(/\\/g, '\\\\').replace(/'/g, "\\'"))}'); return false;">
                 <div class="d-flex justify-content-between align-items-center">
-                    <span class="small fw-semibold"><i class="bi bi-table me-1 text-primary"></i>${displayName}</span>
+                    <span class="small fw-semibold"><i class="bi bi-table me-1 text-primary"></i>${escapeHtml(displayName)}</span>
                     <span class="badge bg-secondary">${colCount} col</span>
                 </div>
-                ${dataSource ? `<small class="text-muted d-block" style="font-size: 0.7rem;">${dataSource}</small>` : ''}
-                ${table.comment ? `<small class="text-muted d-block" style="font-size: 0.7rem;">${table.comment}</small>` : ''}
+                ${dataSource ? `<small class="text-muted d-block" style="font-size: 0.7rem;">${escapeHtml(dataSource)}</small>` : ''}
+                ${table.comment ? `<small class="text-muted d-block" style="font-size: 0.7rem;">${escapeHtml(table.comment)}</small>` : ''}
                 ${alreadyCount > 0 ? `<small class="text-info" style="font-size: 0.65rem;">${alreadyCount} column(s) already as attributes</small>` : ''}
             </a>
         `;
@@ -4165,18 +4165,18 @@ function metaAttrSelectTable(tableName) {
         
         html += `
             <label class="list-group-item list-group-item-action py-1 px-2 d-flex align-items-start gap-2 ${labelClass}" style="cursor: ${alreadyExists ? 'default' : 'pointer'};">
-                <input class="form-check-input mt-1 metaAttrColCheck" type="checkbox" value="${col.name}" 
-                       data-camel="${camelName}" ${disabled}
-                       onchange="metaAttrToggleColumn('${col.name.replace(/'/g, "\\'")}', this.checked)">
+                <input class="form-check-input mt-1 metaAttrColCheck" type="checkbox" value="${escapeHtml(col.name)}" 
+                       data-camel="${escapeHtml(camelName)}" ${disabled}
+                       onchange="metaAttrToggleColumn('${escapeHtml(col.name.replace(/\\/g, '\\\\').replace(/'/g, "\\'"))}', this.checked)">
                 <div class="flex-grow-1">
                     <div class="small">
-                        <span class="fw-semibold">${col.name}</span>
+                        <span class="fw-semibold">${escapeHtml(col.name)}</span>
                         <i class="bi bi-arrow-right mx-1 text-muted" style="font-size: 0.65rem;"></i>
-                        <code class="text-primary" style="font-size: 0.75rem;">${camelName}</code>
+                        <code class="text-primary" style="font-size: 0.75rem;">${escapeHtml(camelName)}</code>
                         ${badge}
                     </div>
                     <div style="font-size: 0.65rem;" class="text-muted">
-                        ${col.type || ''}${col.comment ? ' — ' + col.comment : ''}
+                        ${escapeHtml(col.type || '')}${col.comment ? ' — ' + escapeHtml(col.comment) : ''}
                     </div>
                 </div>
             </label>

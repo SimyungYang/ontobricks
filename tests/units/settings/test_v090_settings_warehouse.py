@@ -126,12 +126,13 @@ class TestBuildCurrentConfig:
 
 
 class TestApplyConfigSave:
-    def test_host_and_token_saved_to_session_only(self, domain, gcs, local_mode):
+    def test_host_saved_to_session_and_posted_token_ignored(self, domain, gcs, local_mode):
+        """A domain never holds secrets (.cursor/07 §Domain Security)."""
         result = WarehouseSettings.apply_config_save(
             {"host": "https://ws", "token": "dapi"}, "", "", MagicMock(), _settings()
         )
         assert result == {"success": True, "message": "Configuration saved"}
-        assert domain.databricks == {"host": "https://ws", "token": "dapi"}
+        assert domain.databricks == {"host": "https://ws"}
         gcs.set_warehouse_id.assert_not_called()
         domain.save.assert_called_once()
 

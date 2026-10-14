@@ -46,10 +46,17 @@ class TestGetEmptyDomain:
         assert "reasoning" not in data["ontology"]
         assert data["domain"]["metadata"] == {}
 
+    def test_load_drops_a_token_left_in_an_old_session(self, mock_session_mgr):
+        data = get_empty_domain()
+        data["settings"]["databricks"] = {"host": "https://ws", "token": "dapi"}
+        mock_session_mgr.set(DomainSession.SESSION_KEY, data)
+        ds = DomainSession(mock_session_mgr)
+        assert ds.databricks == {"host": "https://ws"}
+
     def test_migrates_root_metadata_and_reasoning(self, mock_session_mgr):
         empty = get_empty_domain()
         mock_session_mgr.set(
-            "project_data",
+            DomainSession.SESSION_KEY,
             {
                 "domain": {**empty["domain"]},
                 "ontology": {**empty["ontology"], "classes": []},
@@ -670,7 +677,7 @@ class TestExportImport:
 class TestLegacyMigration:
     def test_migrates_flat_constraints(self, mock_session_mgr):
         mock_session_mgr.set(
-            "project_data",
+            DomainSession.SESSION_KEY,
             {
                 "ontology": {
                     "classes": [{"name": "A"}],
@@ -687,7 +694,7 @@ class TestLegacyMigration:
 
     def test_migrates_mapping_key(self, mock_session_mgr):
         mock_session_mgr.set(
-            "project_data",
+            DomainSession.SESSION_KEY,
             {
                 "ontology": {"classes": [], "properties": []},
                 "mapping": {

@@ -214,6 +214,37 @@ class TestCheckRegistryCfg:
         assert status == "warning"
 
 
+class TestUcPrivilegeDenialInDetail:
+    """UC listing errors carry the raw cause in ``detail``, not the message."""
+
+    def test_schema_denial_gets_the_grant_hint(self):
+        from back.core.errors import InfrastructureError
+
+        client = MagicMock()
+        client.list_tables_and_views.side_effect = InfrastructureError(
+            "Could not list tables in main.bronze",
+            detail="PERMISSION_DENIED: User does not have USE SCHEMA",
+        )
+        with patch.object(health, "_resolve_registry_cfg", return_value=_fake_cfg()), \
+             patch.object(health, "_build_health_client", return_value=client):
+            status, detail = health._check_uc_schema_privileges(MagicMock())
+        assert status == "error"
+        assert "Grant: USE SCHEMA" in detail
+
+    def test_catalog_denial_gets_the_grant_hint(self):
+        from back.core.errors import InfrastructureError
+
+        client = MagicMock()
+        client.get_schemas.side_effect = InfrastructureError(
+            "Could not list schemas", detail="CATALOG_NOT_FOUND: main"
+        )
+        with patch.object(health, "_resolve_registry_cfg", return_value=_fake_cfg()), \
+             patch.object(health, "_build_health_client", return_value=client):
+            status, detail = health._check_uc_catalog_privileges(MagicMock())
+        assert status == "error"
+        assert "GRANT USE CATALOG" in detail
+
+
 class TestCheckRegistryUcSchemaDdl:
     def test_skipped_when_no_warehouse(self):
         client = MagicMock(warehouse_id="")
@@ -399,6 +430,23 @@ class TestCheckLakebasePermissions:
 
 
 class TestRunReadinessChecks:
+    @pytest.fixture(autouse=True)
+    def _offline(self):
+        """Without this, local .env credentials make the probes hit Databricks."""
+        stubs = {
+            name: patch.object(health, name, return_value=("ok", "stub"))
+            for name in dir(health)
+            if name.startswith("_check_") and name not in ("_check_tmp",)
+        }
+        stubs["_build_health_client"] = patch.object(
+            health, "_build_health_client", return_value=None
+        )
+        for stub in stubs.values():
+            stub.start()
+        yield
+        for stub in stubs.values():
+            stub.stop()
+
     def test_shape(self):
         result = health.run_readiness_checks()
         assert {"status", "version", "service", "framework", "summary", "checks"} <= result.keys()
@@ -420,3 +468,126 @@ class TestRunReadinessChecks:
             result = health.run_readiness_checks()
         assert result["status"] == "error"
         assert result["summary"]["errors"] >= 1
+
+
+# ---------------------------------------------------------------------------
+# Public liveness (GET /health) vs admin readiness
+# ---------------------------------------------------------------------------
+
+_REMOTE_PROBES = (
+    "_check_databricks_auth",
+    "_build_health_client",
+    "_check_warehouse",
+    "_check_cloud_fetch",
+    "_resolve_registry_cfg",
+    "_check_registry_cfg",
+    "_check_registry_uc_schema_ddl",
+    "_check_lakebase",
+    "_check_lakebase_permissions",
+    "_check_graphdb_lakebase",
+    "_check_lakebase_accelerated_sync",
+)
+
+
+@pytest.fixture
+def remote_probe_spies():
+    """Replace every network/DDL probe with a spy so calls are observable."""
+    spies = {name: MagicMock(return_value=("ok", "")) for name in _REMOTE_PROBES}
+    with patch.multiple(health, **spies):
+        yield spies
+
+
+def _health_app():
+    from fastapi import FastAPI
+
+    app = FastAPI()
+    app.include_router(health.router)
+    return app
+
+
+class TestPublicHealthRoute:
+    def test_makes_no_remote_or_ddl_calls(self, remote_probe_spies):
+        from fastapi.testclient import TestClient
+
+        resp = TestClient(_health_app()).get("/health")
+        assert resp.status_code == 200
+        for name, spy in remote_probe_spies.items():
+            assert not spy.called, f"/health must not run {name}"
+
+    def test_payload_is_minimal(self, remote_probe_spies):
+        from fastapi.testclient import TestClient
+
+        data = TestClient(_health_app()).get("/health").json()
+        assert set(data) == {"status", "version", "service", "timestamp"}
+        assert data["status"] in ("ok", "warning", "error")
+        assert data["version"] == health.APP_VERSION
+
+    def test_leaks_no_internal_detail(self, remote_probe_spies, monkeypatch, tmp_path):
+        from fastapi.testclient import TestClient
+
+        from shared.config.settings import get_settings
+
+        session_dir = tmp_path / "secret_session_dir"
+        app = _health_app()
+        app.dependency_overrides[get_settings] = lambda: SimpleNamespace(
+            session_dir=str(session_dir)
+        )
+        with patch.object(
+            health, "_check_tmp", side_effect=RuntimeError("main.bronze.reg boom")
+        ):
+            resp = TestClient(app).get("/health")
+        body = resp.text
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "error"
+        for leaked in ("secret_session_dir", "/tmp", "main.bronze", "boom", "detail"):
+            assert leaked not in body
+
+    def test_local_failure_rolls_up_to_status(self, remote_probe_spies):
+        with patch.object(health, "_check_tmp", return_value=("warning", "low")):
+            result = health.run_liveness_checks()
+        assert result["status"] == "warning"
+
+
+class TestAdminReadinessRoute:
+    """``GET /settings/diagnostics/readiness`` runs the heavy probes, admin-only."""
+
+    @staticmethod
+    def _client(role: str):
+        from fastapi import FastAPI, Request
+        from fastapi.testclient import TestClient
+
+        from api.routers.internal.settings import router as settings_router
+        from back.core.errors import register_exception_handlers
+
+        app = FastAPI()
+        register_exception_handlers(app)
+
+        @app.middleware("http")
+        async def _set_role(request: Request, call_next):
+            request.state.user_role = role
+            return await call_next(request)
+
+        app.include_router(settings_router)
+        return TestClient(app)
+
+    def test_admin_gets_full_readiness_checks(self, remote_probe_spies):
+        resp = self._client("admin").get("/settings/diagnostics/readiness")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert {"status", "summary", "checks"} <= data.keys()
+        assert remote_probe_spies["_check_registry_uc_schema_ddl"].called
+        assert remote_probe_spies["_check_warehouse"].called
+
+    @pytest.mark.parametrize("role", ["app_user", "none"])
+    def test_non_admin_is_forbidden(self, role, remote_probe_spies):
+        resp = self._client(role).get("/settings/diagnostics/readiness")
+        assert resp.status_code == 403
+        for spy in remote_probe_spies.values():
+            assert not spy.called
+
+    def test_grouped_diagnostics_stays_admin_only(self):
+        with patch.object(health, "run_diagnostics_checks", return_value={"groups": []}) as spy:
+            assert self._client("app_user").get("/settings/diagnostics").status_code == 403
+            assert not spy.called
+            assert self._client("admin").get("/settings/diagnostics").status_code == 200
+            assert spy.called

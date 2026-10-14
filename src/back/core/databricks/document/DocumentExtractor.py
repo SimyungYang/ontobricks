@@ -58,15 +58,6 @@ class DocumentExtractor:
             )
 
     @classmethod
-    def from_credentials(
-        cls, host: str, token: str, warehouse_id: str
-    ) -> "DocumentExtractor":
-        """Build an extractor from raw credentials (resolves the client lazily)."""
-        from back.core.databricks.DatabricksClient import DatabricksClient as _Client
-
-        return cls(client=_Client(host=host, token=token, warehouse_id=warehouse_id))
-
-    @classmethod
     def supports(cls, extension: str) -> bool:
         """Return *True* when *extension* (without dot) can be parsed."""
         return (extension or "").lower() in cls.SUPPORTED_EXTENSIONS

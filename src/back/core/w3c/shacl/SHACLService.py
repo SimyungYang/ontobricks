@@ -11,6 +11,8 @@ import re
 import uuid
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
+from back.core.errors import InfrastructureError
+from back.core.helpers import sql_escape
 from back.core.logging import get_logger
 from back.core.w3c.rdf_utils import uri_local_name
 from back.core.graphdb.constants import RDF_TYPE
@@ -419,7 +421,7 @@ class SHACLService:
 
     @staticmethod
     def _extract_violations(report_turtle: str) -> List[Dict]:
-        """Parse the PySHACL validation report into violation dicts."""
+        """Parse the PySHACL report into violation dicts (unparseable → InfrastructureError)."""
         from rdflib import Graph as RG, URIRef
         from rdflib.namespace import Namespace as NS
 
@@ -427,8 +429,8 @@ class SHACLService:
         g = RG()
         try:
             g.parse(data=report_turtle, format="turtle")
-        except Exception:
-            return []
+        except Exception as exc:
+            raise InfrastructureError("SHACL report is unparseable", detail=str(exc)) from exc
 
         rdf_type_ref = URIRef(RDF_TYPE)
         violations = []
@@ -1480,7 +1482,7 @@ class SHACLService:
             ShapeConditions.get_logic(shape),
             shape.get("target_class_uri", ""),
             table,
-            lambda v: v.replace("'", "''"),
+            sql_escape,
             SHACLService._normalize_prop_uri,
         )
         if not condition_sql:
@@ -1494,9 +1496,7 @@ class SHACLService:
         params = shape.get("parameters", {})
         cls_uri = shape.get("target_class_uri", "")
         prop_uri = SHACLService._normalize_prop_uri(shape.get("property_uri", ""))
-
-        def esc(v: str) -> str:
-            return v.replace("'", "''")
+        esc = sql_escape
 
         if shacl_type in ("sh:minCount", "sh:maxCount") or (
             "sh:minCount" in params or "sh:maxCount" in params

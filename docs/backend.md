@@ -1797,7 +1797,6 @@ Several smaller optimizations avoid unnecessary warehouse work:
 Implementations:
 
 - `GraphDBBackend.get_entity_metadata`
-- `GraphDBBackend.get_top_nodes_by_degree`
 - `DeltaFlatStore.table_exists`
 - `LakebaseFlatStore.table_exists`
 - `LakebaseFlatStore.find_subjects_by_patterns`

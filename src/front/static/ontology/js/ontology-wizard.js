@@ -1179,12 +1179,6 @@ function updateWizardDocsCount() {
     el.textContent = `${selected} of ${total} document${total !== 1 ? 's' : ''} selected`;
 }
 
-function getSelectedDocumentNames() {
-    return getSelectedDocumentFiles()
-        .filter(file => file.parse_status === 'ready')
-        .map(file => file.name);
-}
-
 function getSelectedDocumentFiles() {
     return wizardDocsCache.filter(file => wizardSelectedDocs.has(file.name));
 }
@@ -1198,15 +1192,6 @@ function formatDocSize(bytes) {
 // =====================================================
 // AGENT STEPS LOG
 // =====================================================
-
-function renderAgentStepsLog(steps) {
-    if (typeof TaskProgressUI !== 'undefined') {
-        return TaskProgressUI.renderAgentStepsLogHtml(steps);
-    }
-    return '';
-}
-
-function _truncate(str, max) { return truncate(str, max); }
 
 // =====================================================
 // EXPOSE GLOBALLY

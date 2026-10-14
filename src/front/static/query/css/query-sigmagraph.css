@@ -241,26 +241,39 @@
     margin-bottom: 0.5rem;
 }
 
-/* Resize handle */
+/* Resize handle — same thin divider as Ontology / Mapping Studio:
+   1px track, 0.5px grip, half-gutter overlap, wider invisible hit area. */
 #sigmagraph-section .resize-handle {
-    width: 8px;
+    position: relative;
+    width: 1px;
+    margin-left: -0.25rem;
+    margin-right: -0.25rem;
     cursor: col-resize;
     display: flex;
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
+    z-index: 1;
+    user-select: none;
+}
+
+#sigmagraph-section .resize-handle::before {
+    content: "";
+    position: absolute;
+    inset: 0 -4px;
 }
 
 #sigmagraph-section .resize-handle .resize-handle-bar {
-    width: 3px;
+    width: 0.5px;
     height: 40px;
-    background: #dee2e6;
-    border-radius: 2px;
-    transition: background 0.15s;
+    background: var(--db-border);
+    border-radius: 1px;
+    transition: background 0.15s ease;
 }
 
-#sigmagraph-section .resize-handle:hover .resize-handle-bar {
-    background: #adb5bd;
+#sigmagraph-section .resize-handle:hover .resize-handle-bar,
+#sigmagraph-section .resize-handle.active .resize-handle-bar {
+    background: var(--db-primary);
 }
 
 /* Filter pane */

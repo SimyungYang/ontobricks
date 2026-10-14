@@ -8,7 +8,7 @@ from __future__ import annotations
 import json
 from typing import Any, Dict, List, Optional, Tuple
 
-from back.core.errors import ConflictError
+from back.core.errors import ConflictError, InfrastructureError
 from back.core.mcp_tools import coerce_mcp_policy
 from back.objects.registry.registry_cache import invalidate_registry_cache
 from ..base import DomainSummary
@@ -143,7 +143,8 @@ class Catalog:
 
     def get_domain_quorum(self, folder: str) -> int:
         """Per-domain review sign-off quorum (>= 1). Default ``1`` when the
-        domain is missing or the column has not been provisioned yet.
+        domain is missing; raises :class:`InfrastructureError` when the
+        quorum cannot be read so the publish gate fails closed.
         """
         try:
             self._ensure_domains_review_quorum_column()
@@ -158,8 +159,9 @@ class Catalog:
                 return 1
             return max(1, int(row[0]))
         except Exception as exc:  # noqa: BLE001
-            logger.debug("get_domain_quorum(%s) failed: %s", folder, exc)
-            return 1
+            raise InfrastructureError(
+                "Failed to read the domain review quorum", detail=str(exc)
+            ) from exc
 
     def delete_domain(self, folder: str) -> List[str]:
         try:
@@ -430,6 +432,10 @@ class Catalog:
             return None
 
     def load_domain_permissions(self, folder: str) -> Dict[str, Any]:
+        """Empty permissions when the domain has none; raises
+        :class:`InfrastructureError` when they cannot be read, so callers
+        never mistake an outage for "no grants".
+        """
         try:
             psycopg, dict_row = _require_psycopg()
             with self._connect() as conn, conn.cursor(row_factory=dict_row) as cur:
@@ -446,15 +452,20 @@ class Catalog:
                 rows = cur.fetchall()
             return {"version": 1, "permissions": [dict(r) for r in rows]}
         except Exception as exc:  # noqa: BLE001
-            logger.debug("load_domain_permissions(%s) failed: %s", folder, exc)
-            return {"version": 1, "permissions": []}
+            raise InfrastructureError(
+                "Failed to read domain permissions", detail=str(exc)
+            ) from exc
 
     def save_domain_permissions(
         self, folder: str, data: Dict[str, Any]
     ) -> Tuple[bool, str]:
         entries = data.get("permissions") or []
         try:
-            with self._connect() as conn, conn.cursor() as cur:
+            with (
+                self._connect() as conn,
+                conn.transaction(),
+                conn.cursor() as cur,
+            ):
                 cur.execute(
                     f"""
                     SELECT id FROM {self._q(self._schema)}.domains

@@ -2,7 +2,8 @@
 
 Base-URL resolution, M2M OAuth header minting (with a module-level token
 cache), and retrying GET/POST wrappers that ride out Databricks Apps
-cold-start transients. Tests monkeypatch ``_get_auth_headers`` / ``_base_url``
+cold-start transients, plus the mapping of HTTP failures to short,
+URL-free tool text. Tests monkeypatch ``_get_auth_headers`` / ``_base_url``
 / ``_get`` / ``_post`` on this module, so call sites resolve them through the
 module object (late binding) rather than importing the names directly.
 """
@@ -11,9 +12,12 @@ from __future__ import annotations
 
 import asyncio
 import contextvars
+import functools
 import logging
 import os
 import time
+from collections.abc import Awaitable, Callable
+from urllib.parse import quote
 
 import httpx
 
@@ -255,7 +259,10 @@ async def _get(
 
 
 async def _post(
-    client: httpx.AsyncClient, path: str, json: dict | None = None
+    client: httpx.AsyncClient,
+    path: str,
+    json: dict | None = None,
+    params: dict | None = None,
 ) -> dict:
     """POST *path* on *client* with optional JSON body and return the JSON response.
 
@@ -267,7 +274,11 @@ async def _post(
         logger.info("POST %s%s (attempt %d)", client.base_url, path, attempt + 1)
         started = time.monotonic()
         resp = await client.post(
-            path, json=json or {}, headers=_merged_headers(), timeout=120
+            path,
+            json=json or {},
+            params=params,
+            headers=_merged_headers(),
+            timeout=120,
         )
         elapsed_ms = int((time.monotonic() - started) * 1000)
         if resp.status_code >= 400:
@@ -295,3 +306,54 @@ async def _post(
             logger.info("POST %s%s → %s in %dms", client.base_url, path, resp.status_code, elapsed_ms)
         resp.raise_for_status()
         return resp.json()
+
+
+def _graphql_path(domain_name: str, suffix: str = "") -> str:
+    """In-app GraphQL route for *domain_name*, encoded as one path segment."""
+    return f"/graphql/{quote(domain_name, safe='')}{suffix}"
+
+
+def _json_body(resp: httpx.Response) -> dict:
+    """*resp*'s JSON object body, or ``{}`` when it is not a JSON object."""
+    try:
+        body = resp.json()
+    except ValueError:
+        return {}
+    return body if isinstance(body, dict) else {}
+
+
+def _http_error_message(exc: httpx.HTTPError, what: str) -> str:
+    """Short text for the LLM naming *what* failed.
+
+    Only the backend's own safe ``message`` / ``error`` field is passed on —
+    never ``str(exc)`` or a raw body, which carry the full URL (registry query
+    params included) and internal details.
+    """
+    if isinstance(exc, httpx.HTTPStatusError):
+        body = _json_body(exc.response)
+        message = body.get("message") or body.get("error")
+        if isinstance(message, str) and message:
+            return message
+        return f"Could not {what} (HTTP {exc.response.status_code})."
+    return f"Could not {what}: the OntoBricks API is unreachable."
+
+
+def http_errors_as_text(what: str) -> Callable:
+    """Decorate an async tool so an escaping ``httpx.HTTPError`` becomes text.
+
+    Without it FastMCP surfaces the exception string, i.e. the full request
+    URL, to the model.
+    """
+
+    def decorate(fn: Callable[..., Awaitable[str]]) -> Callable[..., Awaitable[str]]:
+        @functools.wraps(fn)
+        async def wrapper(*args, **kwargs) -> str:
+            try:
+                return await fn(*args, **kwargs)
+            except httpx.HTTPError as exc:
+                logger.warning("Tool %s could not %s: %s", fn.__name__, what, exc)
+                return _http_error_message(exc, what)
+
+        return wrapper
+
+    return decorate

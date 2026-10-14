@@ -374,10 +374,6 @@ async function saveDomainInfo() {
 
 // Note: save-to-local helpers live in domain template partials when present.
 
-function loadDomainFromFile() {
-    document.getElementById('domainFileInput').click();
-}
-
 async function handleDomainFileUpload(input) {
     const file = input.files[0];
     if (!file) return;
@@ -438,86 +434,6 @@ async function newDomain() {
         }
     } catch (error) {
         showNotification('Failed: ' + error.message, 'error');
-    }
-}
-
-/**
- * Save domain from settings page with validation
- * For new domains, requires Domain Name and Base URI
- */
-async function saveDomainFromSettings() {
-    const nameEl = document.getElementById('domainName');
-    const baseUriEl = document.getElementById('domainBaseUri');
-    
-    // Get values
-    const domainName = nameEl ? nameEl.value.trim() : '';
-    const baseUri = baseUriEl ? baseUriEl.value.trim() : '';
-    
-    // Clear previous validation states
-    if (nameEl) nameEl.classList.remove('is-invalid');
-    if (baseUriEl) baseUriEl.classList.remove('is-invalid');
-    
-    // Validate required fields
-    let hasErrors = false;
-    
-    if (!domainName) {
-        if (nameEl) {
-            nameEl.classList.add('is-invalid');
-            nameEl.focus();
-        }
-        showNotification('Domain Name is required', 'warning');
-        hasErrors = true;
-    } else if (!/^[A-Z][a-zA-Z0-9]*$/.test(domainName)) {
-        if (nameEl) {
-            nameEl.classList.add('is-invalid');
-            if (!hasErrors) nameEl.focus();
-        }
-        showNotification('Domain Name must be CamelCase and alphanumeric only (e.g. MyOntologyDomain)', 'warning');
-        hasErrors = true;
-    }
-    
-    if (!baseUri) {
-        if (baseUriEl) {
-            baseUriEl.classList.add('is-invalid');
-            if (!hasErrors) baseUriEl.focus();
-        }
-        if (!hasErrors) {
-            showNotification('Base URI is required', 'warning');
-        } else {
-            showNotification('Domain Name and Base URI are required', 'warning');
-        }
-        hasErrors = true;
-    }
-    
-    // Validate Base URI format
-    if (baseUri && !isValidUri(baseUri)) {
-        if (baseUriEl) {
-            baseUriEl.classList.add('is-invalid');
-            if (!hasErrors) baseUriEl.focus();
-        }
-        showNotification('Base URI must be a valid URI (e.g., https://example.org/ontology#)', 'warning');
-        hasErrors = true;
-    }
-    
-    if (hasErrors) {
-        return;
-    }
-    
-    // Remove validation states on input
-    if (nameEl) {
-        nameEl.addEventListener('input', () => nameEl.classList.remove('is-invalid'), { once: true });
-    }
-    if (baseUriEl) {
-        baseUriEl.addEventListener('input', () => baseUriEl.classList.remove('is-invalid'), { once: true });
-    }
-    
-    // Save domain info to session and persist to the registry (no confirmation popup)
-    // (saveDomainInfo only saves to session; domainSave writes to the registry)
-    if (typeof domainSave === 'function') {
-        await domainSave();
-    } else {
-        await saveDomainInfo();
-        showNotification('Domain info saved. Use the menu "Save Domain" to persist to Unity Catalog.', 'info', 4000);
     }
 }
 

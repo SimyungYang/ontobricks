@@ -183,8 +183,3 @@ class TaskContext:
     def advance(self, message: str) -> None:
         if self.tm and self.task_id:
             self.tm.advance_step(self.task_id, message)
-
-    @property
-    def log_prefix(self) -> str:
-        target = f"/{self.target_key}" if self.target_key else ""
-        return f"Scheduled {self.task_type} [{self.domain_name}{target}]"

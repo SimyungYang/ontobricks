@@ -109,7 +109,11 @@ Materialize triples incrementally, then **reason** over the graph with OWL 2 RL
 inference, SWRL rules and SHACL validation. Explore interactively: two-phase
 search, N-hop neighbour expansion, cross-domain bridge navigation, community
 detection (Louvain, Label Propagation, Greedy Modularity), and explainable
-**cohort discovery**. Lakehouse domains can optionally read from a **Lakehouse//RT**
+**cohort discovery**. Right-click any entity to run its **Data Quality Checks**
+(every SHACL shape on its class, its parents and the global ones, with
+per-dimension gauges), one of its **SWRL business rules**, or a class action
+(Unity Catalog function or **Databricks Job**) — the same checks and actions are
+MCP tools. Lakehouse domains can optionally read from a **Lakehouse//RT**
 query warehouse while builds stay on a classic or serverless warehouse. Query
 everything through an auto-generated **GraphQL** API or open **Knowledge Graph
 → Query → SPARQL** for read-only SELECT queries, sample queries, CSV export,

@@ -1656,7 +1656,8 @@ All blocking Databricks I/O runs through `run_blocking()` in `DatabricksHelpers.
 
 ### CSRF Protection
 - Double-submit cookie pattern via `CSRFMiddleware` (`shared/fastapi/csrf.py`)
-- A `csrf_token` cookie is set on first visit; state-changing requests (POST, PUT, PATCH, DELETE) must include the same value in an `X-CSRF-Token` header
+- A `csrf_token` cookie is set on first visit; state-changing requests (POST, PUT, PATCH, DELETE) must include the same value in an `X-CSRF-Token` header. A missing cookie, a missing header or a mismatch is rejected with 403 (constant-time comparison); non-browser clients must use `/api/` or `/graphql/`
+- `navigator.sendBeacon` cannot set the header — unload-time saves use `fetch(..., {keepalive: true})` instead
 - The browser-side `fetch()` wrapper in `utils.js` attaches the header automatically
 - Bypass paths: `/static/`, `/health`, `/api/`, `/graphql/`, docs endpoints
 - Disabled via `CSRF_DISABLED=1` for automated test suites

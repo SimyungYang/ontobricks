@@ -9,7 +9,7 @@ seam similar to :class:`back.core.reasoning.swrl.SWRLEngine`.
 import time
 from typing import Dict, List
 
-from back.core.helpers import sql_numeric
+from back.core.helpers import is_sql_numeric, sql_literal, sql_numeric
 from back.core.logging import get_logger
 from back.core.w3c.rdf_utils import uri_local_name
 from back.core.reasoning.results.InferredTriple import InferredTriple
@@ -43,18 +43,6 @@ class DecisionTableEngine:
     A column only constrains an instance in rows where its cell holds a
     condition: instances missing that attribute still match ``any`` cells.
     """
-
-    @staticmethod
-    def _esc_sql(val: str) -> str:
-        return val.replace("'", "''")
-
-    @staticmethod
-    def _is_numeric(val: str) -> bool:
-        try:
-            float(val)
-            return True
-        except (ValueError, TypeError):
-            return False
 
     @staticmethod
     def _build_uri_map(ontology: Dict) -> Dict[str, str]:
@@ -290,7 +278,7 @@ class DecisionTableEngine:
             return None
         base_where = [
             f"t0.predicate = '{RDF_TYPE}'",
-            f"t0.object = '{self._esc_sql(target_cls_uri)}'",
+            f"t0.object = {sql_literal(target_cls_uri)}",
         ]
         used_cols = set()
         row_conditions = []
@@ -309,7 +297,7 @@ class DecisionTableEngine:
                     continue
                 alias = f"inp{j}"
                 used_cols.add(j)
-                if self._is_numeric(val):
+                if is_sql_numeric(val):
                     v_expr = val
                     lhs = (
                         sql_numeric(f"{alias}.object")
@@ -317,7 +305,7 @@ class DecisionTableEngine:
                         else f"{alias}.object"
                     )
                 else:
-                    v_expr = f"'{self._esc_sql(val.lower())}'"
+                    v_expr = sql_literal(val.lower())
                     lhs = (
                         f"LOWER({alias}.object)"
                         if op in DT_STRING_OPS
@@ -331,7 +319,7 @@ class DecisionTableEngine:
         # LEFT JOIN: a column only constrains rows whose cell holds a condition.
         joins = [
             f"LEFT JOIN {table} inp{j} ON inp{j}.subject = t0.subject "
-            f"AND inp{j}.predicate = '{self._esc_sql(inputs[j]['property_uri'])}'"
+            f"AND inp{j}.predicate = {sql_literal(inputs[j]['property_uri'])}"
             for j in sorted(used_cols)
         ]
         row_joiner = " AND " if dt.get("row_logic") == "and" else " OR "

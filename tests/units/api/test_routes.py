@@ -19,27 +19,27 @@ def client():
 
 class TestHealthRoutes:
     def test_health_check(self, client):
-        # ``/health`` is now a comprehensive readiness probe.  Individual
-        # checks may fail (no warehouse / no Lakebase in the test env)
-        # but the route always returns 200 and a stable shape so external
-        # probes can keep parsing the top-level ``status`` and
-        # ``summary.errors`` fields.
+        # ``/health`` is an anonymous, local-only liveness probe; the
+        # heavy readiness probes live behind the admin-only
+        # ``/settings/diagnostics/readiness`` route.
         response = client.get("/health")
         assert response.status_code == 200
         data = response.json()
+        assert set(data) == {"status", "version", "service", "timestamp"}
         assert data["status"] in ("ok", "warning", "error")
-        assert data["framework"] == "FastAPI"
         assert data["service"] == "OntoBricks"
-        assert "summary" in data
-        assert "checks" in data
+
+    def test_readiness_route_returns_checks(self, client):
+        # The test env resolves the caller as admin (local mode).
+        response = client.get("/settings/diagnostics/readiness")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] in ("ok", "warning", "error")
         assert isinstance(data["checks"], list) and data["checks"]
         for c in data["checks"]:
             assert {"name", "label", "status", "detail", "duration_ms"} <= c.keys()
-            assert c["status"] in ("ok", "warning", "error")
 
     def test_detailed_health_removed(self, client):
-        # ``/health/detailed`` was retired — its information now lives in
-        # ``/health``.  FastAPI returns 404 for the removed route.
         response = client.get("/health/detailed")
         assert response.status_code == 404
 

@@ -260,6 +260,17 @@ def test_publish_blocked_until_quorum():
               user_domain_role=ROLE_BUILDER)
 
 
+def test_publish_refused_when_quorum_read_fails():
+    svc, info, events = _make_svc(status="IN-REVIEW", quorum=1)
+    svc.store.get_domain_quorum.side_effect = RuntimeError("lakebase down")
+    with pytest.raises(InfrastructureError):
+        _call("publish", svc, comment="", user_role="",
+              user_domain_role=ROLE_BUILDER)
+    assert info["status"] == "IN-REVIEW"
+    svc.set_version_status.assert_not_called()
+    assert events == []
+
+
 def test_publish_admin_overrides_quorum():
     # An admin may publish even when the quorum is not met.
     svc, info, events = _make_svc(status="IN-REVIEW", quorum=3)

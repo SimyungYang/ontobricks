@@ -35,7 +35,6 @@ _MAX_MAPPING_RUN_LOG_ENTRIES = 500
 
 if TYPE_CHECKING:
     from agents.agent_auto_assignment.engine import AgentResult as AutoAssignAgentResult
-    from agents.agent_mapping_pge.engine import AgentResult as MappingPGEAgentResult
 
 SINGLE_ITEM_MAX_ITERATIONS = 15
 
@@ -142,48 +141,6 @@ class Mapping:
         started from HTTP.
         """
         from agents.agent_auto_assignment import run_agent
-
-        return run_agent(
-            host=host,
-            token=token,
-            endpoint_name=endpoint_name,
-            client=client,
-            metadata=metadata,
-            ontology=ontology,
-            entity_mappings=entity_mappings,
-            relationship_mappings=relationship_mappings,
-            documents=documents,
-            on_step=on_step,
-            max_iterations=max_iterations,
-        )
-
-    def auto_assign_with_pge_agent(
-        self,
-        *,
-        host: str,
-        token: str,
-        endpoint_name: str,
-        client: Any,
-        metadata: dict,
-        ontology: dict,
-        entity_mappings: Optional[list] = None,
-        relationship_mappings: Optional[list] = None,
-        documents: Optional[list] = None,
-        on_step: Optional[Callable[[str, int], None]] = None,
-        max_iterations: Optional[int] = None,
-    ) -> "MappingPGEAgentResult":
-        """Run the mapping-PGE agent (``agent_mapping_pge``) — blocking.
-
-        Returns an :class:`AgentResult` with the standard ``entity_mappings``
-        and ``relationship_mappings`` plus three PGE-specific extras
-        (``source_model``, ``mapping_evaluations``, ``mapping_run_log``) that
-        the caller can persist on the session via :meth:`save_mappings_to_session`.
-
-        Prefer :meth:`auto_assign_with_agent` for the legacy single-agent loop;
-        use this method (or :meth:`~back.core.agents.AgentClient.run_mapping_pge`)
-        when the orchestrator selects the PGE engine.
-        """
-        from agents.agent_mapping_pge import run_agent
 
         return run_agent(
             host=host,
@@ -1983,7 +1940,7 @@ class Mapping:
 
         One ``get_table_columns`` round-trip per table, not per attribute.
         Tables that cannot be read (missing, no privilege — the client
-        returns an empty list rather than raising) are omitted, so callers
+        raises ``InfrastructureError``) are omitted, so callers
         treat them as "unknown" and skip drift reporting instead of
         flagging every column as dropped.
         """

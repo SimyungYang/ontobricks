@@ -298,36 +298,47 @@ async function loadSchemas(catalog) {
 }
 
 
-/**
- * Load volumes for a catalog and schema
- * @param {string} catalog - Catalog name
- * @param {string} schema - Schema name
- * @returns {Promise<Array>} List of volume names
- */
-async function loadVolumes(catalog, schema) {
-    try {
-        const data = await apiRequest(`/settings/volumes/${catalog}/${schema}`);
-        return data.volumes || [];
-    } catch (error) {
-        console.error('Error loading volumes:', error);
-        return [];
-    }
-}
-
-
 // ========== HTML UTILITIES ==========
+
+const _HTML_ESCAPES = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
 
 /**
  * Escape HTML special characters to prevent XSS.
  * Canonical implementation — all modules should use this instead of local copies.
+ * Safe for both text content and quoted attribute values.
  * @param {*} text - Text to escape
  * @returns {string} Escaped HTML string
  */
 function escapeHtml(text) {
     if (text === null || text === undefined) return '';
-    const div = document.createElement('div');
-    div.textContent = String(text);
-    return div.innerHTML;
+    return String(text).replace(/[&<>"']/g, ch => _HTML_ESCAPES[ch]);
+}
+
+/**
+ * Escape a value for a quoted HTML attribute (alias of escapeHtml).
+ * @param {*} text - Text to escape
+ * @returns {string} Escaped attribute string
+ */
+function escapeAttr(text) {
+    return escapeHtml(text);
+}
+
+/**
+ * Render untrusted Markdown to sanitised HTML.
+ * Uses the global `marked` + `DOMPurify` (loaded in base.html); without
+ * either of them it falls back to escaped plain text with <br> line breaks.
+ * @param {*} text - Markdown source
+ * @returns {string} HTML safe to assign to innerHTML
+ */
+function renderMarkdown(text) {
+    const src = text === null || text === undefined ? '' : String(text);
+    if (window.marked && typeof window.marked.parse === 'function'
+            && window.DOMPurify && typeof window.DOMPurify.sanitize === 'function') {
+        try {
+            return window.DOMPurify.sanitize(window.marked.parse(src, { breaks: true, gfm: true }));
+        } catch (e) { /* fall through to plain text */ }
+    }
+    return escapeHtml(src).replace(/\n/g, '<br>');
 }
 
 
@@ -975,6 +986,8 @@ window.showInfoDialog = showInfoDialog;
 window.showDeleteConfirm = showDeleteConfirm;
 window.apiRequest = apiRequest;
 window.escapeHtml = escapeHtml;
+window.escapeAttr = escapeAttr;
+window.renderMarkdown = renderMarkdown;
 window.enforceDomainNameCamelCase = enforceDomainNameCamelCase;
 window.isValidDomainName = isValidDomainName;
 window.showNewDomainDialog = showNewDomainDialog;

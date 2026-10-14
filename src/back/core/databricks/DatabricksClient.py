@@ -183,9 +183,6 @@ class DatabricksClient:
     def list_secret_keys(self, scope):
         return self.secrets.list_keys(scope)
 
-    def get_secret(self, scope, key):
-        return self.secrets.get_secret_value(scope, key)
-
     @property
     def last_app_permissions_status(self) -> int:
         """Expose the HTTP status of the last ``list_app_principals`` call."""

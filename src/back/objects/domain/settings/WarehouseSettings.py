@@ -84,8 +84,6 @@ class WarehouseSettings:
 
         if data.get("host"):
             domain.databricks["host"] = data["host"]
-        if data.get("token"):
-            domain.databricks["token"] = data["token"]
 
         if data.get("warehouse_id"):
             if SettingsService.is_warehouse_locked(settings):

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Optional, Tuple
+from typing import Any, Optional
 
 from back.core.databricks import is_databricks_app
 from back.core.helpers import (
@@ -80,18 +80,3 @@ def create_databricks_client(
     except Exception as exc:  # noqa: BLE001
         logger.exception("Failed to create DatabricksClient for Delta engine: %s", exc)
         return None
-
-
-def resolve_credentials(
-    domain: Any, settings: Optional[Any] = None
-) -> Tuple[str, str, str]:
-    """Return ``(host, token, warehouse_id)`` for build tasks."""
-    if settings is not None:
-        host, token = get_databricks_host_and_token(domain, settings)
-        warehouse_id = resolve_delta_warehouse_id(domain, settings)
-    else:
-        db = getattr(domain, "databricks", None) or {}
-        host = db.get("host", "")
-        token = db.get("token", "")
-        warehouse_id = db.get("warehouse_id", "") or db.get("sql_warehouse_id", "")
-    return host, token, warehouse_id

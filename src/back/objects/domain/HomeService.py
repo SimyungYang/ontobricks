@@ -382,8 +382,7 @@ class HomeService:
         }
 
         # Metadata table count (in-session, no I/O)
-        _dom = domain._data.get("domain") or domain._data.get("project") or {}
-        metadata = _dom.get("metadata", {})
+        metadata = domain._data["domain"].get("metadata", {})
         metadata_table_count = len(metadata.get("tables", [])) if metadata else 0
 
         # Document count: live list of UC documents path (same rules as domain documents list)

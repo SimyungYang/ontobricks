@@ -41,15 +41,15 @@
     <script defer src="{{ url_for('static', filename='global/js/comments-panel.js') }}?v={{ asset_version }}"></script>
     <script defer src="{{ url_for('static', filename='global/js/uc_file_dialog.js') }}?v={{ asset_version }}"></script>
     <script defer src="{{ url_for('static', filename='global/js/uc-location-widget.js') }}?v={{ asset_version }}"></script>
-    <script defer src="{{ url_for('static', filename='home/js/uc-file-browser-modal.js') }}?v={{ asset_version }}"></script>
     <script defer src="{{ url_for('static', filename='global/js/navbar.js') }}?v={{ asset_version }}"></script>
     <script defer src="{{ url_for('static', filename='global/js/sidebar-nav.js') }}?v={{ asset_version }}"></script>
     <script defer src="{{ url_for('static', filename='global/js/task-tracker.js') }}?v={{ asset_version }}"></script>
     <script defer src="{{ url_for('static', filename='global/js/base-ui-handlers.js') }}?v={{ asset_version }}"></script>
     <script defer src="{{ url_for('static', filename='global/js/breadcrumb.js') }}?v={{ asset_version }}"></script>
     <script defer src="{{ url_for('static', filename='global/js/emoji-picker.js') }}?v={{ asset_version }}"></script>
-    <!-- Markdown renderer (used by the Help Center Documentation tab) -->
-    <script defer src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <!-- Markdown renderer + sanitiser (renderMarkdown in utils.js, Help Center docs) -->
+    <script defer src="https://cdn.jsdelivr.net/npm/marked@15.0.12/marked.min.js" integrity="sha384-948ahk4ZmxYVYOc+rxN1H2gM1EJ2Duhp7uHtZ4WSLkV4Vtx5MUqnV+l7u9B+jFv+" crossorigin="anonymous"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/dompurify@3.4.17/dist/purify.min.js" integrity="sha384-P0JNneQf81HOl9VwNXK76cQ9VMD6Nfsnepxb0cCOg8+UzEdzgPHAPV4wVQrvYQSx" crossorigin="anonymous"></script>
     <script defer src="{{ url_for('static', filename='global/js/help-modal.js') }}?v={{ asset_version }}"></script>
     <script defer src="{{ url_for('static', filename='global/js/help-docs.js') }}?v={{ asset_version }}"></script>
     <script defer src="{{ url_for('static', filename='registry/js/registry.js') }}?v={{ asset_version }}"></script>

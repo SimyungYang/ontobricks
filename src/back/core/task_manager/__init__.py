@@ -13,13 +13,6 @@ def get_task_manager() -> TaskManager:
     return task_manager
 
 
-def run_background_task(name, task_type, target, *args, steps=None, **kwargs) -> Task:
-    """Backward-compatible wrapper — delegates to TaskManager.run_background_task."""
-    return task_manager.run_background_task(
-        name, task_type, target, *args, steps=steps, **kwargs
-    )
-
-
 __all__ = [
     "TaskStatus",
     "TaskStep",
@@ -27,6 +20,5 @@ __all__ = [
     "Task",
     "TaskManager",
     "get_task_manager",
-    "run_background_task",
     "task_manager",
 ]

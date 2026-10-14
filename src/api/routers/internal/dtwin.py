@@ -93,10 +93,6 @@ def _dataquality_table(domain, settings) -> str:
 _RDF_TYPE_URI = TwinNeighborTriples.RDF_TYPE_URI
 
 
-def _is_type_predicate(predicate: str) -> bool:
-    return TwinNeighborTriples.is_type_predicate(predicate)
-
-
 def _filter_neighbor_triples(
     rows: list[dict[str, str]],
     visited: set[str],
@@ -1970,10 +1966,6 @@ _CHAT_MIN_LIMIT = TwinAssistantCache.MIN_LIMIT
 _CHAT_MAX_LIMIT = TwinAssistantCache.MAX_LIMIT
 _UPGRADE_INSTANCE_ADVICE = TwinAssistantCache.UPGRADE_INSTANCE_ADVICE
 _PENDING_ACTION_TTL_SEC = TwinAssistantCache.PENDING_ACTION_TTL_SEC
-
-
-def _resource_pressure_payload() -> dict:
-    return TwinAssistantCache.resource_pressure_payload()
 
 
 def _chat_cache(session_mgr: SessionManager) -> dict:

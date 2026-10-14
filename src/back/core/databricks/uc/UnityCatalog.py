@@ -11,7 +11,7 @@ from typing import Any, Dict, List, Optional
 from urllib.parse import quote
 
 from back.core.logging import get_logger
-from back.core.errors import ValidationError
+from back.core.errors import InfrastructureError, ValidationError
 from shared.config.constants import MSG_WAREHOUSE_ID_REQUIRED
 
 from ..DatabricksAuth import DatabricksAuth
@@ -167,8 +167,9 @@ class UnityCatalog:
     def get_tables(self, catalog: str, schema: str) -> List[str]:
         """Return table names within *catalog*.*schema*.
 
-        Returns an empty list on error (callers rely on this for graceful
-        degradation).
+        Raises:
+            InfrastructureError: the listing failed (warehouse down, missing
+                privilege, …) — distinct from a schema that has no tables.
         """
         fqn = quote_uc_fqn(catalog, schema)
         try:
@@ -179,7 +180,9 @@ class UnityCatalog:
                     return [row[1] for row in cur.fetchall()]
         except Exception as exc:
             logger.exception("Error fetching tables: %s", exc)
-            return []
+            raise InfrastructureError(
+                f"Could not list tables in {catalog}.{schema}", detail=str(exc)
+            ) from exc
 
     def list_tables_and_views(
         self, catalog: str, schema: str
@@ -188,9 +191,14 @@ class UnityCatalog:
 
         Unlike ``get_tables`` (SQL ``SHOW TABLES``), the REST endpoint reports
         each asset's ``table_type`` so callers can distinguish views from
-        tables. No warehouse required. Returns an empty list on error.
+        tables. No warehouse required. Returns an empty list when no
+        workspace credentials are configured.
 
         Each dict has ``name``, ``full_name``, ``table_type`` and ``comment``.
+
+        Raises:
+            InfrastructureError: the REST listing failed (HTTP error, missing
+                privilege, network).
         """
         if not self._auth.host or not self._auth.has_valid_auth():
             return []
@@ -221,7 +229,10 @@ class UnityCatalog:
             return assets
         except Exception as exc:
             logger.exception("Error listing tables and views: %s", exc)
-            return []
+            raise InfrastructureError(
+                f"Could not list tables and views in {catalog}.{schema}",
+                detail=str(exc),
+            ) from exc
 
     def list_functions(self, catalog: str, schema: str) -> List[Dict[str, Any]]:
         """Return user-defined functions in *catalog*.*schema* with their parameters.
@@ -230,7 +241,8 @@ class UnityCatalog:
         ``/functions`` collection endpoint omits ``input_params`` (it is only
         populated when fetching a single function by name), and callers need
         the parameter count to tell which functions are bindable as class
-        actions. Returns an empty list on error.
+        actions. Returns an empty list for an invalid *schema* identifier and
+        raises :class:`InfrastructureError` when the listing query fails.
 
         Each dict has ``name``, ``full_name``, ``comment``, ``input_params``
         (parameter names in declaration order), ``param_count``,
@@ -271,7 +283,9 @@ class UnityCatalog:
                     )
         except Exception as exc:
             logger.exception("Error listing functions: %s", exc)
-            return []
+            raise InfrastructureError(
+                f"Could not list functions in {catalog}.{schema}", detail=str(exc)
+            ) from exc
 
         functions: List[Dict[str, Any]] = []
         for row in rows:
@@ -420,8 +434,10 @@ class UnityCatalog:
         """Return column metadata for *catalog*.*schema*.*table*.
 
         Each dict has ``name``, ``type``, and ``comment`` keys.
-        Returns an empty list on error (callers rely on this for graceful
-        degradation).
+
+        Raises:
+            InfrastructureError: ``DESCRIBE`` failed (missing table, no
+                privilege, warehouse down) — never reported as "no columns".
         """
         fqn = quote_uc_fqn(catalog, schema, table)
         try:
@@ -441,7 +457,10 @@ class UnityCatalog:
                     return columns
         except Exception as exc:
             logger.exception("Error fetching table columns: %s", exc)
-            return []
+            raise InfrastructureError(
+                f"Could not read columns of {catalog}.{schema}.{table}",
+                detail=str(exc),
+            ) from exc
 
     def get_table_comment(self, catalog: str, schema: str, table: str) -> str:
         """Return the table-level comment (empty string if none)."""
