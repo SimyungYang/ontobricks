@@ -1,8 +1,9 @@
 # SPEC: entity-shacl-facets
 
-> **Scope:** a new entity-scoped data-quality check, exposed three ways — a
-> Graph Explorer right-click item opening a popup, a public REST endpoint, and
-> a new MCP tool under `src/mcp-server/**`.
+> **Scope:** a new entity-scoped data-quality check, exposed three ways — the
+> Graph Explorer (right-click item opening a popup, a detail-panel section and
+> a canvas status ring), a public REST endpoint, and a new MCP tool under
+> `src/mcp-server/**`.
 >
 > Not a new Foundation Model agent. OntoBricks does not call the LLM here —
 > this SPEC covers the **tool contract** (a new `check_entity_shacl_facets`
@@ -65,8 +66,10 @@ is the fallback, so a node reached through the Graph Explorer always resolves.
 |---|---|
 | `GET /api/v1/digitaltwin/nodes/shacl` | **New.** Public, `assert_public_graph_read`. Query: `entity_uri`, `domain_name`, `domain_version`, registry overrides |
 | `GET /dtwin/nodes/shacl` | **New.** Internal (UI), `assert_domain_graph_read`, session domain |
-| `GET …/nodes/context` | Gains `shacl_shape_count` (int, selected shapes per §1.1, no evaluation, no warehouse query beyond the existing ones) |
-| Graph Explorer node menu | New **Data quality** section with **Check SHACL facets (N)**, rendered only when `shacl_shape_count > 0` |
+| `GET …/nodes/context` | Gains `shacl_shape_count` (int, shapes selected per §1.1 using the class already resolved by `match_ontology_class`; no evaluation, no extra warehouse query) |
+| Graph Explorer node menu | New **Data quality** section with **Check SHACL facets (N)**, rendered only when `shacl_shape_count > 0` — see §3.5 |
+| Graph Explorer detail panel | New **Data quality** section with a Check button and, once checked, a one-line summary — see §3.5 |
+| Graph Explorer canvas | Checked nodes get a session-only status ring, with a toggle — see §3.5 |
 | MCP `check_entity_shacl_facets(entity_uri)` | **New.** Registered in `MCP_DOMAIN_TOOLS` with `requires_graph: True`, so the per-domain tool toggle governs it |
 | MCP `get_entity_context` / `describe_entity` | `[Context]` block gains `SHACL shapes (N) — call check_entity_shacl_facets(entity_uri) to evaluate` when N > 0 and the tool is enabled |
 
@@ -169,6 +172,152 @@ issues, filtered afterwards.
 3. **No shape injection** — shapes are read from the domain, never from the
    request body (unlike `/dataquality/execute`).
 
+### 3.5 Graph Explorer rendering
+
+Design system: `.cursor/11-frontend-design.mdc`. Three surfaces share one
+client-side result cache, so a check made from any of them shows up in all
+three.
+
+#### 3.5.1 Client cache and module
+
+- New `src/front/static/query/js/query-shacl-facets.js` owns the cache
+  `{ entityUri: { response, checkedAt } }` for the lifetime of the page (same
+  policy as virtual attributes), the fetch to `GET /dtwin/nodes/shacl`, and
+  the three renderers below. Exposes `openShaclFacetsModal(entityUri, meta)`,
+  `renderShaclFacetSection(entityUri, count)`, `getShaclFacetStatus(entityUri)`.
+- New `src/front/static/query/css/query-shacl-facets.css`, built on `ob-*`
+  classes and `--db-status-*` tokens; no inline styles.
+- A check always replaces the cache entry; **Re-check** is the only way to
+  refresh it (no silent re-fetch on reopen).
+- Every completed check emits `shacl-facets:updated` (`CustomEvent` with
+  `entityUri`); the detail panel and the canvas listen for it instead of being
+  called directly.
+
+#### 3.5.2 Node context menu
+
+- New section **Data quality** after **Business rules**, one item
+  `<i class="bi bi-shield-check"></i> Check SHACL facets (N)` with
+  `data-sg-node-action="shacl-facets"`.
+- Rendered only when `meta.shaclShapeCount > 0` (from `shacl_shape_count`)
+  and the node is not a group/cluster super-node.
+- Click ⇒ `openShaclFacetsModal(uri, meta)`; it reuses the cached result when
+  present, otherwise checks.
+
+#### 3.5.3 Popup
+
+Markup lives in a Jinja partial
+`src/front/templates/partials/dtwin/_query_shacl_facets_modal.html`,
+included from `_query_sigmagraph.html`; opened with
+`bootstrap.Modal.getOrCreateInstance(...)`. Classes
+`modal-lg modal-dialog-scrollable modal-fullscreen-md-down`. The
+dataset-preview pattern (markup built from a JS string, `new bootstrap.Modal`
+on each open) is **not** reused — `.cursor/11` forbids both.
+
+```text
+┌─────────────────────────────────────────────────────────────────────┐
+│ 🛡 SHACL facets — ACME Corp   [Customer]  [C-42]                 ✕  │
+├─────────────────────────────────────────────────────────────────────┤
+│ Customer ⊑ Party · 7 shapes · checked 08:32                         │
+│ [✗ 2 failed] [✓ 4 passed] [– 1 not applicable] [? 0 not evaluated]  │
+│                                                                     │
+│ ▾ Completeness                                        1 failed / 2  │
+│   ✗ [Violation]  Customer.email must not be empty                   │
+│        email · sh:minCount 1 · found: (none)                  [▸]   │
+│   ✓              Customer.name must not be empty                    │
+│        name · sh:minCount 1 · found: "ACME Corp"                    │
+│ ▾ Conformance                                         1 failed / 1  │
+│   ✗ [Warning]    Phone must start with +   ↑ inherited from Party   │
+│        phone · sh:pattern ^\+ · found: "06 12 34 56 78"       [▸]   │
+│ ▸ Consistency                                         0 failed / 3  │
+│ ▸ Structural                                 1 not applicable / 1   │
+├─────────────────────────────────────────────────────────────────────┤
+│ Open Data Quality ↗                          [↻ Re-check] [Close]   │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+- **Header** — entity label, class badge, local-ID badge, filled from the
+  menu metadata before the response arrives. The body shows the standard
+  `spinner-border` until then.
+- **Sub-header** — class lineage, shape count, check time.
+- **Summary chips** — one per non-zero status, `--db-radius-chip`, tinted
+  with the semantic status vocabulary (`fail` → danger, `pass` → success,
+  `not_applicable` → draft, `not_evaluated` → info, `error` → warning), each
+  with icon **and** label. Chips are toggle filters; with none active, every
+  facet shows.
+- **Category groups** — Bootstrap accordion, one item per category in
+  `QUALITY_CATEGORIES` order, with the same icon and colour as the Data
+  Quality tab (`bi-check2-all` completeness, `bi-123` cardinality,
+  `bi-fingerprint` uniqueness, `bi-link-45deg` consistency, `bi-regex`
+  conformance, `bi-diagram-3` structural). Header count: `N failed / M`
+  (or `N not applicable / M` when nothing failed and some were skipped).
+  Groups with a `fail` or `error` start expanded; the others collapsed.
+  Empty categories are not rendered.
+- **Facet row**, in the §3.2 order:
+  - line 1: status icon (`bi-x-circle-fill` fail, `bi-check-circle-fill`
+    pass, `bi-dash-circle` not applicable, `bi-question-circle`
+    not evaluated, `bi-exclamation-triangle-fill` error) with a visually
+    hidden status label; severity badge on `fail`/`error` only; shape label;
+    `↑ inherited from <Class>` badge when `inherited_from` is set.
+  - line 2 (muted, small): property path, constraint in `<code>`, then
+    `found:` with up to 5 value chips, `+N more` expander when
+    `values.length > 5` or `values_truncated`, `(none)` when empty. Omitted
+    for shapes without a property.
+  - expander `[▸]` (only when there is something to show): the `details`
+    rows as a compact `table-sm` (fail), the engine message (error),
+    "This constraint type cannot be checked with SQL" (not evaluated), or the
+    shape's condition summary (not applicable).
+- **Footer** — `Open Data Quality ↗` (link to Ontology → Data Quality),
+  `Re-check` (`btn-outline-primary`, spinner while running), `Close`.
+- **Empty state** — no facets: `bi-shield` icon, "No SHACL shape applies to
+  *Customer*", link to Ontology → Data Quality.
+- **Request failure** — `showNotification(msg, 'error')` and an in-body empty
+  state with a **Retry** button; no ad-hoc alert banner.
+
+#### 3.5.4 Detail panel section
+
+- New collapsible `entity-detail-section` **Data quality**
+  (`bi-shield-check`), placed after the Virtual attributes section, rendered
+  only when `shacl_shape_count > 0`.
+- Unchecked: `N SHACL shapes apply` + `Check` button
+  (`btn-sm btn-outline-primary w-100`).
+- Checked: one line of status chips (same vocabulary as the popup, compact),
+  check time, and two buttons — `Details` (opens the popup from the cache)
+  and `Re-check`.
+- Re-renders on `shacl-facets:updated` for the selected entity, so a check
+  made from the context menu fills the panel too.
+
+#### 3.5.5 Canvas status ring
+
+- `_nodeReducer` gains one step: when the **Quality** toggle is on and
+  `getShaclFacetStatus(node)` returns a status, set `borderColor` and
+  `borderSize = 3`:
+
+  | Node status | Ring |
+  |---|---|
+  | any `fail` with `sh:Violation` | danger |
+  | `fail` with `sh:Warning`/`sh:Info` only, or any `error` | warning |
+  | every facet `pass` or `not_applicable` | success |
+  | otherwise (some `not_evaluated`, no fail) | no ring |
+
+  Colours are read once from `--db-status-*` via `getComputedStyle` (Sigma
+  needs concrete values).
+- Precedence: seed highlight and Find-Path highlight are applied **after**
+  the ring, so they win; group/cluster super-nodes never get a ring.
+- Toggle: inline checkbox **Quality** (`id="sgShowQualityRings"`,
+  `data-sg-change="toggleQualityRings"`) in the header toolbar next to
+  **Inferred**, checked by default, disabled until at least one node has
+  been checked. Toggling calls `refresh` only — no fetch.
+- Session-only: rings cover the nodes the user actually checked; nothing is
+  persisted and no bulk check is triggered.
+
+#### 3.5.6 Accessibility and responsiveness
+
+- Status is never colour-only: icon + label in the popup and panel; the
+  ring is supplementary (the panel states the same status in text).
+- Keyboard: menu items and chips are focusable buttons; accordion and
+  expanders use Bootstrap's `aria-expanded`.
+- Below `md` the popup is full-screen and facet line 2 wraps under line 1.
+
 ## 4. Success criteria
 
 1. **Own, inherited and global shapes are all listed**
@@ -195,7 +344,16 @@ issues, filtered afterwards.
    - right-click a node whose class has shapes ⇒ menu item with the count;
      click ⇒ modal with summary chips and facets grouped by category,
      failures first. No item when the count is 0.
-8. **MCP**
+   - clicking the `failed` chip hides every non-failed facet; clicking it
+     again restores them.
+8. **Detail panel and canvas stay in sync**
+   - check from the context menu with the entity selected ⇒ the panel's
+     Data quality section shows the summary without a second request, and
+     the node gets its ring.
+   - **Re-check** after fixing the data ⇒ panel, popup and ring all update.
+   - unticking **Quality** removes every ring without a request; seed and
+     Find-Path highlights still override a ring.
+9. **MCP**
    - "Is customer C-42 compliant with our data-quality rules?" ⇒ the model
      calls `check_entity_shacl_facets` and names the failing constraints and
      their observed values.
@@ -255,10 +413,19 @@ pastes the run URI under "MLflow eval run" per `.cursor/12`.
 - Route tests for both endpoints (public guard, missing entity, no shapes).
 - `tests/…/mcp` formatting test for `check_entity_shacl_facets` and the
   `[Context]` hint, plus the disabled-tool case.
+- `tests/units/front/test_shacl_facets_ui.py` — structural contract: the
+  modal partial is included once, uses `getOrCreateInstance` and no inline
+  styles; the menu item and the panel section are gated on
+  `shacl_shape_count`; the status → icon/label/tint and node → ring mappings
+  of §3.5.3 / §3.5.5; the **Quality** toggle exists next to **Inferred**.
+- Browser check (frontend-design skill step 5): desktop and below-`md`
+  widths, keyboard focus through menu → popup → chips → expanders, no
+  console or network errors.
 
 ## 10. Sign-off
 
 - [ ] Contracts in §3 reviewed.
+- [ ] Rendering in §3.5 reviewed.
 - [ ] Eval dataset committed (10 examples).
 - [ ] Baseline eval run URI pasted into PR body.
 - [ ] Aggregate threshold ≥ `0.90`.
