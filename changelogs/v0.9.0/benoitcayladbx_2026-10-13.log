@@ -663,5 +663,203 @@ Modified files:
 
 Tests: `uv run --frozen pytest -q tests/units/front/test_ontology_split_panel_layout.py` → 24 passed, 1 warning in 0.17s.
 
+================================================================================
+## Bind Databricks Jobs as class actions
+================================================================================
+
+Context:
+Ontology Studio Actions already bound Unity Catalog functions. Authors also
+need to start an existing workspace Job with `entity_id` (Spark still uses
+the Job run-as identity). OntoBricks only calls `run_now`, tracks the run
+in navbar Background Tasks, and allow-lists `job:<job_id>` from Explorer
+and MCP. Lakehouse App mode triggers OBO with the forwarded user token.
+
+Changes:
+
+1. src/back/core/databricks/jobs/JobActionRunner.py
+   List Jobs that declare `entity_id`, `run_now`, poll `get_run`; Lakehouse
+   App mode uses the caller token (fail-closed).
+2. src/back/objects/digitaltwin/node/JobActionService.py
+   Allow-list invoke, debounce in-flight runs, TaskManager `entity_job_action`.
+3. src/back/objects/digitaltwin/node/NodeContextService.py
+   `class_action_entries` and `invoke_action` branch on `kind=job`.
+4. src/api/routers/internal/settings.py
+   `GET /settings/jobs` for the Studio picker.
+5. src/front/static/ontology/js/ontology-shared-panels.js
+   Actions tab Jobs box, picker, save concat with UC functions.
+6. src/front/static/query/js/query-dashboard.js
+   Job invoke toasts "Running in Background Tasks" (no UC result modal).
+7. src/front/static/query/js/query-entity-details.js
+   Explorer details Run buttons for Jobs (`bi-play-circle`).
+8. src/front/static/query/js/query-sigmagraph.js
+   Details pane and right-click menu for Jobs.
+9. src/front/static/global/js/task-tracker.js
+   `entity_job_action` type; completion notification can link `run_page_url`.
+10. src/mcp-server/server/formatting.py
+    Context and invoke responses list Jobs and return `task_id` / `run_id`.
+11. src/mcp-server/server/tools.py
+    `invoke_entity_action` accepts `job:<id>` as well as a UC FQN.
+12. docs/user-guide.md, docs/mcp.md, docs/api.md, docs/architecture.md
+    Document Job class actions, OBO, and Background Tasks.
+
+Modified files:
+- src/back/core/databricks/jobs/JobActionRunner.py
+- src/back/core/databricks/jobs/__init__.py
+- src/back/objects/digitaltwin/node/JobActionService.py
+- src/back/objects/digitaltwin/node/NodeContextService.py
+- src/back/objects/digitaltwin/node/__init__.py
+- src/back/objects/domain/settings/RegistrySettings.py
+- src/back/objects/domain/settings/SettingsService.py
+- src/api/routers/digitaltwin.py
+- src/api/routers/internal/settings.py
+- src/back/core/mcp_tools.py
+- src/front/static/ontology/js/ontology-shared-panels.js
+- src/front/static/query/js/query-dashboard.js
+- src/front/static/query/js/query-entity-details.js
+- src/front/static/query/js/query-sigmagraph.js
+- src/front/static/global/js/task-tracker.js
+- src/mcp-server/server/formatting.py
+- src/mcp-server/server/tools.py
+- examples/mcp_client.py
+- docs/user-guide.md
+- docs/mcp.md
+- docs/api.md
+- docs/architecture.md
+- docs/sphinx/api/app.core.databricks.rst
+- docs/sphinx/api/app.objects.digitaltwin.rst
+- tests/units/dtwin/test_class_action_entries.py
+- tests/units/core/test_job_action_runner.py
+- tests/units/api/test_node_job_action.py
+- tests/units/front/test_class_actions_ui.py
+- tests/units/front/test_task_tracker_job_actions.py
+- tests/units/settings/test_settings_jobs.py
+- tests/units/mcp/test_node_action_formatting.py
+- changelogs/v0.9.0/benoitcayladbx_2026-10-13.log
+
+Tests: `uv run --frozen pytest -q -m "not scenario"` → 9109 passed, 326 skipped, 6 deselected, 1 xfailed, 40 warnings in 56.04s.
+
+================================================================================
+## Add create/delete fake-contract test Jobs
+================================================================================
+
+Context:
+Class Actions will bind Databricks Jobs that declare `entity_id`. Add two
+test-only Job scripts (create a fake contract, delete a contract) to try the
+Job Action path. They are not declared in the bundle; the Jobs are created
+by hand in the workspace.
+
+Changes:
+
+1. src/jobs/contract_demo.py
+   `ContractDemoTable`: Delta DDL, fake row, delete SQL (contract id or FAKE-* customer); manual Job setup notes.
+2. src/jobs/create_fake_contract_job.py
+   Spark entry: insert one fake contract for `entity_id`.
+3. src/jobs/delete_contract_job.py
+   Spark entry: delete matching contract / fake customer rows.
+4. tests/units/jobs/test_contract_demo_jobs.py
+   Argparse, row/SQL contracts, and a guard that no bundle resource declares them; no live Spark.
+
+Modified files:
+- src/jobs/contract_demo.py
+- src/jobs/create_fake_contract_job.py
+- src/jobs/delete_contract_job.py
+- tests/units/jobs/test_contract_demo_jobs.py
+- changelogs/v0.9.0/benoitcayladbx_2026-10-13.log
+
+Tests: `uv run --frozen pytest -q tests/units/jobs/test_contract_demo_jobs.py tests/units/settings/test_bundle_job_resource.py` → 28 passed, 1 warning in 0.23s.
+
+================================================================================
+## Add tests for Job class actions
+================================================================================
+
+Context:
+Job entity actions shipped with smoke coverage (allow-list, runner happy path,
+one invoke). Add behavioral tests for OBO, failed runs, TaskManager debounce,
+409 conflict, nodes/context, MCP `job:<id>` formatting, and Explorer/Studio
+contracts.
+
+Changes:
+
+1. tests/units/dtwin/test_job_action_service.py
+   Invoke creates `entity_job_action`; conflict / notebook / invalid id;
+   poll completes or fails the task.
+2. tests/units/core/test_job_action_runner.py
+   Failed run, missing run id, `class_job_entry`, Lakehouse OBO token.
+3. tests/units/api/test_node_job_action.py
+   Duplicate run 409, context lists jobs, disabled MCP policy blocks jobs.
+4. tests/units/front/test_class_actions_ui.py
+   Explorer job icon, skip UC modal, refresh Background Tasks.
+5. tests/units/front/test_task_tracker_job_actions.py
+   Completion notification links `run_page_url`.
+6. tests/units/mcp/test_node_action_formatting.py
+   Mixed UC + Job context listings.
+7. tests/mcp/integration/test_dataset_context_tools.py
+   `invoke_entity_action` posts `job:42` and formats the async start.
+
+Modified files:
+- tests/units/dtwin/test_job_action_service.py
+- tests/units/core/test_job_action_runner.py
+- tests/units/api/test_node_job_action.py
+- tests/units/front/test_class_actions_ui.py
+- tests/units/front/test_task_tracker_job_actions.py
+- tests/units/mcp/test_node_action_formatting.py
+- tests/mcp/integration/test_dataset_context_tools.py
+- changelogs/v0.9.0/benoitcayladbx_2026-10-13.log
+
+Tests: `uv run --frozen pytest -q -m "not scenario"` → 9132 passed, 326 skipped, 6 deselected, 1 xfailed, 40 warnings in 54.99s.
+
+================================================================================
+## Rewrite V0.9.0 release notes from the full changelog
+================================================================================
+
+Context:
+The published `releases/ReleaseNotes_V0.9.0.md` still described only the
+early-September Lakehouse//RT and Explorer slice. Operators needed a
+product summary that also covers staged Generate, Knowledge Store, GitHub
+mirror, Studio, SWRL, Job actions, SPARQL, OBO, and later reliability work.
+
+Changes:
+
+1. releases/ReleaseNotes_V0.9.0.md
+   Replace highlights and body with the September–October 0.9.0 feature set,
+   selected bug fixes, security table, and upgrade notes (Knowledge Store,
+   GitHub mirror, MCP tools).
+2. releases/Roadmap_2026-09.md
+   Align the executive summary with the rewritten notes; mark Knowledge
+   Store and three-stage Generate as shipped.
+
+Modified files:
+- releases/ReleaseNotes_V0.9.0.md
+- releases/Roadmap_2026-09.md
+- changelogs/v0.9.0/benoitcayladbx_2026-10-13.log
+
+Tests: `uv run --frozen pytest -q -m "not scenario"` → 9130 passed, 326 skipped, 6 deselected, 1 xfailed, 40 warnings in 57.56s.
+
+================================================================================
+## List Job actions from Spark task args, not jobs.list parameters
+================================================================================
+
+Context:
+Add Databricks Job showed "No jobs with an entity_id parameter" even for
+Jobs that declare `entity_id`. `jobs.list` omits `settings.parameters`;
+`expand_tasks` returns Spark `--entity-id` / `{{job.parameters.entity_id}}`.
+
+Changes:
+
+1. src/back/core/databricks/jobs/JobActionRunner.py
+   List with `expand_tasks=True`; treat Spark/notebook task args as the
+   `entity_id` signal when job-level parameters are missing from list.
+2. tests/units/core/test_job_action_runner.py
+   Spark-python arg contract and expand_tasks on list.
+
+Modified files:
+- src/back/core/databricks/jobs/JobActionRunner.py
+- tests/units/core/test_job_action_runner.py
+- changelogs/v0.9.0/benoitcayladbx_2026-10-13.log
+
+Tests: `uv run --frozen pytest -q -m "not scenario"` → 9132 passed, 326 skipped, 6 deselected, 1 xfailed, 40 warnings in 61.71s.
+
+
+
 
 

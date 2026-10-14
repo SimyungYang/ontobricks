@@ -859,18 +859,14 @@ def register_tools(mcp: FastMCP, session: MCPServerSession) -> None:
 
     @mcp.tool()
     async def invoke_entity_action(entity_uri: str, action: str) -> str:
-        """Run a Unity Catalog function action configured on an entity's class.
+        """Run a UC function or Job (job:<id>) declared on the entity's class.
 
-        Requires a domain to be selected first via select_domain. Discover the
-        available actions with get_entity_context or describe_entity — only
-        functions declared on the entity's ontology class can be invoked.
-
-        The function is called with exactly one argument: the entity's local ID,
-        derived server-side from *entity_uri*.
+        Requires select_domain. Discover names via get_entity_context. UC
+        functions receive the entity local ID; Jobs start in Background Tasks.
 
         Args:
             entity_uri: Full URI of the entity (e.g. from describe_entity).
-            action: Fully qualified function name (catalog.schema.function).
+            action: catalog.schema.function or job:<job_id>.
         """
         blocked = session.require_domain("invoke_entity_action")
         if blocked:

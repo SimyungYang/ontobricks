@@ -261,6 +261,20 @@ async def get_uc_functions(
     )
 
 
+@router.get("/jobs")
+async def get_entity_jobs(
+    q: str = "",
+    session_mgr: SessionManager = Depends(get_session_manager),
+    settings: Settings = Depends(get_settings),
+):
+    """List Databricks Jobs that declare an entity_id parameter (class Job picker)."""
+    from back.objects.domain.settings.RegistrySettings import RegistrySettings
+
+    return await RegistrySettings.fetch_entity_jobs(
+        session_mgr, settings, query=q
+    )
+
+
 # ===========================================
 # Domain Registry
 # ===========================================

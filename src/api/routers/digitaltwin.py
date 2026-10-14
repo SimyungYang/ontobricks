@@ -237,15 +237,19 @@ class NodeContextBridge(BaseModel):
 
 
 class NodeContextAction(BaseModel):
-    """A Unity Catalog function bound to the node's ontology class.
+    """A class action: Unity Catalog function or Databricks Job.
 
-    The function takes exactly one parameter: the ID of the entity to act on.
+    UC functions take exactly one parameter (entity ID). Jobs are identified
+    as ``job:<job_id>`` and must declare an ``entity_id`` job parameter.
     """
 
     fullName: str
     function: str = ""
     description: Optional[str] = None
     returns_table: bool = False
+    kind: Optional[str] = None
+    job_id: Optional[int] = None
+    job_name: Optional[str] = None
 
 
 class NodeContextBusinessRule(BaseModel):
@@ -298,7 +302,8 @@ class NodeContextResponse(BaseModel):
 class NodeActionRequest(BaseModel):
     entity_uri: str = Field(..., description="Instance URI of the node to act on")
     action_full_name: str = Field(
-        ..., description="Fully qualified UC function name (catalog.schema.function)"
+        ...,
+        description="UC function FQN (catalog.schema.function) or job:<job_id>",
     )
     domain_name: Optional[str] = Field(None, description="Domain name in the registry")
     domain_version: Optional[str] = Field(None, description="Domain version to load")
@@ -313,8 +318,12 @@ class NodeActionResponse(BaseModel):
     entity_local_id: str = ""
     class_name: Optional[str] = None
     action: Optional[str] = None
+    kind: Optional[str] = None
     returns_table: bool = False
     rows: Optional[List[Dict[str, Any]]] = None
+    task_id: Optional[str] = None
+    run_id: Optional[int] = None
+    run_page_url: Optional[str] = None
     message: Optional[str] = None
 
 

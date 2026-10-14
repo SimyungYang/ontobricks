@@ -30,7 +30,8 @@ const TASK_TYPE_URLS = {
     'triplestore_sync': '/dtwin#sync',
     'registry_archive': '/dtwin#sync',
     'quality_checks': '/dtwin#quality',
-    'graph_analytics': '/dtwin#analytics'
+    'graph_analytics': '/dtwin#analytics',
+    'entity_job_action': '/dtwin'
 };
 
 // =====================================================
@@ -134,13 +135,17 @@ function notifyTaskTransition(task) {
     const durSuffix = duration ? ` <span class="text-muted small">(in ${duration})</span>` : '';
     let type = 'info';
     let body;
+    const runUrl = task.result && task.result.run_page_url;
+    const runLink = runUrl
+        ? ` <a href="${escapeHtml(runUrl)}" target="_blank" rel="noopener">Open run</a>`
+        : '';
     if (task.status === 'completed') {
         type = 'success';
-        body = `Task <strong>${name}</strong> completed${durSuffix}`;
+        body = `Task <strong>${name}</strong> completed${durSuffix}${runLink}`;
     } else if (task.status === 'failed') {
         type = 'error';
         const err = task.error || task.message || 'Unknown error';
-        body = `Task <strong>${name}</strong> failed${durSuffix}: ${escapeHtml(err)}`;
+        body = `Task <strong>${name}</strong> failed${durSuffix}: ${escapeHtml(err)}${runLink}`;
     } else if (task.status === 'cancelled') {
         type = 'warning';
         body = `Task <strong>${name}</strong> cancelled${durSuffix}`;

@@ -13,9 +13,9 @@
 
 OntoBricks is a Databricks-native semantic engineering platform: teams design OWL ontologies, map Unity Catalog data, build interchangeable Lakehouse/Lakebase/Neo4j knowledge graphs, apply rules and reasoning, and publish governed graph capabilities through REST, GraphQL, Graph Chat, and MCP.
 
-Version 0.8.0 closed the most immediate product-integrity gaps and broadened the AI-facing surface. Version 0.9.0 adds Lakehouse//RT query support (split Build vs Query warehouses, Statement Execution API, CloudFetch control), faster Knowledge Graph Explorer first paint and search timing, navbar New Version, Unity Catalog digit-leading table names, and related reliability fixes. See `releases/ReleaseNotes_V0.9.0.md`.
+Version 0.8.0 closed the most immediate product-integrity gaps and broadened the AI-facing surface. Version 0.9.0 adds Lakehouse//RT queries, staged Ontology Generate, Knowledge Store, GitHub domain mirror, faster Explorer, SPARQL playground, entity SWRL rules, Job class actions, Ontology Studio, and OBO / No-LLM gates. See `releases/ReleaseNotes_V0.9.0.md`.
 
-The Asana board still owns the remaining **authoring-journey** work originally listed under v0.9.0 (durable parsed documents, three-stage Generate, selective Auto-Map). Those items are not delivered in this release.
+Durable parsed documents (Knowledge Store) and three-stage Generate shipped in v0.9.0. The Asana board still owns remaining authoring-journey work, notably selective Auto-Map.
 
 The forward roadmap is now driven primarily by the active **OntoBricks-Product** Asana board:
 

@@ -135,6 +135,31 @@ class RegistrySettings:
             raise InfrastructureError(f"{log_label} failed", detail=str(e)) from e
 
     @staticmethod
+    async def fetch_entity_jobs(
+        session_mgr: SessionManager,
+        settings: Settings,
+        *,
+        query: str = "",
+        log_label: str = "Get entity jobs",
+    ) -> Dict[str, Any]:
+        """List workspace Jobs that declare an ``entity_id`` parameter."""
+        from back.core.databricks.jobs import JobActionRunner
+
+        try:
+            domain = get_domain(session_mgr)
+            runner = JobActionRunner.from_domain(domain, settings)
+            jobs = await run_blocking(runner.list_entity_jobs)
+            needle = (query or "").strip().lower()
+            if needle:
+                jobs = [j for j in jobs if needle in str(j.get("name") or "").lower()]
+            return {"success": True, "jobs": jobs}
+        except OntoBricksError:
+            raise
+        except Exception as e:
+            logger.exception("%s failed: %s", log_label, e)
+            raise InfrastructureError(f"{log_label} failed", detail=str(e)) from e
+
+    @staticmethod
     async def check_lakebase_permissions(
         session_mgr: SessionManager, settings: Settings
     ) -> Dict[str, Any]:

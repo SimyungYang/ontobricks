@@ -185,6 +185,14 @@ NodeContextService class
    :undoc-members:
    :show-inheritance:
 
+JobActionService class
+----------------------
+
+.. automodule:: back.objects.digitaltwin.node.JobActionService
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 VirtualAttributeService class
 -----------------------------
 

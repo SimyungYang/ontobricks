@@ -99,8 +99,8 @@ MCP_DOMAIN_TOOLS: tuple[Dict[str, Any], ...] = (
     {
         "name": "invoke_entity_action",
         "label": "Invoke entity action",
-        "description": "Run a Unity Catalog function declared on the entity's "
-        "class.",
+        "description": "Run a Unity Catalog function or Databricks Job declared "
+        "on the entity's class.",
         "requires_graph": True,
     },
     {

@@ -76,7 +76,7 @@ _TOOL_DESCRIPTIONS: dict[str, str] = {
     "compute_virtual_attributes":
         "Compute live (non-stored) virtual attributes for an entity via UC functions.",
     "invoke_entity_action":
-        "Run a UC function action on an entity.",
+        "Run a UC function or Databricks Job (job:<id>) on an entity.",
     "run_entity_business_rule":
         "Trigger a SWRL business rule declared on an entity's class; WRITES the "
         "inferred triples. Needs the Builder role.",

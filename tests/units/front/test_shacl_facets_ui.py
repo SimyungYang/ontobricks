@@ -87,7 +87,8 @@ def test_context_menu_item_is_gated_on_the_shape_count():
     body = _function_body(_read(SIGMA_JS), "_showNodeContextMenu")
     assert "shaclShapeCount" in body
     assert 'data-sg-node-action="shacl-facets"' in body
-    assert "Check SHACL facets (" in body
+    assert "Data Quality Checks (" in body
+    assert "SHACL facets" not in body
     assert "'Data quality'" in body or ">Data quality<" in body
 
 
@@ -136,6 +137,39 @@ def test_modal_is_opened_idempotently():
     js = _read(SHACL_JS)
     assert "bootstrap.Modal.getOrCreateInstance(" in js
     assert "new bootstrap.Modal(" not in js
+
+
+def test_popup_is_titled_data_quality_checks():
+    html = _read(MODAL_HTML)
+    assert "Data Quality Checks" in html
+    assert "SHACL facets" not in html
+    js = _read(SHACL_JS)
+    assert "Checking SHACL facets" not in js
+
+
+def test_popup_shows_one_gauge_per_dimension():
+    """Score = passed / (passed + failed); unchecked shapes do not count."""
+    assert 'id="shaclFacetsGauges"' in _read(MODAL_HTML)
+    js = _read(SHACL_JS)
+    body = js[js.find("function _shaclGaugesHtml("):]
+    assert "function _shaclGaugesHtml(" in js
+    assert "data-shacl-gauge" in body
+    assert "<svg" in body and 'aria-hidden="true"' in body
+    assert "passed" in body
+
+
+def test_gauge_colours_come_from_the_status_tokens():
+    css = _read(SHACL_CSS)
+    assert ".shacl-gauge" in css
+    assert not re.search(r"#[0-9a-fA-F]{3,6}\b", css)
+
+
+def test_dimension_sections_start_collapsed():
+    js = _read(SHACL_JS)
+    body = js[js.find("function _shaclCategoriesHtml("):js.find("function _shaclFacetRowHtml(")]
+    assert 'accordion-button collapsed' in body
+    assert 'aria-expanded="false"' in body
+    assert "collapse show" not in body
 
 
 def test_modal_has_recheck_and_data_quality_link():

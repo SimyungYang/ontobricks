@@ -39,6 +39,55 @@ logger = get_logger(__name__)
 _RDF_TYPE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type"
 
 
+async def _invoke_uc_function(
+    domain: Any,
+    settings: Any,
+    *,
+    entity_uri: str,
+    local_id: str,
+    class_name: str,
+    dname: str,
+    action: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Execute an allow-listed Unity Catalog function as the caller (OBO)."""
+    full_name = action["fullName"]
+    returns_table = action["returns_table"]
+    client_db = get_data_plane_client(domain, settings)
+    if client_db is None:
+        raise InfrastructureError("Databricks client is not configured")
+    arg = f"'{sql_escape(local_id)}'"
+    sql = (
+        f"SELECT * FROM {full_name}({arg})"
+        if returns_table
+        else f"SELECT {full_name}({arg}) AS result"
+    )
+    try:
+        result = await run_blocking(client_db.execute_query, sql)
+        rows = result if isinstance(result, list) else []
+    except Exception as exc:
+        logger.warning("nodes/action: %s failed for %s: %s", full_name, entity_uri, exc)
+        raise InfrastructureError(
+            str(exc) or "Action invocation failed", detail=str(exc)
+        ) from exc
+    logger.info(
+        "nodes/action: entity=%s class=%s domain=%s action=%s rows=%d",
+        local_id,
+        class_name,
+        dname,
+        full_name,
+        len(rows),
+    )
+    return {
+        "success": True,
+        "entity_uri": entity_uri,
+        "entity_local_id": local_id,
+        "class_name": class_name,
+        "action": full_name,
+        "returns_table": returns_table,
+        "rows": rows,
+    }
+
+
 class NodeContextService:
     """Ontology-backed node context resolution and UC action invocation."""
 
@@ -113,14 +162,19 @@ class NodeContextService:
     def class_action_entries(cls: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Return the class's UC function actions, keeping only usable entries.
 
-        Each action binds a Unity Catalog function that takes exactly one
-        parameter: the ID of the entity being acted on. Entries without a
-        syntactically valid ``fullName`` are dropped rather than raising, so a
-        single bad entry never breaks the whole node context.
+        Each UC function takes exactly one parameter (entity ID). Job entries
+        (``kind=job``) bind a workspace Job id. Bad entries are skipped so one
+        broken declaration never hides the rest of the class.
         """
+        from back.core.databricks.jobs import class_job_entry
+
         entries: List[Dict[str, Any]] = []
         for action in cls.get("actions") or []:
             if not isinstance(action, dict):
+                continue
+            job = class_job_entry(action)
+            if job is not None:
+                entries.append(job)
                 continue
             full_name = str(action.get("fullName") or "").strip()
             if not full_name or not _SAFE_SQL_IDENT.match(full_name):
@@ -128,6 +182,7 @@ class NodeContextService:
                 continue
             entries.append(
                 {
+                    "kind": "uc_function",
                     "fullName": full_name,
                     "function": str(
                         action.get("function") or extract_local_name(full_name) or ""
@@ -471,7 +526,7 @@ class NodeContextService:
         action_full_name: str,
         context_policy: Optional[Dict[str, str]] = None,
     ) -> Dict[str, Any]:
-        """Invoke a class-declared Unity Catalog function for *entity_uri*.
+        """Invoke a class-declared UC function or Databricks Job for *entity_uri*.
 
         A domain that disabled the ``actions`` context element refuses every
         invocation, independently of whether the ``invoke_entity_action`` MCP
@@ -517,49 +572,26 @@ class NodeContextService:
                 f"Action {requested!r} is not configured on class {class_name!r}"
             )
 
-        full_name = action["fullName"]
-        returns_table = action["returns_table"]
+        from back.core.databricks.jobs import JOB_KIND
+        from back.objects.digitaltwin.node.JobActionService import JobActionService
 
-        # OBO: a Class Action runs a UC function; execute as the caller.
-        client_db = get_data_plane_client(domain, settings)
-        if client_db is None:
-            raise InfrastructureError("Databricks client is not configured")
-
-        arg = f"'{sql_escape(local_id)}'"
-        sql = (
-            f"SELECT * FROM {full_name}({arg})"
-            if returns_table
-            else f"SELECT {full_name}({arg}) AS result"
-        )
-        try:
-            result = await run_blocking(client_db.execute_query, sql)
-            rows = result if isinstance(result, list) else []
-        except Exception as exc:
-            logger.warning(
-                "nodes/action: %s failed for %s: %s", full_name, entity_uri, exc
+        if action.get("kind") == JOB_KIND:
+            return await JobActionService.invoke(
+                domain,
+                settings,
+                entity_uri=entity_uri,
+                action=action,
+                matched_cls=matched_cls,
             )
-            raise InfrastructureError(
-                str(exc) or "Action invocation failed", detail=str(exc)
-            ) from exc
-
-        logger.info(
-            "nodes/action: entity=%s class=%s domain=%s action=%s rows=%d",
-            local_id,
-            class_name,
-            dname,
-            full_name,
-            len(rows),
+        return await _invoke_uc_function(
+            domain,
+            settings,
+            entity_uri=entity_uri,
+            local_id=local_id,
+            class_name=class_name,
+            dname=dname,
+            action=action,
         )
-
-        return {
-            "success": True,
-            "entity_uri": entity_uri,
-            "entity_local_id": local_id,
-            "class_name": class_name,
-            "action": full_name,
-            "returns_table": returns_table,
-            "rows": rows,
-        }
 
     @staticmethod
     def resolve_business_rule(

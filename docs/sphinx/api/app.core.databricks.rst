@@ -125,6 +125,14 @@ Workspace Service
    :undoc-members:
    :show-inheritance:
 
+Job actions
+-----------
+
+.. automodule:: back.core.databricks.jobs.JobActionRunner
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 Dashboard Service
 -----------------
 

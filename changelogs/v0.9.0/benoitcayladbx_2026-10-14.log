@@ -157,3 +157,96 @@ Modified files:
 
 Tests: `uv run --frozen pytest -q -m "not scenario"` → 9215 passed, 326 skipped, 6 deselected, 1 xfailed, 40 warnings in 55.91s (full working tree). The committed snapshot alone (without the uncommitted Job-action work) → 9171 passed, 326 skipped, 6 deselected, 1 xfailed.
 Manual: on the local server, new assets serve (200), `/api/v1/domain/classes` returns real counts (cust360auto: Customer 22, Contract 11), and `/dtwin/nodes/shacl` on an unbuilt graph returns a readable 502. No local domain has a built graph, so a live facet evaluation was not possible.
+
+================================================================================
+## Rename to "Data Quality Checks", add per-dimension gauges, collapse sections
+================================================================================
+
+Context:
+User request: rename the Explorer right-click item and the popup from
+"SHACL facets" to "Data Quality Checks", show gauges by dimension in the
+popup, and collapse the dimension sections by default. A follow-up removed
+the grey border drawn around each gauge.
+
+Changes:
+
+1. src/front/static/query/js/query-sigmagraph.js
+   Context-menu item reads "Data Quality Checks (N)"; the unavailable
+   fallback notification reads "Data quality checks are unavailable.".
+2. src/front/templates/partials/dtwin/_query_shacl_facets_modal.html
+   Title "Data Quality Checks — <entity>"; new `#shaclFacetsGauges`
+   container above the status chips.
+3. src/front/static/query/js/query-shacl-facets.js
+   `_shaclGroups` (dimension grouping shared by gauges and accordion),
+   `_shaclGaugesHtml` (one SVG half-gauge per dimension, score =
+   passed / (passed + failed), "—" when nothing was checked, label and
+   "P of C passed" as text), `_shaclExpandSection`. Accordion sections start
+   collapsed; a status filter chip expands sections holding a match;
+   clicking a gauge expands and scrolls to its section. Loading and error
+   strings renamed.
+4. src/front/static/query/css/query-shacl-facets.css
+   Gauge grid, arc and tone classes on the `--db-status-*` tokens (Data
+   Quality tab thresholds: 100 % success, >= 80 % warning, below danger,
+   unchecked draft). No border around a gauge; light hover background.
+5. tests/units/front/test_shacl_facets_ui.py
+   Menu label, popup title, gauges, token-only colours, collapsed sections.
+6. docs/user-guide.md, .planning/entity-shacl-facets/SPEC.md
+   Label, gauges and collapsed sections documented (SPEC §3.5.2 / §3.5.3).
+
+Modified files:
+- src/front/static/query/js/query-sigmagraph.js
+- src/front/templates/partials/dtwin/_query_shacl_facets_modal.html
+- src/front/static/query/js/query-shacl-facets.js
+- src/front/static/query/css/query-shacl-facets.css
+- tests/units/front/test_shacl_facets_ui.py
+- docs/user-guide.md
+- .planning/entity-shacl-facets/SPEC.md
+
+Tests: `uv run --frozen pytest -q -m "not scenario"` → 9221 passed, 326 skipped, 6 deselected, 1 xfailed, 40 warnings in 55.60s. After the gauge border tweak: `tests/units/front` → 1549 passed.
+
+================================================================================
+## Explorer Details tab: every section starts collapsed
+================================================================================
+
+Context:
+User request: when an entity is selected in the Graph Explorer, all sections
+of the Details tab should be collapsed by default (Entity Info, Attributes,
+Virtual Attributes, Data quality, Dashboard, Dataset, Actions, Business
+rules, Bridges, Outgoing, Incoming).
+
+Changes:
+
+1. src/front/static/query/js/query-sigmagraph.js
+   `_sec(icon, title, body)` always renders `entity-detail-section collapsed`;
+   the `startOpen` flag is removed from the helper and its 11 call sites.
+2. tests/units/front/test_explorer_detail_sections.py
+   New. The helper renders collapsed and no call passes an open flag
+   (fails on the previous code).
+
+Modified files:
+- src/front/static/query/js/query-sigmagraph.js
+- tests/units/front/test_explorer_detail_sections.py
+
+Tests: `uv run --frozen pytest -q -m "not scenario"` → 9221 passed, 326 skipped, 6 deselected, 1 xfailed, 40 warnings in 55.60s.
+
+================================================================================
+## Release notes V0.9.0: entity Data Quality Checks
+================================================================================
+
+Context:
+User request: update the release notes. The V0.9.0 notes already covered the
+changelogs up to 2026-10-13; today's entity check feature was missing.
+
+Changes:
+
+1. releases/ReleaseNotes_V0.9.0.md
+   Highlight bullet; "Entity Data Quality Checks" subsection under Knowledge
+   Graph Explorer (shape selection, entry points, evaluation, popup gauges,
+   canvas ring); documentation list; bug fix (unbuilt graph returns a
+   readable 502 instead of 500); Upgrade Notes for `/nodes/shacl`,
+   `shacl_shape_count` and the MCP tool `check_entity_shacl_facets`.
+
+Modified files:
+- releases/ReleaseNotes_V0.9.0.md
+
+Tests: documentation only; suite unchanged (9221 passed).

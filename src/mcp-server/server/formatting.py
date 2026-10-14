@@ -146,9 +146,7 @@ def _format_class_context_block(
         )
 
     if actions:
-        lines.append("  Actions:")
-        for a in actions:
-            lines.append(f"    → {a.get('fullName', '')}: {a.get('description', '')}")
+        lines.extend(_class_action_lines(actions))
         lines.append(
             _hint(
                 context_policy,
@@ -284,12 +282,7 @@ def _format_node_context_response(
 
     actions = data.get("actions") or []
     if actions:
-        lines.append("Actions (Unity Catalog functions):")
-        for a in actions:
-            lines.append(f"  → {a.get('fullName', '')}")
-            desc = (a.get("description") or "").strip()
-            if desc:
-                lines.append(f"    Description: {desc}")
+        lines.extend(_node_action_lines(actions))
         lines.append(
             _hint(
                 context_policy,
@@ -501,6 +494,58 @@ def _format_virtual_attributes_response(
     return "\n".join(lines)
 
 
+def _class_action_lines(actions: list) -> list[str]:
+    uc_actions, job_actions = _split_class_actions(actions)
+    lines: list[str] = []
+    if uc_actions:
+        lines.append("  Actions:")
+        lines.extend(
+            f"    → {a.get('fullName', '')}: {a.get('description', '')}"
+            for a in uc_actions
+        )
+    if job_actions:
+        lines.append("  Jobs:")
+        lines.extend(
+            f"    → {a.get('fullName', '')}: {a.get('description', '')}"
+            for a in job_actions
+        )
+    return lines
+
+
+def _node_action_lines(actions: list) -> list[str]:
+    uc_actions, job_actions = _split_class_actions(actions)
+    lines: list[str] = []
+    if uc_actions:
+        lines.append("Actions (Unity Catalog functions):")
+        for a in uc_actions:
+            lines.append(f"  → {a.get('fullName', '')}")
+            desc = (a.get("description") or "").strip()
+            if desc:
+                lines.append(f"    Description: {desc}")
+    if job_actions:
+        lines.append("Jobs (Databricks Job run_now, tracked in Background Tasks):")
+        for a in job_actions:
+            lines.append(f"  → {a.get('fullName', '')}")
+            desc = (a.get("description") or "").strip()
+            if desc:
+                lines.append(f"    Description: {desc}")
+    return lines
+
+
+def _split_class_actions(actions: list) -> tuple[list, list]:
+    """Partition class actions into UC functions vs Databricks Jobs."""
+    uc: list = []
+    jobs: list = []
+    for action in actions or []:
+        kind = str(action.get("kind") or "")
+        full_name = str(action.get("fullName") or "")
+        if kind == "job" or full_name.startswith("job:"):
+            jobs.append(action)
+        else:
+            uc.append(action)
+    return uc, jobs
+
+
 def _format_node_action_response(data: dict) -> str:
     """Format the /nodes/action JSON response as LLM-friendly text."""
     if not data.get("success"):
@@ -516,6 +561,17 @@ def _format_node_action_response(data: dict) -> str:
         f"Entity: {local_id}  ({data.get('class_name', 'Unknown')})",
         "",
     ]
+
+    if data.get("kind") == "job" or str(data.get("action") or "").startswith("job:"):
+        lines.append(data.get("message") or "Running in Background Tasks")
+        if data.get("task_id"):
+            lines.append(f"task_id: {data['task_id']}")
+        if data.get("run_id") is not None:
+            lines.append(f"run_id: {data['run_id']}")
+        if data.get("run_page_url"):
+            lines.append(f"run_page_url: {data['run_page_url']}")
+        lines.append("Watch progress in the OntoBricks navbar Background Tasks list.")
+        return "\n".join(lines)
 
     rows = data.get("rows") or []
     if not rows:

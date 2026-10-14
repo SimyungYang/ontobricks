@@ -278,7 +278,6 @@ class SettingsService:
 
         return await RegistrySettings.fetch_uc_functions(catalog, schema, session_mgr, settings, log_label)
 
-
     @staticmethod
     async def check_lakebase_permissions(
         session_mgr: SessionManager, settings: Settings

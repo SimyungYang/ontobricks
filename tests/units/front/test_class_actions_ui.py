@@ -69,10 +69,25 @@ def test_action_picker_disables_functions_without_exactly_one_param():
 def test_actions_state_is_saved_and_hydrated():
     js = PANELS_JS.read_text(encoding="utf-8")
     assert "let sharedPanelActions = []" in js
-    assert "sharedPanelActions = cls.actions ? JSON.parse(JSON.stringify(cls.actions)) : []" in js
-    assert "actions: sharedPanelActions.length > 0 ? sharedPanelActions : undefined" in js
+    assert "const splitActions = _splitClassActions(cls.actions);" in js
+    assert "sharedPanelActions = splitActions.uc;" in js
+    assert "sharedPanelActions.concat(sharedPanelJobs)" in js
     assert "onActionDescriptionChange" in js
     assert "removeSharedEntityAction" in js
+
+
+def test_actions_tab_has_jobs_box_and_picker():
+    js = PANELS_JS.read_text(encoding="utf-8")
+    pane = js[
+        js.index('data-form-tab-content="actions"') : js.index(
+            'data-form-tab-content="constraints"'
+        )
+    ]
+    assert 'id="sharedEntityJobs"' in pane
+    assert "openJobSelectorModal()" in pane
+    assert "/settings/jobs?q=" in js
+    assert "let sharedPanelJobs = []" in js
+    assert "renderSharedEntityJobs(viewOnly)" in js
 
 
 def test_loaders_retain_class_actions():
@@ -103,6 +118,8 @@ def test_entity_details_renders_actions_section():
     assert "openEntityActionModal(" in js
     assert "action.description" in js
     assert "bi bi-lightning-charge" in js
+    assert "bi bi-play-circle" in js
+    assert "_entityActionIsJob" in js
 
 
 def test_sigmagraph_details_renders_actions_section():
@@ -119,6 +136,8 @@ def test_sigmagraph_context_menu_has_action_items_and_dispatch():
     assert "data-description=" in js
     assert "action === 'action-invoke'" in js
     assert "openEntityActionModal(actUri, actName, actLbl, actDesc)" in js
+    assert "bi bi-play-circle" in js
+    assert "_entityActionIsJob" in js
 
 
 def test_action_modal_posts_to_the_invoke_endpoint():
@@ -128,6 +147,10 @@ def test_action_modal_posts_to_the_invoke_endpoint():
     assert "/api/v1/digitaltwin/nodes/action" in js
     assert "method: 'POST'" in js
     assert "action_full_name" in js
+    assert "function _entityActionIsJob" in js
+    assert "Running in Background Tasks" in js
+    assert "if (_entityActionIsJob(actionFullName))" in js
+    assert "refreshTasks()" in js
 
 
 def test_action_modal_shows_function_description():

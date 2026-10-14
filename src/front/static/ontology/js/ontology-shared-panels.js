@@ -80,6 +80,8 @@ let sharedPanelDataset = null;  // Linked Unity Catalog dataset { catalog, schem
 // The bound function must take exactly one parameter: the ID of the entity
 // being acted on — it is passed automatically at invocation time.
 let sharedPanelActions = [];
+// Databricks Jobs bound as class actions: { kind: 'job', job_id, job_name, fullName, description }.
+let sharedPanelJobs = [];
 // SWRL business rules referenced by name: [{ name }]. Only rules whose class
 // atoms cite this entity (or one of its parents) can be attached; they are
 // triggered on a single entity from the Knowledge Graph and over MCP.
@@ -411,6 +413,7 @@ function closeSharedPanel() {
     sharedPanelBridges = [];
     sharedPanelDataset = null;
     sharedPanelActions = [];
+    sharedPanelJobs = [];
     sharedPanelBusinessRules = [];
     sharedPanelDirty = false;
 }
@@ -469,6 +472,7 @@ async function openEntityPanel(options = {}) {
     sharedPanelBridges = [];  // Reset bridges for new entity
     sharedPanelDataset = null;  // Reset dataset for new entity
     sharedPanelActions = [];  // Reset UC function actions for new entity
+    sharedPanelJobs = [];
     sharedPanelBusinessRules = [];  // Reset business rules for new entity
     sharedPanelVirtualAttributes = [];  // Reset virtual attributes for new entity
     
@@ -512,7 +516,9 @@ async function openEntityPanelForEdit(idx, options = {}) {
     sharedPanelDashboardParams = cls.dashboardParams || {};  // Load existing parameter mappings
     sharedPanelBridges = cls.bridges ? JSON.parse(JSON.stringify(cls.bridges)) : [];
     sharedPanelDataset = cls.dataset ? JSON.parse(JSON.stringify(cls.dataset)) : null;
-    sharedPanelActions = cls.actions ? JSON.parse(JSON.stringify(cls.actions)) : [];
+    const splitActions = _splitClassActions(cls.actions);
+    sharedPanelActions = splitActions.uc;
+    sharedPanelJobs = splitActions.jobs;
     sharedPanelBusinessRules = cls.business_rules ? JSON.parse(JSON.stringify(cls.business_rules)) : [];
     sharedPanelVirtualAttributes = cls.virtualAttributes ? JSON.parse(JSON.stringify(cls.virtualAttributes)) : [];
 
@@ -554,7 +560,9 @@ async function openEntityPanelForView(idx, options = {}) {
     sharedPanelDashboardParams = cls.dashboardParams || {};  // Load existing parameter mappings
     sharedPanelBridges = cls.bridges ? JSON.parse(JSON.stringify(cls.bridges)) : [];
     sharedPanelDataset = cls.dataset ? JSON.parse(JSON.stringify(cls.dataset)) : null;
-    sharedPanelActions = cls.actions ? JSON.parse(JSON.stringify(cls.actions)) : [];
+    const splitActions = _splitClassActions(cls.actions);
+    sharedPanelActions = splitActions.uc;
+    sharedPanelJobs = splitActions.jobs;
     sharedPanelBusinessRules = cls.business_rules ? JSON.parse(JSON.stringify(cls.business_rules)) : [];
     sharedPanelVirtualAttributes = cls.virtualAttributes ? JSON.parse(JSON.stringify(cls.virtualAttributes)) : [];
 
@@ -758,6 +766,18 @@ async function renderEntityForm(panel, cls, viewOnly = false) {
                 </div>
                 <div class="mb-3">
                     <label class="form-label d-flex justify-content-between align-items-center">
+                        <span><i class="bi bi-play-circle me-1"></i>Jobs</span>
+                        ${!viewOnly ? '<button type="button" class="btn btn-sm btn-outline-primary py-0 px-1" onclick="openJobSelectorModal()"><i class="bi bi-plus"></i> Add</button>' : ''}
+                    </label>
+                    <div id="sharedEntityJobs" class="border rounded p-2" style="background: #ffffff;">
+                        <div id="sharedEntityJobsContent">
+                            <small class="text-muted">No jobs assigned</small>
+                        </div>
+                    </div>
+                    <div class="form-text small">Each job is a Databricks Job that declares an <code>entity_id</code> parameter. Spark still runs as the job&apos;s run-as identity; on Lakehouse domains the trigger is on-behalf-of the signed-in user.</div>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label d-flex justify-content-between align-items-center">
                         <span><i class="bi bi-diagram-3 me-1"></i>Business rules</span>
                         ${!viewOnly ? '<button type="button" class="btn btn-sm btn-outline-primary py-0 px-1" onclick="openBusinessRuleSelectorModal()"><i class="bi bi-plus"></i> Add</button>' : ''}
                     </label>
@@ -818,6 +838,7 @@ async function renderEntityForm(panel, cls, viewOnly = false) {
     renderSharedEntityDashboard(viewOnly);
     renderSharedEntityDataset(viewOnly);
     renderSharedEntityActions(viewOnly);
+    renderSharedEntityJobs(viewOnly);
     renderSharedEntityBusinessRules(viewOnly);
     renderSharedEntityBridges(viewOnly);
     if (!viewOnly) {
@@ -1664,6 +1685,18 @@ function _ucClosePickerModal(modalId) {
     modal.addEventListener('hidden.bs.modal', () => modal.remove(), { once: true });
 }
 
+function _isJobAction(action) {
+    return !!(action && (action.kind === 'job' || (action.job_id != null && action.kind !== 'uc_function')));
+}
+
+function _splitClassActions(raw) {
+    const all = raw ? JSON.parse(JSON.stringify(raw)) : [];
+    return {
+        uc: all.filter(a => !_isJobAction(a)),
+        jobs: all.filter(a => _isJobAction(a)),
+    };
+}
+
 // =====================================================
 // UNITY CATALOG FUNCTION ACTIONS
 // =====================================================
@@ -1724,6 +1757,129 @@ function removeSharedEntityAction(index) {
     sharedPanelActions.splice(index, 1);
     markPanelDirty();
     renderSharedEntityActions(false);
+}
+
+function renderSharedEntityJobs(viewOnly = false) {
+    const container = panelGetById('sharedEntityJobsContent');
+    if (!container) return;
+    if (!sharedPanelJobs.length) {
+        container.innerHTML = '<small class="text-muted">No jobs assigned</small>';
+        return;
+    }
+    container.innerHTML = sharedPanelJobs.map((job, idx) => {
+        const label = job.job_name || job.function || job.job_id;
+        const descHtml = !viewOnly
+            ? `<textarea class="form-control form-control-sm mt-1" rows="2"
+                         placeholder="What does this job do?"
+                         oninput="onJobDescriptionChange(${idx}, this.value)">${escapeHtml(job.description || '')}</textarea>`
+            : (job.description
+                ? `<small class="text-muted d-block ms-3">${escapeHtml(job.description)}</small>`
+                : '');
+        return `
+            <div class="${idx > 0 ? 'mt-2 pt-2 border-top' : ''}">
+                <div class="d-flex align-items-center gap-2">
+                    <i class="bi bi-play-circle text-primary"></i>
+                    <div class="flex-grow-1">
+                        <div class="fw-semibold">${escapeHtml(String(label))}</div>
+                        <small class="text-muted">job:${escapeHtml(String(job.job_id))}</small>
+                    </div>
+                    ${!viewOnly ? `<button type="button" class="btn btn-sm btn-outline-danger py-0 px-1" onclick="removeSharedEntityJob(${idx})" title="Remove job"><i class="bi bi-x"></i></button>` : ''}
+                </div>
+                ${descHtml}
+            </div>
+        `;
+    }).join('');
+}
+
+function onJobDescriptionChange(index, value) {
+    const job = sharedPanelJobs[index];
+    if (!job) return;
+    job.description = value.trim() || null;
+    markPanelDirty();
+}
+
+function removeSharedEntityJob(index) {
+    sharedPanelJobs.splice(index, 1);
+    markPanelDirty();
+    renderSharedEntityJobs(false);
+}
+
+async function openJobSelectorModal() {
+    const modalId = 'jobSelectorModal';
+    const existing = document.getElementById(modalId);
+    if (existing) existing.remove();
+    const modalHtml = `
+        <div class="modal fade" id="${modalId}" tabindex="-1" data-bs-backdrop="static">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content">
+                    <div class="modal-header py-2">
+                        <h6 class="modal-title"><i class="bi bi-play-circle me-2"></i>Add Databricks Job</h6>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <input type="search" class="form-control form-control-sm mb-2" id="jobSelectorQuery"
+                               placeholder="Filter by name…" oninput="_jobSelectorReload()">
+                        <div id="jobSelectorList" class="border rounded p-2" style="max-height: 240px; overflow-y: auto;">
+                            <small class="text-muted">Loading…</small>
+                        </div>
+                        <div class="form-text small">Only jobs that declare an <code>entity_id</code> parameter are listed. OntoBricks starts the job; Spark still uses the job run-as identity.</div>
+                    </div>
+                </div>
+            </div>
+        </div>`;
+    document.body.insertAdjacentHTML('beforeend', modalHtml);
+    const modal = new bootstrap.Modal(document.getElementById(modalId));
+    document.getElementById(modalId).addEventListener('hidden.bs.modal', () => {
+        document.getElementById(modalId)?.remove();
+    }, { once: true });
+    modal.show();
+    await _jobSelectorReload();
+}
+
+async function _jobSelectorReload() {
+    const list = document.getElementById('jobSelectorList');
+    if (!list) return;
+    const q = (document.getElementById('jobSelectorQuery')?.value || '').trim();
+    list.innerHTML = '<small class="text-muted">Loading…</small>';
+    try {
+        const resp = await fetch('/settings/jobs?q=' + encodeURIComponent(q), { credentials: 'same-origin' });
+        const data = await resp.json();
+        const jobs = (data.success && data.jobs) ? data.jobs : [];
+        if (!jobs.length) {
+            list.innerHTML = '<small class="text-muted">No jobs with an entity_id parameter</small>';
+            return;
+        }
+        list.innerHTML = jobs.map(job => {
+            const id = Number(job.job_id);
+            const name = job.name || ('job-' + id);
+            return `<button type="button" class="btn btn-sm btn-outline-secondary w-100 text-start mb-1" onclick="_jobSelectJob(${id}, this.dataset.name)" data-name="${escapeHtml(name)}">
+                <span class="fw-semibold">${escapeHtml(name)}</span>
+                <small class="text-muted d-block">job:${id}</small>
+            </button>`;
+        }).join('');
+    } catch (err) {
+        console.error('[SharedPanel] Failed to list jobs', err);
+        list.innerHTML = '<small class="text-danger">Failed to list jobs</small>';
+    }
+}
+
+function _jobSelectJob(jobId, name) {
+    if (sharedPanelJobs.some(j => Number(j.job_id) === Number(jobId))) {
+        showNotification('Job already assigned: ' + name, 'warning', 3000);
+        return;
+    }
+    sharedPanelJobs.push({
+        kind: 'job',
+        job_id: Number(jobId),
+        job_name: name,
+        function: name,
+        fullName: 'job:' + jobId,
+        description: null,
+    });
+    markPanelDirty();
+    renderSharedEntityJobs(false);
+    _ucClosePickerModal('jobSelectorModal');
+    showNotification('Job added: ' + name, 'success', 3000);
 }
 
 // Action selector state
@@ -3114,7 +3270,8 @@ async function saveSharedEntity(options = {}) {
         dashboardParams: Object.keys(sharedPanelDashboardParams).length > 0 ? sharedPanelDashboardParams : undefined,
         bridges: sharedPanelBridges.length > 0 ? sharedPanelBridges : undefined,
         dataset: sharedPanelDataset || undefined,
-        actions: sharedPanelActions.length > 0 ? sharedPanelActions : undefined,
+        actions: (sharedPanelActions.length + sharedPanelJobs.length) > 0
+            ? sharedPanelActions.concat(sharedPanelJobs) : undefined,
         business_rules: sharedPanelBusinessRules.length > 0 ? sharedPanelBusinessRules : undefined,
         virtualAttributes: sharedPanelVirtualAttributes.length > 0 ? sharedPanelVirtualAttributes : undefined
     };

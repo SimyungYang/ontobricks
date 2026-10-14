@@ -1,5 +1,5 @@
 /**
- * SHACL facets of one entity in the Graph Explorer.
+ * Data Quality Checks of one entity in the Graph Explorer (its SHACL facets).
  *
  * Every enabled shape targeting the entity's class, one of its ancestors, or
  * no class is checked against that entity only (``/dtwin/nodes/shacl``). The
@@ -124,7 +124,7 @@ async function checkShaclFacets(entityUri) {
     } catch (err) {
         console.error('[SHACL facets] Check failed:', err);
         if (typeof showNotification === 'function') {
-            showNotification('Could not check the SHACL facets: ' + err.message, 'error', 5000);
+            showNotification('Could not run the data quality checks: ' + err.message, 'error', 5000);
         }
         return null;
     }
@@ -159,14 +159,11 @@ function _shaclRenderLoading(entityUri) {
     _shaclSetText('shaclFacetsEntity', _shaclLocalName(entityUri));
     _shaclSetText('shaclFacetsSubtitle', entityUri);
     _shaclSetText('shaclFacetsCheckedAt', '');
-    const summary = document.getElementById('shaclFacetsSummary');
-    if (summary) summary.innerHTML = '';
-    const body = document.getElementById('shaclFacetsBody');
-    if (body) {
-        body.innerHTML = '<div class="text-center text-muted py-4">' +
-            '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>' +
-            'Checking SHACL facets…</div>';
-    }
+    _shaclSetHtml('shaclFacetsSummary', '');
+    _shaclSetHtml('shaclFacetsGauges', '');
+    _shaclSetHtml('shaclFacetsBody', '<div class="text-center text-muted py-4">' +
+        '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>' +
+        'Running data quality checks…</div>');
     const btn = document.getElementById('shaclFacetsRecheck');
     if (btn) btn.disabled = true;
 }
@@ -190,19 +187,66 @@ function _shaclRenderModal(entityUri) {
         (lineage.length ? lineage.join(' → ') : classNames.join(', ')) + ' · ' + entityUri);
     _shaclSetText('shaclFacetsCheckedAt', 'Checked at ' + entry.checkedAt.toLocaleTimeString());
 
-    const summary = document.getElementById('shaclFacetsSummary');
     const facets = data.facets || [];
     if (!facets.length) {
-        if (summary) summary.innerHTML = '';
+        _shaclSetHtml('shaclFacetsSummary', '');
+        _shaclSetHtml('shaclFacetsGauges', '');
         body.innerHTML = '<div class="text-center text-muted py-4">' +
             '<i class="bi bi-shield fs-3 d-block mb-2" aria-hidden="true"></i>' +
             'No SHACL shape applies to ' + _shaclEsc(classNames.join(', ') || 'this entity') + '.</div>';
         return;
     }
 
-    if (summary) summary.innerHTML = _shaclChipsHtml(data.summary || {}, facets.length);
-    body.innerHTML = _shaclCategoriesHtml(facets);
+    const groups = _shaclGroups(facets);
+    _shaclSetHtml('shaclFacetsGauges', _shaclGaugesHtml(groups));
+    _shaclSetHtml('shaclFacetsSummary', _shaclChipsHtml(data.summary || {}, facets.length));
+    body.innerHTML = _shaclCategoriesHtml(groups);
     _shaclApplyFilter();
+}
+
+/** Dimensions present in *facets*, in the Data Quality tab order, each with its rows. */
+function _shaclGroups(facets) {
+    const known = SHACL_CATEGORIES.map(function (c) { return c.id; });
+    const extra = Array.from(new Set(facets.map(function (f) { return f.category || 'other'; })))
+        .filter(function (id) { return known.indexOf(id) === -1; })
+        .map(function (id) { return { id: id, label: id.charAt(0).toUpperCase() + id.slice(1), icon: 'bi-shield' }; });
+    return SHACL_CATEGORIES.concat(extra).map(function (cat, idx) {
+        const rows = facets.filter(function (f) { return (f.category || 'other') === cat.id; });
+        return Object.assign({ rows: rows, collapseId: 'shaclCat' + idx }, cat);
+    }).filter(function (g) { return g.rows.length; });
+}
+
+/**
+ * One half-gauge per dimension: passed / (passed + failed). Shapes that were
+ * not applicable, not evaluated or errored are not part of the score; a
+ * dimension with none checked shows a dash instead of a misleading 100%.
+ */
+function _shaclGaugesHtml(groups) {
+    return groups.map(function (g) {
+        const passed = g.rows.filter(function (f) { return f.status === 'pass'; }).length;
+        const failed = g.rows.filter(function (f) { return f.status === 'fail'; }).length;
+        const checked = passed + failed;
+        const score = checked ? Math.round(passed * 100 / checked) : null;
+        const tone = score === null ? 'muted' : score === 100 ? 'success' : score >= 80 ? 'warning' : 'danger';
+        const detail = checked ? passed + ' of ' + checked + ' passed' : 'not checked';
+        return '<button type="button" class="shacl-gauge shacl-gauge--' + tone + '" data-shacl-gauge="' + g.collapseId + '"' +
+            ' aria-controls="' + g.collapseId + '" title="Show ' + _shaclEsc(g.label) + ' checks">' +
+            '<svg class="shacl-gauge-arc" viewBox="0 0 100 56" aria-hidden="true">' +
+            '<path class="shacl-gauge-track" d="M 10 50 A 40 40 0 0 1 90 50" pathLength="100"/>' +
+            (score ? '<path class="shacl-gauge-value" d="M 10 50 A 40 40 0 0 1 90 50" pathLength="100" stroke-dasharray="' + score + ' 100"/>' : '') +
+            '</svg>' +
+            '<span class="shacl-gauge-score">' + (score === null ? '—' : score + '%') + '</span>' +
+            '<span class="shacl-gauge-label"><i class="bi ' + g.icon + ' me-1" aria-hidden="true"></i>' + _shaclEsc(g.label) + '</span>' +
+            '<span class="shacl-gauge-detail">' + detail + '</span>' +
+            '</button>';
+    }).join('');
+}
+
+function _shaclExpandSection(collapseId, scroll) {
+    const el = document.getElementById(collapseId);
+    if (!el || typeof bootstrap === 'undefined') return;
+    bootstrap.Collapse.getOrCreateInstance(el, { toggle: false }).show();
+    if (scroll) el.closest('.accordion-item').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
 function _shaclChipsHtml(summary, total) {
@@ -219,29 +263,19 @@ function _shaclChipsHtml(summary, total) {
     return html;
 }
 
-function _shaclCategoriesHtml(facets) {
-    const known = SHACL_CATEGORIES.map(function (c) { return c.id; });
-    const groups = SHACL_CATEGORIES.concat(
-        Array.from(new Set(facets.map(function (f) { return f.category || 'other'; })))
-            .filter(function (id) { return known.indexOf(id) === -1; })
-            .map(function (id) { return { id: id, label: id.charAt(0).toUpperCase() + id.slice(1), icon: 'bi-shield' }; })
-    );
-
+function _shaclCategoriesHtml(groups) {
     let html = '<div class="accordion shacl-facets-accordion" id="shaclFacetsAccordion">';
-    groups.forEach(function (cat, idx) {
-        const rows = facets.filter(function (f) { return (f.category || 'other') === cat.id; });
-        if (!rows.length) return;
-        const failed = rows.filter(function (f) { return f.status === 'fail'; }).length;
-        const collapseId = 'shaclCat' + idx;
-        html += '<div class="accordion-item" data-shacl-category="' + _shaclEsc(cat.id) + '">' +
-            '<h2 class="accordion-header"><button class="accordion-button py-2" type="button" ' +
-            'data-bs-toggle="collapse" data-bs-target="#' + collapseId + '" aria-expanded="true" aria-controls="' + collapseId + '">' +
-            '<i class="bi ' + cat.icon + ' me-2" aria-hidden="true"></i>' + _shaclEsc(cat.label) +
-            '<span class="ms-2 small text-muted">' + rows.length + (failed ? ' · ' + failed + ' failed' : '') + '</span>' +
+    groups.forEach(function (g) {
+        const failed = g.rows.filter(function (f) { return f.status === 'fail'; }).length;
+        html += '<div class="accordion-item" data-shacl-category="' + _shaclEsc(g.id) + '">' +
+            '<h2 class="accordion-header"><button class="accordion-button collapsed py-2" type="button" ' +
+            'data-bs-toggle="collapse" data-bs-target="#' + g.collapseId + '" aria-expanded="false" aria-controls="' + g.collapseId + '">' +
+            '<i class="bi ' + g.icon + ' me-2" aria-hidden="true"></i>' + _shaclEsc(g.label) +
+            '<span class="ms-2 small text-muted">' + g.rows.length + (failed ? ' · ' + failed + ' failed' : '') + '</span>' +
             '</button></h2>' +
-            '<div id="' + collapseId + '" class="accordion-collapse collapse show">' +
+            '<div id="' + g.collapseId + '" class="accordion-collapse collapse">' +
             '<div class="accordion-body p-0"><ul class="list-group list-group-flush">' +
-            rows.map(_shaclFacetRowHtml).join('') +
+            g.rows.map(_shaclFacetRowHtml).join('') +
             '</ul></div></div></div>';
     });
     return html + '</div>';
@@ -289,7 +323,12 @@ function _shaclApplyFilter() {
         row.classList.toggle('d-none', !show);
     });
     document.querySelectorAll('#shaclFacetsBody [data-shacl-category]').forEach(function (item) {
-        item.classList.toggle('d-none', !item.querySelector('.shacl-facet:not(.d-none)'));
+        const hasRows = !!item.querySelector('.shacl-facet:not(.d-none)');
+        item.classList.toggle('d-none', !hasRows);
+        // A status filter reveals its matches; "All" leaves the sections as they are.
+        if (hasRows && _shaclFilter !== 'all') {
+            _shaclExpandSection(item.querySelector('.accordion-collapse').id, false);
+        }
     });
 }
 
@@ -350,6 +389,11 @@ function _shaclSetText(id, text) {
     if (el) el.textContent = text || '';
 }
 
+function _shaclSetHtml(id, html) {
+    const el = document.getElementById(id);
+    if (el) el.innerHTML = html;
+}
+
 function _shaclLocalName(uri) {
     return String(uri || '').split('#').pop().split('/').pop();
 }
@@ -360,6 +404,11 @@ document.addEventListener('click', function (e) {
         const value = chip.getAttribute('data-shacl-filter');
         _shaclFilter = (value === _shaclFilter) ? 'all' : value;
         _shaclApplyFilter();
+        return;
+    }
+    const gauge = e.target.closest('#shaclFacetsGauges [data-shacl-gauge]');
+    if (gauge) {
+        _shaclExpandSection(gauge.getAttribute('data-shacl-gauge'), true);
         return;
     }
     if (e.target.closest('#shaclFacetsRecheck')) {

@@ -1590,10 +1590,9 @@ var SigmaGraph = (function () {
             '</div></div>';
 
         var _secIdx = 0;
-        function _sec(icon, title, body, startOpen) {
+        function _sec(icon, title, body) {
             var id = 'sgSec' + (_secIdx++);
-            var cls = startOpen ? 'entity-detail-section' : 'entity-detail-section collapsed';
-            return '<div class="' + cls + '" id="' + id + '">' +
+            return '<div class="entity-detail-section collapsed" id="' + id + '">' +
                 '<h6 onclick="this.parentElement.classList.toggle(\'collapsed\')">' +
                 '<i class="' + icon + '"></i> ' + title +
                 '<i class="bi bi-chevron-down entity-section-chevron"></i></h6>' +
@@ -1612,7 +1611,7 @@ var SigmaGraph = (function () {
                 '<span class="detail-value"><span class="sg-cluster-dot" style="background:' + _clusterColor(_cid) + ';width:10px;height:10px;display:inline-block;border-radius:50%;vertical-align:middle;margin-right:4px;"></span>' +
                 'Cluster #' + _cid + '</span></div>';
         }
-        html += _sec('bi bi-card-list', 'Entity Info', infoBody, true);
+        html += _sec('bi bi-card-list', 'Entity Info', infoBody);
 
         var customAttrs = {};
         if (entityMapping && entityMapping.attributeMappings) {
@@ -1639,7 +1638,7 @@ var SigmaGraph = (function () {
         } else {
             attrBody = '<p class="small text-muted mb-0">No custom attributes found for this entity.</p>';
         }
-        html += _sec('bi bi-tags', 'Attributes', attrBody, true);
+        html += _sec('bi bi-tags', 'Attributes', attrBody);
 
         // Virtual attributes — declarations only. Values cost a warehouse
         // round-trip, so they are computed when the user clicks, never here.
@@ -1649,13 +1648,13 @@ var SigmaGraph = (function () {
                 return n + ((g.attributes || []).length);
             }, 0);
             html += _sec('bi bi-magic', 'Virtual Attributes (' + vaCount + ')',
-                renderVirtualAttributeSection(entity.id, virtualGroups), true);
+                renderVirtualAttributeSection(entity.id, virtualGroups));
         }
 
         var shaclCount = (classInfo && classInfo.shaclShapeCount) || 0;
         if (shaclCount > 0 && typeof renderShaclFacetSection === 'function') {
             html += _sec('bi bi-shield-check', 'Data quality',
-                renderShaclFacetSection(entity.id, shaclCount), true);
+                renderShaclFacetSection(entity.id, shaclCount));
         }
 
         if (dashboardUrl && typeof buildDashboardUrl === 'function') {
@@ -1671,7 +1670,7 @@ var SigmaGraph = (function () {
             var dashUrl = buildDashboardUrl(dashboardUrl, actualIdValue, paramValues);
             var dashBody = '<div class="entity-detail-item"><button onclick="openDashboardModal(\'' + esc(dashUrl) + '\', \'' + esc(ontologyTypeName) + '\', \'' + esc(actualIdValue || '') + '\')" ' +
                 'class="btn btn-sm btn-outline-info w-100" title="Open dashboard"><i class="bi bi-speedometer2 me-1"></i>View Dashboard</button></div>';
-            html += _sec('bi bi-speedometer2', 'Dashboard', dashBody, true);
+            html += _sec('bi bi-speedometer2', 'Dashboard', dashBody);
         }
 
         var dataset = (entityMapping && entityMapping.dataset) || (classInfo && classInfo.dataset) || null;
@@ -1699,7 +1698,7 @@ var SigmaGraph = (function () {
                     'class="btn btn-sm btn-outline-info w-100" title="Key column is not configured — preview unavailable">' +
                     '<i class="bi bi-table me-1"></i>Preview rows</button></div>';
             }
-            html += _sec('bi bi-table', 'Dataset', dsBody, true);
+            html += _sec('bi bi-table', 'Dataset', dsBody);
         }
 
         // Unity Catalog function actions — each takes the entity ID as its only argument
@@ -1707,19 +1706,21 @@ var SigmaGraph = (function () {
         if (nodeActions.length > 0) {
             var actionBody = '';
             nodeActions.forEach(function (action) {
+                var isJob = typeof _entityActionIsJob === 'function' && _entityActionIsJob(action);
                 var actFullName = action.fullName
-                    || [action.catalog, action.schema, action.function].filter(Boolean).join('.');
+                    || (isJob ? ('job:' + action.job_id) : [action.catalog, action.schema, action.function].filter(Boolean).join('.'));
                 if (!actFullName) return;
-                var actLabel = action.function || actFullName;
+                var actLabel = action.job_name || action.function || actFullName;
                 var actTitle = action.description || ('Run ' + actFullName);
                 var actDesc = action.description || '';
+                var icon = isJob ? 'bi bi-play-circle' : 'bi bi-lightning-charge';
                 actionBody += '<div class="entity-detail-item"><button type="button" onclick="openEntityActionModal(\'' +
                     esc(entity.id) + '\', \'' + esc(actFullName) + '\', \'' + esc(actLabel) + '\', \'' + esc(actDesc) +
                     '\')" class="btn btn-sm btn-outline-primary w-100" title="' + esc(actTitle) + '">' +
-                    '<i class="bi bi-lightning-charge me-1"></i>' + esc(actLabel) + '</button></div>';
+                    '<i class="' + icon + ' me-1"></i>' + esc(actLabel) + '</button></div>';
             });
             if (actionBody) {
-                html += _sec('bi bi-lightning-charge', 'Actions (' + nodeActions.length + ')', actionBody, true);
+                html += _sec('bi bi-lightning-charge', 'Actions (' + nodeActions.length + ')', actionBody);
             }
         }
 
@@ -1728,7 +1729,7 @@ var SigmaGraph = (function () {
         if (nodeRules.length > 0 && typeof renderBusinessRuleSection === 'function') {
             var ruleBody = renderBusinessRuleSection(entity.id, nodeRules);
             if (ruleBody) {
-                html += _sec('bi bi-diagram-3', 'Business rules (' + nodeRules.length + ')', ruleBody, true);
+                html += _sec('bi bi-diagram-3', 'Business rules (' + nodeRules.length + ')', ruleBody);
             }
         }
 
@@ -1753,7 +1754,7 @@ var SigmaGraph = (function () {
                     '<i class="bi bi-box-arrow-up-right ms-auto float-end mt-1"></i>' +
                     '</a></div>';
             });
-            html += _sec('bi bi-signpost-2', 'Bridges (' + bridges.length + ')', bridgeBody, true);
+            html += _sec('bi bi-signpost-2', 'Bridges (' + bridges.length + ')', bridgeBody);
         }
 
         var outgoingRels = (typeof d3LinksData !== 'undefined' && d3LinksData) ? d3LinksData.filter(function (l) {
@@ -1778,7 +1779,7 @@ var SigmaGraph = (function () {
                     '<span class="rel-direction">→</span> ' +
                     '<span class="rel-target" onclick="SigmaGraph.selectEntity(\'' + esc(targetId) + '\')">' + targetIcon + ' ' + esc(targetLabel) + '</span></div>';
             });
-            html += _sec('bi bi-arrow-right-circle', 'Outgoing (' + outgoingRels.length + ')', outBody, false);
+            html += _sec('bi bi-arrow-right-circle', 'Outgoing (' + outgoingRels.length + ')', outBody);
         }
 
         if (incomingRels.length > 0) {
@@ -1796,7 +1797,7 @@ var SigmaGraph = (function () {
                     '<span class="rel-predicate">' + esc(inPredLabel) + '</span> ' +
                     '<span class="rel-direction">→</span></div>';
             });
-            html += _sec('bi bi-arrow-left-circle', 'Incoming (' + incomingRels.length + ')', inBody, false);
+            html += _sec('bi bi-arrow-left-circle', 'Incoming (' + incomingRels.length + ')', inBody);
         }
 
         var _dNid = esc(nodeId).replace(/'/g, "\\'");
@@ -2563,15 +2564,17 @@ var SigmaGraph = (function () {
         if (ctxActions.length > 0 && meta.entity && meta.entity.id) {
             var actionItems = '';
             ctxActions.forEach(function (action) {
+                var isJob = typeof _entityActionIsJob === 'function' && _entityActionIsJob(action);
                 var actFullName = action.fullName
-                    || [action.catalog, action.schema, action.function].filter(Boolean).join('.');
+                    || (isJob ? ('job:' + action.job_id) : [action.catalog, action.schema, action.function].filter(Boolean).join('.'));
                 if (!actFullName) return;
-                var actLabel = action.function || actFullName;
+                var actLabel = action.job_name || action.function || actFullName;
                 var actDesc = action.description || '';
+                var icon = isJob ? 'bi bi-play-circle' : 'bi bi-lightning-charge';
                 actionItems += '<div class="ctx-item" data-sg-node-action="action-invoke" data-uri="' + esc(meta.entity.id) +
                     '" data-action="' + esc(actFullName) + '" data-label="' + esc(actLabel) +
                     '" data-description="' + esc(actDesc) + '">' +
-                    '<i class="bi bi-lightning-charge"></i> ' + esc(actLabel) + '</div>';
+                    '<i class="' + icon + '"></i> ' + esc(actLabel) + '</div>';
             });
             if (actionItems) {
                 if (items) items += '<div class="ctx-divider"></div>';
@@ -2607,7 +2610,7 @@ var SigmaGraph = (function () {
             if (items) items += '<div class="ctx-divider"></div>';
             items += '<div class="ctx-header">Data quality</div>';
             items += '<div class="ctx-item" data-sg-node-action="shacl-facets" data-uri="' + esc(meta.entity.id) + '">' +
-                '<i class="bi bi-shield-check"></i> Check SHACL facets (' + meta.shaclShapeCount + ')</div>';
+                '<i class="bi bi-shield-check"></i> Data Quality Checks (' + meta.shaclShapeCount + ')</div>';
         }
 
         if (meta.bridges.length > 0) {
@@ -4036,7 +4039,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 if (shUri && typeof openShaclFacetsModal === 'function') {
                     openShaclFacetsModal(shUri);
                 } else if (typeof showNotification === 'function') {
-                    showNotification('SHACL facet check is unavailable.', 'warning');
+                    showNotification('Data quality checks are unavailable.', 'warning');
                 }
             } else if (action === 'bridge') {
                 var url = nodeItem.getAttribute('data-url');

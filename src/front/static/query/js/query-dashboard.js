@@ -326,7 +326,19 @@ async function _loadDatasetPreviewRows(entityUri) {
  * @param {string} [label] - Display label for the action
  * @param {string} [description] - Optional function description from the class config
  */
+function _entityActionIsJob(actionOrName) {
+    if (actionOrName && typeof actionOrName === 'object') {
+        return actionOrName.kind === 'job'
+            || (actionOrName.job_id != null && actionOrName.kind !== 'uc_function');
+    }
+    return String(actionOrName || '').indexOf('job:') === 0;
+}
+
 function openEntityActionModal(entityUri, actionFullName, label, description) {
+    if (_entityActionIsJob(actionFullName)) {
+        _runEntityAction(entityUri, actionFullName).then(function () {});
+        return;
+    }
     const existingModal = document.getElementById('entityActionResultModal');
     if (existingModal) {
         existingModal.remove();
@@ -396,7 +408,22 @@ async function _runEntityAction(entityUri, actionFullName) {
         }
         const data = await resp.json();
         if (!data.success) {
-            return `<div class="alert alert-danger mb-0">${escapeHtml(data.message || 'The action could not be executed.')}</div>`;
+            const failMsg = data.message || 'The action could not be executed.';
+            if (_entityActionIsJob(actionFullName) && typeof showNotification === 'function') {
+                showNotification(failMsg, 'error', 5000);
+            }
+            return `<div class="alert alert-danger mb-0">${escapeHtml(failMsg)}</div>`;
+        }
+
+        if (data.kind === 'job' || _entityActionIsJob(actionFullName)) {
+            const started = data.message || 'Running in Background Tasks';
+            if (typeof showNotification === 'function') {
+                showNotification(started, 'info', 5000);
+            }
+            if (typeof refreshTasks === 'function') {
+                refreshTasks();
+            }
+            return `<div class="alert alert-info mb-0">${escapeHtml(started)}</div>`;
         }
 
         const rows = Array.isArray(data.rows) ? data.rows : [];

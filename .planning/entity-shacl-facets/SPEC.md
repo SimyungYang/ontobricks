@@ -68,7 +68,7 @@ is the fallback, so a node reached through the Graph Explorer always resolves.
 | `GET /dtwin/nodes/shacl` | **New.** Internal (UI), `assert_domain_graph_read`, session domain |
 | `GET …/nodes/context` | Gains `shacl_shape_count` (int, shapes selected per §1.1 using the class already resolved by `match_ontology_class`; no evaluation, no extra warehouse query) |
 | `GET /api/v1/domain/classes` | Each class gains `shacl_shape_count`, so MCP `describe_entity` can emit the hint from the cached class listing |
-| Graph Explorer node menu | New **Data quality** section with **Check SHACL facets (N)**, rendered only when `shacl_shape_count > 0` — see §3.5 |
+| Graph Explorer node menu | New **Data quality** section with **Data Quality Checks (N)**, rendered only when `shacl_shape_count > 0` — see §3.5 |
 | Graph Explorer detail panel | New **Data quality** section with a Check button and, once checked, a one-line summary — see §3.5 |
 | Graph Explorer canvas | Checked nodes get a session-only status ring, with a toggle — see §3.5 |
 | MCP `check_entity_shacl_facets(entity_uri)` | **New.** Registered in `MCP_DOMAIN_TOOLS` with `requires_graph: True`, so the per-domain tool toggle governs it |
@@ -197,7 +197,7 @@ three.
 #### 3.5.2 Node context menu
 
 - New section **Data quality** after **Business rules**, one item
-  `<i class="bi bi-shield-check"></i> Check SHACL facets (N)` with
+  `<i class="bi bi-shield-check"></i> Data Quality Checks (N)` with
   `data-sg-node-action="shacl-facets"`.
 - Rendered only when `meta.shaclShapeCount > 0` and the node is not a
   group/cluster super-node.
@@ -223,9 +223,12 @@ on each open) is **not** reused — `.cursor/11` forbids both.
 
 ```text
 ┌─────────────────────────────────────────────────────────────────────┐
-│ 🛡 SHACL facets — ACME Corp   [Customer]  [C-42]                 ✕  │
+│ 🛡 Data Quality Checks — ACME Corp   [Customer]  [C-42]          ✕  │
 ├─────────────────────────────────────────────────────────────────────┤
 │ Customer ⊑ Party · 7 shapes · checked 08:32                         │
+│  ◠ 50%        ◠ 0%         ◠ 100%       ◠ —                         │
+│  Completeness Conformance  Consistency  Structural                  │
+│  1 of 2 passed 0 of 1      3 of 3       not checked                 │
 │ [✗ 2 failed] [✓ 4 passed] [– 1 not applicable] [? 0 not evaluated]  │
 │                                                                     │
 │ ▾ Completeness                                        1 failed / 2  │
@@ -258,8 +261,18 @@ on each open) is **not** reused — `.cursor/11` forbids both.
   `bi-fingerprint` uniqueness, `bi-link-45deg` consistency, `bi-regex`
   conformance, `bi-diagram-3` structural). Header count: `N failed / M`
   (or `N not applicable / M` when nothing failed and some were skipped).
-  Groups with a `fail` or `error` start expanded; the others collapsed.
-  Empty categories are not rendered.
+  Every group starts collapsed; activating a status chip expands the groups
+  holding a matching row, and clicking a dimension gauge expands and scrolls
+  to its group. Empty categories are not rendered.
+- **Dimension gauges** — above the chips, one half-gauge per rendered
+  category (same order and icon), score = `pass / (pass + fail)` rounded to
+  a percentage; `not_applicable`, `not_evaluated` and `error` stay out of the
+  score. Colour follows the Data Quality tab thresholds through the status
+  tokens (100 % success, ≥ 80 % warning, below danger); a category with no
+  checked shape shows `—` in the draft tone. Each gauge carries the
+  percentage, the category label and `P of C passed` as text, so the colour
+  is never the only signal. Drawn as an inline SVG arc styled in
+  `query-shacl-facets.css` — no Chart.js, no hex.
 - **Facet row**, in the §3.2 order:
   - line 1: status icon (`bi-x-circle-fill` fail, `bi-check-circle-fill`
     pass, `bi-dash-circle` not applicable, `bi-question-circle`

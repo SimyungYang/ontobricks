@@ -870,20 +870,24 @@ returning several sets `message` instead of aggregating.
 
 #### `POST /api/v1/digitaltwin/nodes/action`
 
-Invoke one of the class's Unity Catalog function actions on a node. The function
-receives **exactly one argument: the entity's local ID**, extracted from
-`entity_uri`.
+Invoke a class action on a node: a Unity Catalog function or a Databricks Job
+(`job:<job_id>`). UC functions receive **exactly one argument: the entity's
+local ID**, extracted from `entity_uri`. Jobs must declare an `entity_id`
+parameter; OntoBricks calls Jobs `run_now` and returns immediately with a
+`task_id` (navbar Background Tasks). Spark still uses the Job's run-as
+identity. On Lakehouse domains in App mode the trigger uses the caller's
+forwarded token (OBO).
 
 **Body:**
 - `entity_uri`: Instance URI of the node to act on
-- `action_full_name`: Fully qualified function name (`catalog.schema.function`)
+- `action_full_name`: UC function FQN (`catalog.schema.function`) or `job:<job_id>`
 - `domain_name` / `domain_version` (optional): Registry domain and version
 
-Only functions declared in the resolved class's `actions` list may be invoked —
-the ontology is the allow-list. Requests for any other function are rejected
-with `success: false` and nothing is executed. Table-valued functions run as
+Only actions declared in the resolved class's `actions` list may be invoked —
+the ontology is the allow-list. Requests for any other name are rejected
+with `success: false` and nothing is executed. Table-valued UC functions run as
 `SELECT * FROM fn('<id>')`; scalar functions run as
-`SELECT fn('<id>') AS result`.
+`SELECT fn('<id>') AS result`. Job responses set `kind: job` and omit result rows.
 
 > **Policy filtering.** If the domain sets **Actions** to **Disabled**, every
 > invocation is refused here, whatever the function name — a caller that
