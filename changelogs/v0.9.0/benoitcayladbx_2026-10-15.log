@@ -222,3 +222,35 @@ Modified files:
 - changelogs/v0.9.0/benoitcayladbx_2026-10-15.log
 
 Tests: `uv run --frozen pytest -q -m "not scenario"` → 9424 passed, 326 skipped, 6 deselected, 1 xfailed, 40 warnings in 46.69s.
+
+================================================================================
+## Explorer right-click menus always stay inside the viewport
+================================================================================
+
+Context:
+Right-clicking near the bottom (or right) of the Explorer canvas opened the
+node / canvas context menu at the raw cursor position, so its lower items
+were cut off by the window edge and could not be reached.
+
+Changes:
+
+1. src/front/static/query/js/query-sigmagraph.js
+   New ``_placeContextMenu(menu, x, y)``: measures the menu off-screen, flips
+   it above / left of the cursor when it would cross the bottom / right edge,
+   clamps it inside the viewport (8px margin), and caps ``maxHeight`` to the
+   viewport height. Used by ``_showNodeContextMenu`` and ``_showContextMenu``.
+2. src/front/static/query/css/query-sigmagraph.css
+   ``#sgContextMenu`` / ``#sgNodeContextMenu``: ``overflow-y: auto`` so a
+   capped menu scrolls (the height cap is set in JS to honour the
+   root-shell-only ``100vh`` design contract).
+3. tests/units/front/test_explorer_context_menu_placement.py
+   Runs the helper in Node: default placement, bottom / right flip, clamp,
+   viewport cap; checks both menus use it and the CSS scrolls.
+
+Modified files:
+- src/front/static/query/js/query-sigmagraph.js
+- src/front/static/query/css/query-sigmagraph.css
+- tests/units/front/test_explorer_context_menu_placement.py
+- changelogs/v0.9.0/benoitcayladbx_2026-10-15.log
+
+Tests: `uv run --frozen pytest -q -m "not scenario"` → 9431 passed, 326 skipped, 6 deselected, 1 xfailed, 40 warnings in 54.87s.

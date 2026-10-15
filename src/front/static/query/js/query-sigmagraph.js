@@ -2634,12 +2634,38 @@ var SigmaGraph = (function () {
 
         nodeMenu.innerHTML = items;
         if (mouseEvent) {
-            nodeMenu.style.left = mouseEvent.clientX + 'px';
-            nodeMenu.style.top = mouseEvent.clientY + 'px';
             _lastNodeMenuX = mouseEvent.clientX;
             _lastNodeMenuY = mouseEvent.clientY;
+            _placeContextMenu(nodeMenu, mouseEvent.clientX, mouseEvent.clientY);
+        } else {
+            nodeMenu.style.display = 'block';
         }
-        nodeMenu.style.display = 'block';
+    }
+
+    var MENU_MARGIN = 8;
+
+    /**
+     * Show *menu* at the click point, flipped up / left when it would cross
+     * the bottom / right edge and clamped inside the viewport. A menu taller
+     * than the viewport is capped and scrolls, so every item stays reachable.
+     */
+    function _placeContextMenu(menu, x, y) {
+        var vw = window.innerWidth;
+        var vh = window.innerHeight;
+        menu.style.visibility = 'hidden';
+        menu.style.display = 'block';
+        menu.style.left = '0px';
+        menu.style.top = '0px';
+        menu.style.maxHeight = (vh - 2 * MENU_MARGIN) + 'px';
+        var w = menu.offsetWidth;
+        var h = Math.min(menu.offsetHeight, vh - 2 * MENU_MARGIN);
+        var left = (x + w + MENU_MARGIN > vw) ? x - w : x;
+        var top = (y + h + MENU_MARGIN > vh) ? y - h : y;
+        left = Math.max(MENU_MARGIN, Math.min(left, vw - w - MENU_MARGIN));
+        top = Math.max(MENU_MARGIN, Math.min(top, vh - h - MENU_MARGIN));
+        menu.style.left = left + 'px';
+        menu.style.top = top + 'px';
+        menu.style.visibility = '';
     }
 
     function _showExpandInfoBubble(message) {
@@ -2681,10 +2707,10 @@ var SigmaGraph = (function () {
         var menu = document.getElementById('sgContextMenu');
         if (!menu) return;
         if (mouseEvent) {
-            menu.style.left = mouseEvent.clientX + 'px';
-            menu.style.top = mouseEvent.clientY + 'px';
+            _placeContextMenu(menu, mouseEvent.clientX, mouseEvent.clientY);
+        } else {
+            menu.style.display = 'block';
         }
-        menu.style.display = 'block';
     }
 
     function _hideContextMenu() {

@@ -434,6 +434,7 @@
     position: fixed;
     z-index: 9999;
     min-width: 170px;
+    overflow-y: auto;
     background: #fff;
     border: 1px solid #dee2e6;
     border-radius: 6px;
@@ -517,6 +518,7 @@
     z-index: 9999;
     min-width: 200px;
     max-width: 340px;
+    overflow-y: auto;
     background: #fff;
     border: 1px solid #dee2e6;
     border-radius: 6px;
