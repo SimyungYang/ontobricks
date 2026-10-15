@@ -457,3 +457,26 @@ Modified files:
 - .planning/code-review-2026-10-14/PLAN.md
 
 Tests: `uv run --frozen pytest -q -m "not scenario"` → 9400 passed, 326 skipped, 6 deselected, 1 xfailed, 40 warnings in 49.37s.
+
+================================================================================
+## README: "What's new in 0.9.0" callout
+================================================================================
+
+Context:
+The README had no at-a-glance summary of the 0.9.0 release. The biggest
+features are now listed right under the header badges, in a highlighted box.
+
+Changes:
+
+1. README.md
+   Added a boxed "What's new in 0.9.0" section (single-cell HTML table, so it
+   renders as a bordered box on GitHub and in IDE previews) with eleven bullets
+   (Lakehouse//RT queries, three-stage Generate, Knowledge Store, entity Data
+   Quality Checks, entity business rules, Jobs as class actions, SPARQL
+   playground, GitHub mirror, faster Explorer, Ontology Studio, security
+   hardening) and a link to releases/ReleaseNotes_V0.9.0.md.
+
+Modified files:
+- README.md
+
+Tests: `uv run --frozen pytest -q -m "not scenario"` → 9400 passed, 326 skipped, 6 deselected, 1 xfailed, 40 warnings in 57.88s.
