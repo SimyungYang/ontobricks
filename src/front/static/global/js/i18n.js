@@ -21,9 +21,13 @@
 (function () {
     'use strict';
 
+    // Keep COOKIE / SUPPORTED / DEFAULT_LANG in sync with UI_LANG_COOKIE /
+    // SUPPORTED_UI_LANGS / DEFAULT_UI_LANG in src/front/fastapi/dependencies.py
+    // (a server-side ONTOBRICKS_UI_LANG override reaches us via <html lang>).
     var COOKIE = 'ob_lang';
     var SUPPORTED = ['en', 'ko'];
     var DEFAULT_LANG = 'en';
+    var ONE_YEAR_SECONDS = 365 * 24 * 60 * 60; // language cookie max-age
     var ATTRS = ['placeholder', 'title', 'aria-label', 'data-bs-original-title', 'data-bs-title'];
     var SKIP_SELECTOR = [
         'script', 'style', 'code', 'pre', 'textarea', 'svg', 'kbd', 'samp',
@@ -64,6 +68,15 @@
      * Translate one string with ``dict``. Tries, in order: exact match,
      * number template, "Known prefix: dynamic detail", and the core text
      * without trailing punctuation. Returns null when nothing matches.
+     *
+     * Examples, with dict = { "Save": "<Save>", "{n} entities": "<{n} entities>",
+     * "Error deleting relationship:": "<Error deleting relationship>:",
+     * "Loading": "<Loading>" }:
+     *   exact:           "Save"                                 -> "<Save>"
+     *   number template: "12 entities"                          -> "<12 entities>"
+     *   known prefix:    "Error deleting relationship: timeout" -> "<Error deleting relationship>: timeout"
+     *   trailing punct:  "Loading..."                           -> "<Loading>..."
+     *   no match:        "Unknown text"                         -> null
      */
     function translateWith(dict, text) {
         var key = normalize(text);
@@ -129,21 +142,23 @@
 
         function translateTree(root) {
             if (!root) return;
-            if (root.nodeType === 3) { translateTextNode(root); return; }
-            if (root.nodeType !== 1 && root.nodeType !== 9 && root.nodeType !== 11) return;
-            if (root.nodeType === 1) {
+            if (root.nodeType === Node.TEXT_NODE) { translateTextNode(root); return; }
+            if (root.nodeType !== Node.ELEMENT_NODE &&
+                root.nodeType !== Node.DOCUMENT_NODE &&
+                root.nodeType !== Node.DOCUMENT_FRAGMENT_NODE) return;
+            if (root.nodeType === Node.ELEMENT_NODE) {
                 if (isSkipped(root)) return;
                 translateAttrs(root);
             }
             var walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT, {
                 acceptNode: function (n) {
-                    if (n.nodeType === 1 && n.matches(SKIP_SELECTOR)) return NodeFilter.FILTER_REJECT;
+                    if (n.nodeType === Node.ELEMENT_NODE && n.matches(SKIP_SELECTOR)) return NodeFilter.FILTER_REJECT;
                     return NodeFilter.FILTER_ACCEPT;
                 }
             });
             var n;
             while ((n = walker.nextNode())) {
-                if (n.nodeType === 3) translateTextNode(n);
+                if (n.nodeType === Node.TEXT_NODE) translateTextNode(n);
                 else translateAttrs(n);
             }
         }
@@ -165,7 +180,8 @@
                 var r = records[i];
                 if (r.type === 'childList') {
                     for (var j = 0; j < r.addedNodes.length; j++) pending.push(r.addedNodes[j]);
-                } else {
+                } else if (r.type === 'characterData' || r.type === 'attributes') {
+                    // Edited text node, or element whose ATTRS value changed.
                     pending.push(r.target);
                 }
             }
@@ -195,7 +211,7 @@
 
     function setLang(lang) {
         if (SUPPORTED.indexOf(lang) < 0) return;
-        document.cookie = COOKIE + '=' + lang + '; path=/; max-age=31536000; SameSite=Lax';
+        document.cookie = COOKIE + '=' + lang + '; path=/; max-age=' + ONE_YEAR_SECONDS + '; SameSite=Lax';
         window.location.reload();
     }
 

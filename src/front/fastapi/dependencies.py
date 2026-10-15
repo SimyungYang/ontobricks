@@ -141,13 +141,12 @@ def brand_page_title(context: dict, page_label: str = "") -> str:
     return _brand_page_title(get_request_ui_branding(request), page_label)
 
 
+# Keep UI_LANG_COOKIE / SUPPORTED_UI_LANGS / DEFAULT_UI_LANG in sync with
+# COOKIE / SUPPORTED / DEFAULT_LANG in src/front/static/global/js/i18n.js.
 UI_LANG_COOKIE = "ob_lang"
 SUPPORTED_UI_LANGS = ("en", "ko")
-DEFAULT_UI_LANG = (
-    os.getenv("ONTOBRICKS_UI_LANG", "en")
-    if os.getenv("ONTOBRICKS_UI_LANG", "en") in SUPPORTED_UI_LANGS
-    else "en"
-)
+_ENV_UI_LANG = os.getenv("ONTOBRICKS_UI_LANG", "en")
+DEFAULT_UI_LANG = _ENV_UI_LANG if _ENV_UI_LANG in SUPPORTED_UI_LANGS else "en"
 
 
 def resolve_ui_lang(cookie_value) -> str:

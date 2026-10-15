@@ -1,0 +1,26 @@
+# i18n readability follow-up (named constants, worked examples)
+
+Context: A readability review of the English/Korean UI internationalisation
+found raw DOM node-type numbers, an unnamed cookie lifetime, a fallback chain
+in translateWith without examples, an implicit else branch in the mutation
+observer, and an environment variable read twice. No behaviour change.
+
+Changes:
+
+1. src/front/static/global/js/i18n.js
+   Node.ELEMENT_NODE / TEXT_NODE / DOCUMENT_NODE / DOCUMENT_FRAGMENT_NODE
+   instead of raw numbers (read only inside DOM functions, so the node test
+   harness still works); ONE_YEAR_SECONDS for the ob_lang cookie max-age;
+   one input -> output example per translateWith fallback branch; explicit
+   characterData / attributes branch in observe(); keep-in-sync comment
+   pointing to dependencies.py.
+2. src/front/fastapi/dependencies.py
+   ONTOBRICKS_UI_LANG read once into _ENV_UI_LANG; keep-in-sync comment
+   pointing to i18n.js.
+
+Modified files:
+- src/front/static/global/js/i18n.js
+- src/front/fastapi/dependencies.py
+
+Tests: `uv run --frozen pytest -q -p no:cacheprovider tests/units/front`
+-> 1074 passed; node --check i18n.js OK.
