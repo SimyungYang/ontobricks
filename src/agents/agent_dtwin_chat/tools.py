@@ -40,10 +40,20 @@ from __future__ import annotations
 
 import json
 import re
-from typing import Callable, Dict, List
+from typing import Callable, Dict, List, Optional
 
 import httpx  # noqa: F401 — kept for httpx.HTTPStatusError in tool handlers
 
+from agents.agent_dtwin_chat.analysis import (
+    DEFAULT_METRIC,
+    DEFAULT_ORDER,
+    DEFAULT_TOP,
+    MAX_TOP,
+    METRICS,
+    SET_OPERATIONS,
+    Executor,
+    analyze,
+)
 from agents.tools.context import ToolContext
 from agents.tools.loopback_http import loopback_client, loopback_registry_params
 from agents.tools.graph_formatting import (
@@ -54,6 +64,7 @@ from agents.tools.graph_formatting import (
     local_name,
     pretty_predicate,
 )
+from back.core.errors import ValidationError
 from back.core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -61,6 +72,18 @@ logger = get_logger(__name__)
 _HTTP_TIMEOUT = 120  # fallback floor when the graph timeout can't be resolved
 _HTTP_TIMEOUT_MARGIN_S = 30
 _MAX_DEPTH = 1
+# Triples fetched per describe_entity call. Every tool result is re-sent to
+# the LLM on each later iteration, so large pages inflate prompt tokens and
+# latency for the whole turn.
+_FIND_PAGE_LIMIT = 200
+# Hard ceiling on the text handed back to the LLM by graph tools.
+_MAX_TOOL_RESULT_CHARS = 20_000
+# query_graphql gets a higher ceiling: with the filter / count fast path a
+# turn needs one or two GraphQL calls, so the larger result is re-sent at
+# most once or twice, and a complete filtered fact list (~110 rows with a
+# few nested refs + uris, ~20-25k chars in the compact format) must fit
+# without truncation so counts and "who" answers are exact.
+_MAX_GRAPHQL_RESULT_CHARS = 32_000
 _SPARQL_DANGEROUS = re.compile(
     r"\b(DROP|DELETE|INSERT|CREATE|CLEAR|LOAD|COPY|MOVE|ADD)\b",
     re.IGNORECASE,
@@ -98,6 +121,22 @@ def _client(ctx: ToolContext):
 
 def _registry_params(ctx: ToolContext) -> dict:
     return loopback_registry_params(ctx)
+
+
+def _cap_result(
+    text: str,
+    max_chars: int | None = None,
+    hint: str = "Narrow the search (exact id, entity_type) for the rest.",
+) -> str:
+    """Trim a tool result to *max_chars* with an explicit partial-result note."""
+    cap = max_chars or _MAX_TOOL_RESULT_CHARS
+    if len(text) <= cap:
+        return text
+    return (
+        text[:cap]
+        + f"\n\n[...truncated, {len(text):,} chars total -- this result is "
+        f"PARTIAL. {hint}]"
+    )
 
 
 def _error(msg: str) -> str:
@@ -269,7 +308,7 @@ def tool_describe_entity(
 
     params: dict = {
         "depth": min(max(int(depth or _MAX_DEPTH), 1), 10),
-        "limit": 500,
+        "limit": _FIND_PAGE_LIMIT,
         "offset": 0,
     }
     if search:
@@ -290,11 +329,13 @@ def tool_describe_entity(
     except Exception as exc:
         return _error(f"triples/find error: {exc}")
 
-    return format_find_response(
-        data,
-        ontology_labels=_get_ontology_labels(ctx),
-        class_actions=_get_class_actions(ctx),
-        action_invoke_hint=_ACTION_HINT,
+    return _cap_result(
+        format_find_response(
+            data,
+            ontology_labels=_get_ontology_labels(ctx),
+            class_actions=_get_class_actions(ctx),
+            action_invoke_hint=_ACTION_HINT,
+        )
     )
 
 
@@ -365,11 +406,33 @@ def tool_get_graphql_schema(ctx: ToolContext, **_kwargs) -> str:
     )
 
 
+def _graphql_executor(client: httpx.Client) -> Executor:
+    """Return a function that POSTs a GraphQL query to the loopback execute route."""
+
+    def execute(query: str, variables: Optional[dict] = None) -> dict:
+        body = {"query": query, **({"variables": variables} if variables else {})}
+        resp = client.post("/dtwin/graphql/execute", json=body)
+        resp.raise_for_status()
+        return resp.json()
+
+    return execute
+
+
+def _json_arg(value, name: str):
+    """Accept a JSON string or an already-decoded value for tool arguments."""
+    if value is None or isinstance(value, (dict, list)):
+        return value
+    try:
+        return json.loads(value)
+    except (TypeError, json.JSONDecodeError) as exc:
+        raise ValidationError(f"Invalid JSON in '{name}' argument.") from exc
+
+
 def tool_query_graphql(
     ctx: ToolContext,
     *,
     query: str,
-    variables: str | None = None,
+    variables: dict | str | None = None,
     **_kwargs,
 ) -> str:
     """Execute a GraphQL query against the selected domain."""
@@ -378,22 +441,14 @@ def tool_query_graphql(
         return _error("No domain selected in the current session.")
     if not query:
         return _error("Missing required 'query' argument.")
-
-    body: dict = {"query": query}
-    if variables:
-        if isinstance(variables, dict):
-            body["variables"] = variables
-        else:
-            try:
-                body["variables"] = json.loads(variables)
-            except json.JSONDecodeError:
-                return _error("Invalid JSON in 'variables' argument.")
+    try:
+        query_variables = _json_arg(variables or None, "variables")
+    except ValidationError as exc:
+        return _error(str(exc))
 
     try:
         with _client(ctx) as c:
-            resp = c.post("/dtwin/graphql/execute", json=body)
-            resp.raise_for_status()
-            data = resp.json()
+            data = _graphql_executor(c)(query, query_variables)
     except httpx.HTTPStatusError as exc:
         return _error(
             f"GraphQL query failed ({exc.response.status_code}): "
@@ -402,7 +457,65 @@ def tool_query_graphql(
     except Exception as exc:
         return _error(f"GraphQL query error: {exc}")
 
-    return format_graphql_response(data, domain)
+    return _cap_result(
+        format_graphql_response(data, domain),
+        max_chars=_MAX_GRAPHQL_RESULT_CHARS,
+        hint=(
+            "Select fewer fields, add filters, or use the <list>Count field "
+            "for exact totals."
+        ),
+    )
+
+
+def tool_analyze_graphql(
+    ctx: ToolContext,
+    *,
+    query: str,
+    operation: str,
+    source: str | None = None,
+    by: list | str | None = None,
+    metric: str | None = DEFAULT_METRIC,
+    field: str | None = None,
+    where: list | str | None = None,
+    restrict: dict | str | None = None,
+    sets: list | str | None = None,
+    top: int | None = None,
+    order: str | None = DEFAULT_ORDER,
+    variables: dict | str | None = None,
+    **_kwargs,
+) -> str:
+    """Fetch every row of a GraphQL query and aggregate it server-side."""
+    if not ctx.dtwin_domain_name:
+        return _error("No domain selected in the current session.")
+    if not query or not operation:
+        return _error("Missing required 'query' / 'operation' argument.")
+
+    try:
+        by_paths = _json_arg(by, "by")
+        options = {
+            "operation": operation,
+            "variables": _json_arg(variables, "variables"),
+            "source": source,
+            "by": [by_paths] if isinstance(by_paths, str) else by_paths,
+            "metric": metric or DEFAULT_METRIC,
+            "field": field,
+            "where": _json_arg(where, "where"),
+            "restrict": _json_arg(restrict, "restrict"),
+            "sets": _json_arg(sets, "sets"),
+            "top": top or DEFAULT_TOP,
+            "order": order or DEFAULT_ORDER,
+        }
+        with _client(ctx) as c:
+            return _cap_result(analyze(query, _graphql_executor(c), **options))
+    except ValidationError as exc:  # includes AnalysisError
+        return _error(str(exc))
+    except httpx.HTTPStatusError as exc:
+        return _error(
+            f"GraphQL query failed ({exc.response.status_code}): "
+            f"{exc.response.text[:300]}"
+        )
+    except Exception as exc:
+        return _error(f"analyze_graphql error: {exc}")
 
 
 def tool_get_entity_context(
@@ -555,8 +668,9 @@ _LIST_ENTITY_TYPES_DEF = {
         "name": "list_entity_types",
         "description": (
             "List all entity types (rdf:type) with instance counts and overall "
-            "statistics of the selected domain's knowledge graph. Call this to "
-            "understand the shape of the graph before describing entities."
+            "statistics of the selected domain's knowledge graph. The schema "
+            "digest in the system prompt already names every type; call this "
+            "only when you need instance counts or graph statistics."
         ),
         "parameters": {"type": "object", "properties": {}},
     },
@@ -567,9 +681,10 @@ _DESCRIBE_ENTITY_DEF = {
     "function": {
         "name": "describe_entity",
         "description": (
-            "Search the knowledge graph for entities matching a text and/or "
-            "type, traverse their relationships, and return a human-readable "
-            "description including attributes and relationships."
+            "Profile of entities matching a text and/or type over the raw "
+            "triple store (attributes + direct relationships, incl. inferred "
+            "triples). For 'what did X buy / X's history' or filtered lists, "
+            "use query_graphql with filters instead."
         ),
         "parameters": {
             "type": "object",
@@ -580,11 +695,17 @@ _DESCRIBE_ENTITY_DEF = {
                 },
                 "entity_type": {
                     "type": "string",
-                    "description": "Entity type local name (case-insensitive) e.g. 'Customer'.",
+                    "description": (
+                        "Entity type local name (case-insensitive) e.g. "
+                        "'Customer'. Omit it when unsure of the type."
+                    ),
                 },
                 "depth": {
                     "type": "integer",
-                    "description": "Relationship traversal depth (1-10, default 1).",
+                    "description": (
+                        "Relationship traversal depth (default 1; keep 1 -- "
+                        "higher depths explode through hub entities)."
+                    ),
                 },
             },
         },
@@ -605,9 +726,9 @@ _GET_GRAPHQL_SCHEMA_DEF = {
     "function": {
         "name": "get_graphql_schema",
         "description": (
-            "Return the auto-generated GraphQL schema (SDL) for the selected "
-            "domain. Call this before query_graphql to know which types and "
-            "fields are available."
+            "Return the full auto-generated GraphQL schema (SDL) for the "
+            "selected domain. Only needed when the schema digest in the system "
+            "prompt lacks a type or field you need."
         ),
         "parameters": {"type": "object", "properties": {}},
     },
@@ -618,16 +739,24 @@ _QUERY_GRAPHQL_DEF = {
     "function": {
         "name": "query_graphql",
         "description": (
-            "Execute a GraphQL query against the selected domain. Use for "
-            "typed lookups and nested relationship traversal. Pair with "
-            "get_graphql_schema first."
+            "Execute a GraphQL query against the selected domain. Fast path "
+            "for entity-centric, filtered and count questions: list fields "
+            "accept filters:[{field, value}] (AND), <list>Count(filters, "
+            "distinctBy) returns exact counts, and inverse fields "
+            "<pluralOfSource>Via<Property> walk relationships backwards. "
+            "Field names are in the schema digest."
         ),
         "parameters": {
             "type": "object",
             "properties": {
                 "query": {
                     "type": "string",
-                    "description": "GraphQL query string, e.g. '{ allCustomer(limit: 5) { id label } }'.",
+                    "description": (
+                        "GraphQL query string, e.g. '{ orders(filters:[{field:"
+                        "\"placedBy\", value:\"CUST001\"}]) { id product { label } } "
+                        "ordersCount(filters:[{field:\"placedBy\", value:"
+                        "\"CUST001\"}]) }'."
+                    ),
                 },
                 "variables": {
                     "type": "string",
@@ -635,6 +764,131 @@ _QUERY_GRAPHQL_DEF = {
                 },
             },
             "required": ["query"],
+        },
+    },
+}
+
+_SELECTION_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "source": {"type": "string", "description": "Root list alias in the query."},
+        "key": {
+            "type": "string",
+            "description": "Dotted path of the entity to compare, e.g. 'soldTo.id' or 'id'.",
+        },
+        "where": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": (
+                "Row conditions (AND) applied before taking keys, same syntax as "
+                "the group 'where', e.g. ['product.category.label=TV']."
+            ),
+        },
+        "having": {
+            "type": "string",
+            "description": (
+                "Keep keys whose own rows satisfy an aggregate, e.g. "
+                "'sum(usageMinutes)>=300', 'count>=2', 'count_distinct(channel.id)>=3'."
+            ),
+        },
+    },
+    "required": ["key"],
+}
+
+_ANALYZE_GRAPHQL_DEF = {
+    "type": "function",
+    "function": {
+        "name": "analyze_graphql",
+        "description": (
+            "Exact aggregation over a GraphQL query, computed server-side. "
+            "Every root list is paged to the end (no sampling), then: "
+            "operation='group' ranks groups by count / count_distinct / sum / "
+            "avg / min / max (ties share a rank); operation='intersect' / "
+            "'difference' (first set minus the others) / 'union' compares "
+            "entity key sets across lists. Use it for rankings, top-N, "
+            "totals, distinct counts per group and 'A and B' / 'A but not B' "
+            "questions instead of counting rows yourself. Put simple "
+            "conditions in GraphQL filters:[...]; use 'where' for nested "
+            "conditions (e.g. 'product.category.label=TV')."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": (
+                        "GraphQL query whose aliased root lists select only "
+                        "the fields the analysis needs, e.g. '{ s: sales("
+                        "filters:[{field:\"isReturned\", value:\"Y\"}]) "
+                        "{ channel { id label } } }'. No limit needed."
+                    ),
+                },
+                "operation": {
+                    "type": "string",
+                    "enum": ["group", *SET_OPERATIONS],
+                },
+                "source": {
+                    "type": "string",
+                    "description": "group: root list alias to group (optional when there is one).",
+                },
+                "by": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "group: dotted group-key path(s), e.g. ['channel'] or ['soldTo','product.label'].",
+                },
+                "metric": {
+                    "type": "string",
+                    "enum": list(METRICS),
+                    "description": "group: default count (rows per group).",
+                },
+                "field": {
+                    "type": "string",
+                    "description": "group: dotted path the metric reads, e.g. 'grossKrw' or 'channel.id'.",
+                },
+                "where": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": (
+                        "group: row conditions (AND): 'path=value', 'path!=value', "
+                        "'path~contains', 'path>value' (numbers or ISO dates); "
+                        "'path>@otherPath' compares two fields of the same row."
+                    ),
+                },
+                "restrict": {
+                    "type": "object",
+                    "description": (
+                        "group: keep rows whose entity at 'key' is in (or with "
+                        "exclude:true, not in) the key set 'in' from another list, "
+                        "e.g. {key:'soldTo.id', in:{source:'churned', key:'heldBy.id'}}."
+                    ),
+                    "properties": {
+                        "key": {"type": "string"},
+                        "in": _SELECTION_SCHEMA,
+                        "exclude": {"type": "boolean"},
+                        "compare": {
+                            "type": "string",
+                            "description": (
+                                "Cross-record condition '<thisRowPath><op><otherRowPath>' "
+                                "between a group row and a matched 'in' row with the same "
+                                "key, e.g. 'saleDate>reviewDate' (bought after reviewing)."
+                            ),
+                        },
+                    },
+                    "required": ["key", "in"],
+                },
+                "sets": {
+                    "type": "array",
+                    "items": _SELECTION_SCHEMA,
+                    "description": "intersect / difference / union: two or more key sets.",
+                },
+                "top": {
+                    "type": "integer",
+                    "description": f"group: rows to show (default {DEFAULT_TOP}, max {MAX_TOP}).",
+                },
+                "order": {"type": "string", "enum": ["desc", "asc"]},
+                "variables": {"type": "string", "description": "Optional JSON string of query variables."},
+            },
+            "required": ["query", "operation"],
         },
     },
 }
@@ -709,6 +963,7 @@ TOOL_DEFINITIONS: List[dict] = [
     _GET_STATUS_DEF,
     _GET_GRAPHQL_SCHEMA_DEF,
     _QUERY_GRAPHQL_DEF,
+    _ANALYZE_GRAPHQL_DEF,
     _GET_ENTITY_CONTEXT_DEF,
     _REQUEST_ENTITY_ACTION_DEF,
 ]
@@ -719,6 +974,7 @@ TOOL_HANDLERS: Dict[str, Callable] = {
     "get_status": tool_get_status,
     "get_graphql_schema": tool_get_graphql_schema,
     "query_graphql": tool_query_graphql,
+    "analyze_graphql": tool_analyze_graphql,
     "get_entity_context": tool_get_entity_context,
     "request_entity_action": tool_request_entity_action,
 }

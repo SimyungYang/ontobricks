@@ -10,6 +10,7 @@ its own copy because it is shipped as an independent wheel with only
 
 from __future__ import annotations
 
+import math
 import re
 from typing import Iterable
 
@@ -21,6 +22,53 @@ RDFS_LABEL = "http://www.w3.org/2000/01/rdf-schema#label"
 DEFAULT_ACTION_INVOKE_HINT = (
     "call request_entity_action(entity_uri, action) to propose one (UI confirmation required)"
 )
+
+
+# ── KRW amount helpers ────────────────────────────────────────────────────
+
+_KRW_PER_EOK = 100_000_000  # 1 eok = 100M KRW
+_KRW_PER_MAN = 10_000  # 1 man = 10K KRW
+
+# Naming contract: an ontology attribute holds a KRW amount iff its name ends
+# with this suffix (case-insensitive), e.g. ``grossKrw`` or ``net_krw``. Only
+# those fields get the pre-computed eok / man-won rendering.
+KRW_FIELD_SUFFIX = "krw"
+
+
+def is_krw_field(name: str) -> bool:
+    """True for amount fields named ``...Krw`` / ``..._krw`` (any case)."""
+    return bool(name) and str(name).lower().endswith(KRW_FIELD_SUFFIX)
+
+
+def krw_eok_text(amount: float) -> str:
+    """Deterministic eok (100M KRW) rendering of a KRW amount.
+
+    Amounts below 1 eok also get the man-won (10K KRW) value. The unit
+    suffixes in the output are the Korean unit words.
+    """
+    eok = amount / _KRW_PER_EOK
+    if abs(eok) >= 1:
+        return f"{eok:,.2f}억"
+    return f"{eok:.3f}억, {amount / _KRW_PER_MAN:,.1f}만원"
+
+
+def with_krw_unit(name: str, value: object) -> str:
+    """Return *value* as text, with a pre-computed eok value for KRW fields.
+
+    ``grossKrw=1409235`` -> ``1409235 (0.014 eok, 140.9 man-won)`` (units are
+    rendered as the Korean unit words). LLMs mis-convert large KRW amounts by
+    100x, so the conversion is done here, not by the model.
+    """
+    text = str(value)
+    if not is_krw_field(name):
+        return text
+    try:
+        amount = float(text.replace(",", "").strip())
+    except ValueError:
+        return text
+    if not math.isfinite(amount):
+        return text
+    return f"{text} ({krw_eok_text(amount)})"
 
 
 # ── URI helpers ───────────────────────────────────────────────────────────
@@ -106,7 +154,12 @@ def _format_entity_block(
         elif is_uri(obj):
             relationships.append((_resolve_uri_label(pred, ontology_labels), local_name(obj)))
         else:
-            attributes.append((_resolve_uri_label(pred, ontology_labels), obj))
+            attributes.append(
+                (
+                    _resolve_uri_label(pred, ontology_labels),
+                    with_krw_unit(local_name(pred), obj),
+                )
+            )
 
     # Inbound relationships: other entities that point TO this entity.
     # Excluding rdf:type and label predicates (those are class/label assertions,
@@ -234,7 +287,12 @@ def format_node_context_response(
         if rows:
             lines.append(f"  Rows ({len(rows)}):")
             for row in rows:
-                lines.append("    " + "  |  ".join(f"{k}: {v}" for k, v in row.items()))
+                lines.append(
+                    "    "
+                    + "  |  ".join(
+                        f"{k}: {with_krw_unit(k, v)}" for k, v in row.items()
+                    )
+                )
         lines.append("")
 
     bridges = data.get("bridges") or []
@@ -291,7 +349,9 @@ def format_node_action_response(data: dict) -> str:
 
     lines.append(f"Result ({len(rows)} row{'s' if len(rows) != 1 else ''}):")
     for row in rows:
-        lines.append("  " + "  |  ".join(f"{k}: {v}" for k, v in row.items()))
+        lines.append(
+            "  " + "  |  ".join(f"{k}: {with_krw_unit(k, v)}" for k, v in row.items())
+        )
     return "\n".join(lines)
 
 
@@ -415,35 +475,107 @@ def format_find_response(
     return "\n".join(parts)
 
 
-def _format_graphql_entity(lines: list[str], entity: dict, indent: int = 0) -> None:
-    """Recursively format a GraphQL entity dict as readable text."""
-    prefix = " " * indent
+_GQL_IDENTITY_KEYS = ("id", "label", "uri")
+# Nested lists longer than this are rendered as indented sub-rows instead of
+# being inlined into the parent row.
+_GQL_INLINE_LIST_MAX = 3
+
+
+def _is_entity_list(value: object) -> bool:
+    """True for a non-empty list of nested GraphQL entities (dicts)."""
+    return isinstance(value, list) and bool(value) and isinstance(value[0], dict)
+
+
+def _entity_key(item: dict) -> str:
+    """Identity of a nested entity for distinct counts (uri, then id, then label)."""
+    return str(item.get("uri") or item.get("id") or item.get("label"))
+
+
+def _gql_ref(entity: dict) -> str:
+    """Short reference for an entity: ``label [id] <uri>`` (parts if present)."""
+    label = entity.get("label")
+    ident = entity.get("id")
+    if label and ident and str(label) != str(ident):
+        head = f"{label} [{ident}]"
+    else:
+        head = str(label or ident or "")
+    uri = entity.get("uri")
+    if uri:
+        head = f"{head} <{uri}>" if head else f"<{uri}>"
+    return head
+
+
+def _gql_inline(entity: dict) -> str:
+    """One-line rendering of a GraphQL entity dict (nested refs inlined)."""
+    parts: list[str] = []
+    ref = _gql_ref(entity)
+    if ref:
+        parts.append(ref)
     for key, value in entity.items():
-        if value is None:
+        if key in _GQL_IDENTITY_KEYS or value is None:
             continue
-        if isinstance(value, list):
-            if not value:
-                continue
-            if isinstance(value[0], dict):
-                lines.append(f"{prefix}{key}:")
-                for sub in value:
-                    _format_graphql_entity(lines, sub, indent=indent + 4)
-                    lines.append(f"{prefix}    ---")
-                if lines[-1].endswith("---"):
-                    lines.pop()
-            else:
-                lines.append(
-                    f"{prefix}{key}: {', '.join(str(v) for v in value)}"
-                )
-        elif isinstance(value, dict):
-            lines.append(f"{prefix}{key}:")
-            _format_graphql_entity(lines, value, indent=indent + 4)
+        if isinstance(value, dict):
+            parts.append(key + "={" + _gql_inline(value) + "}")
+        elif _is_entity_list(value):
+            inner = "; ".join(_gql_inline(v) for v in value)
+            parts.append(f"{key}={inner}" if len(value) == 1 else f"{key}=[{inner}]")
+        elif isinstance(value, list):
+            if value:
+                parts.append(f"{key}=[{', '.join(str(v) for v in value)}]")
         else:
-            lines.append(f"{prefix}{key}: {value}")
+            parts.append(f"{key}={with_krw_unit(key, value)}")
+    return " | ".join(parts)
+
+
+def _gql_row(lines: list[str], entity: dict, indent: int) -> None:
+    """Render one entity as a row; long nested entity lists become sub-rows."""
+    prefix = " " * indent
+    inline: dict = {}
+    expanded: list[tuple[str, list]] = []
+    for key, value in entity.items():
+        if _is_entity_list(value) and len(value) > _GQL_INLINE_LIST_MAX:
+            expanded.append((key, value))
+        else:
+            inline[key] = value
+    lines.append(f"{prefix}- {_gql_inline(inline)}")
+    for key, items in expanded:
+        lines.append(f"{prefix}  {key} ({len(items)}):")
+        for item in items:
+            _gql_row(lines, item, indent + 4)
+
+
+def _gql_distinct_summary(rows: list) -> str:
+    """``distinct <field>: N`` for every nested-entity column of *rows*."""
+    keys: list[str] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        for key, value in row.items():
+            if key in keys:
+                continue
+            if isinstance(value, dict) or _is_entity_list(value):
+                keys.append(key)
+    parts = []
+    for key in keys:
+        seen: set[str] = set()
+        for row in rows:
+            value = row.get(key) if isinstance(row, dict) else None
+            items = value if isinstance(value, list) else [value]
+            for item in items:
+                if isinstance(item, dict):
+                    seen.add(_entity_key(item))
+        parts.append(f"{key}: {len(seen)}")
+    return ("distinct " + ", ".join(parts)) if parts else ""
 
 
 def format_graphql_response(data: dict, domain_name: str) -> str:
-    """Convert a GraphQL JSON response into LLM-friendly text."""
+    """Convert a GraphQL JSON response into compact, LLM-friendly text.
+
+    Each entity is one line (``label [id] <uri> | field=value | rel={...}``)
+    so a ~100-row filtered list fits in a single tool result. Root lists
+    also report the row count and the number of distinct nested entities
+    per relationship column (e.g. distinct customers across sales).
+    """
     errors = data.get("errors")
     result_data = data.get("data")
 
@@ -454,25 +586,22 @@ def format_graphql_response(data: dict, domain_name: str) -> str:
     if not result_data:
         return "GraphQL query returned no data."
 
-    lines: list[str] = []
-    lines.append(f"GraphQL Result — {domain_name}")
-    lines.append("=" * 50)
+    lines: list[str] = [f"GraphQL Result — {domain_name}"]
 
     for field_name, field_data in result_data.items():
         if isinstance(field_data, list):
-            lines.append(f"\n{field_name} ({len(field_data)} results)")
-            lines.append("-" * 40)
-            for i, item in enumerate(field_data):
+            lines.append(f"\n{field_name}: {len(field_data)} rows")
+            summary = _gql_distinct_summary(field_data) if len(field_data) > 1 else ""
+            if summary:
+                lines.append(summary)
+            for item in field_data:
                 if isinstance(item, dict):
-                    _format_graphql_entity(lines, item, indent=2)
+                    _gql_row(lines, item, indent=0)
                 else:
-                    lines.append(f"  {item}")
-                if i < len(field_data) - 1:
-                    lines.append("")
+                    lines.append(f"- {item}")
         elif isinstance(field_data, dict):
-            lines.append(f"\n{field_name}")
-            lines.append("-" * 40)
-            _format_graphql_entity(lines, field_data, indent=2)
+            lines.append(f"\n{field_name}:")
+            _gql_row(lines, field_data, indent=0)
         elif field_data is None:
             lines.append(f"\n{field_name}: (not found)")
         else:

@@ -6,6 +6,12 @@ Each ontology class becomes a GraphQL object type with:
 - ``label: String`` — rdfs:label value
 - One ``Optional[String]`` field per data property
 - One ``Optional[List[TargetType]]`` field per object property
+- One inverse ``Optional[List[SourceType]]`` field per object property on
+  its range type, named ``<pluralOfDomain>Via<Property>`` (for example
+  ``salesTransactionsViaSoldTo`` on ``Customer``)
+
+Root query fields per type: ``<plural>(limit, offset, search, filters)``,
+``<plural>Count(search, filters, distinctBy)`` and ``<singular>(id)``.
 
 Types are created in topological order so that relationship targets
 are always defined before the types that reference them.
@@ -18,10 +24,18 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 
 import strawberry
 from strawberry.tools import create_type
+from strawberry.utils.str_converters import to_camel_case
 
 from back.core.graphql.ResolverFactory import ResolverFactory
+from back.core.graphql.constants import MAX_LIST_LIMIT
 from back.core.graphql.SchemaMetadata import SchemaMetadata
-from back.core.graphql.models import TypeInfo
+from back.core.graphql.models import (
+    InverseField,
+    InverseSource,
+    RelEdge,
+    RelTarget,
+    TypeInfo,
+)
 from back.core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -204,6 +218,7 @@ class GraphQLSchemaBuilder:
 
         py_classes = self._create_python_classes(order, class_by_name, base_uri)
         self._add_relationship_annotations(py_classes, rel_by_domain)
+        inv_by_range = self._add_inverse_annotations(py_classes, rel_by_domain)
 
         gql_types = self._apply_strawberry_types(order, py_classes)
         if not gql_types:
@@ -216,15 +231,17 @@ class GraphQLSchemaBuilder:
             class_by_name,
             rel_by_domain,
             base_uri,
+            inv_by_range=inv_by_range,
+            rel_labels=self._property_labels(properties),
         )
         schema = self._build_query(order, gql_types, metadata)
         if not schema:
             return None
 
         logger.info(
-            "GraphQL schema built: %d types, %d query fields",
+            "GraphQL schema built: %d types, %d inverse fields",
             len(gql_types),
-            len(gql_types) * 2,
+            sum(len(v) for v in inv_by_range.values()),
         )
         return schema, metadata
 
@@ -256,8 +273,8 @@ class GraphQLSchemaBuilder:
         base_uri: str,
         class_names: Set[str],
         uri_to_name: Dict[str, str],
-    ) -> Tuple[Dict[str, List[Tuple[str, str, str]]], Dict[str, Set[str]]]:
-        rel_by_domain: Dict[str, List[Tuple[str, str, str]]] = defaultdict(list)
+    ) -> Tuple[Dict[str, List[RelEdge]], Dict[str, Set[str]]]:
+        rel_by_domain: Dict[str, List[RelEdge]] = defaultdict(list)
         dep_graph: Dict[str, Set[str]] = defaultdict(set)
         norm = self.normalize_base(base_uri)
 
@@ -274,7 +291,7 @@ class GraphQLSchemaBuilder:
             range_name = uri_to_name.get(range_uri) or self.extract_local(range_uri)
 
             if domain_name in class_names and range_name in class_names and prop_name:
-                rel_by_domain[domain_name].append((prop_name, range_name, prop_uri))
+                rel_by_domain[domain_name].append(RelEdge(prop_name, range_name, prop_uri))
                 if range_name != domain_name:
                     dep_graph[domain_name].add(range_name)
 
@@ -311,20 +328,79 @@ class GraphQLSchemaBuilder:
     @staticmethod
     def _add_relationship_annotations(
         py_classes: Dict[str, type],
-        rel_by_domain: Dict[str, List[Tuple[str, str, str]]],
+        rel_by_domain: Dict[str, List[RelEdge]],
     ) -> None:
         for domain_name, rels in rel_by_domain.items():
             domain_cls = py_classes.get(domain_name)
             if not domain_cls:
                 continue
-            for prop_name, range_name, _ in rels:
-                range_cls = py_classes.get(range_name)
+            for edge in rels:
+                range_cls = py_classes.get(edge.range_name)
                 if not range_cls:
                     continue
-                safe = GraphQLSchemaBuilder.safe_name(prop_name)
+                safe = GraphQLSchemaBuilder.safe_name(edge.prop_name)
                 if safe not in domain_cls.__annotations__:
                     domain_cls.__annotations__[safe] = Optional[List[range_cls]]
                     setattr(domain_cls, safe, None)
+
+    @staticmethod
+    def inverse_field_name(domain_name: str, prop_name: str) -> str:
+        """Deterministic inverse field name, e.g. ``salesTransactionsViaSoldTo``."""
+        prop = prop_name[:1].upper() + prop_name[1:]
+        return GraphQLSchemaBuilder.safe_name(
+            f"{GraphQLSchemaBuilder.pluralize(domain_name)}Via{prop}"
+        )
+
+    @staticmethod
+    def _add_inverse_annotations(
+        py_classes: Dict[str, type],
+        rel_by_domain: Dict[str, List[RelEdge]],
+    ) -> Dict[str, List[InverseField]]:
+        """Add one inverse list field per object property on its range class.
+
+        Returns ``{range_name: [InverseField, ...]}``.
+        A name that collides with an existing field (in Python or camelCase
+        GraphQL form) is skipped. Self-references and cycles are fine: all
+        Python classes exist before any annotation is added.
+        """
+        inv_by_range: Dict[str, List[InverseField]] = defaultdict(list)
+        for domain_name in sorted(rel_by_domain):
+            domain_cls = py_classes.get(domain_name)
+            if not domain_cls:
+                continue
+            for edge in rel_by_domain[domain_name]:
+                range_name = edge.range_name
+                range_cls = py_classes.get(range_name)
+                if not range_cls:
+                    continue
+                fname = GraphQLSchemaBuilder.inverse_field_name(
+                    domain_name, edge.prop_name
+                )
+                taken = set(range_cls.__annotations__)
+                taken |= {to_camel_case(n) for n in taken}
+                if fname in taken or to_camel_case(fname) in taken:
+                    logger.info(
+                        "GraphQL inverse field %s.%s skipped (name collision)",
+                        range_name,
+                        fname,
+                    )
+                    continue
+                range_cls.__annotations__[fname] = Optional[List[domain_cls]]
+                setattr(range_cls, fname, None)
+                inv_by_range[range_name].append(
+                    InverseField(fname, edge.prop_uri, domain_name)
+                )
+        return inv_by_range
+
+    def _property_labels(self, properties: List[Dict]) -> Dict[str, str]:
+        """Map object-property name -> ontology label (for the schema digest)."""
+        out: Dict[str, str] = {}
+        for prop in properties:
+            name = prop.get("name") or self.extract_local(prop.get("uri", ""))
+            label = prop.get("label") or ""
+            if name and label:
+                out[name] = label
+        return out
 
     @staticmethod
     def _apply_strawberry_types(
@@ -345,8 +421,10 @@ class GraphQLSchemaBuilder:
         order: List[str],
         gql_types: Dict[str, type],
         class_by_name: Dict[str, Dict],
-        rel_by_domain: Dict[str, List[Tuple[str, str, str]]],
+        rel_by_domain: Dict[str, List[RelEdge]],
         base_uri: str,
+        inv_by_range: Dict[str, List[InverseField]],
+        rel_labels: Dict[str, str],
     ) -> SchemaMetadata:
         metadata = SchemaMetadata(base_uri=base_uri)
         for name in order:
@@ -363,14 +441,23 @@ class GraphQLSchemaBuilder:
                 pred_to_field[attr_uri] = safe
                 field_to_pred[safe] = attr_uri
 
-            rel_info: Dict[str, Tuple[str, str]] = {}
-            for prop_name, range_name, prop_uri in rel_by_domain.get(name, []):
-                safe = self.safe_name(prop_name)
-                if range_name in gql_types:
-                    pred_to_field[prop_uri] = safe
-                    field_to_pred[safe] = prop_uri
-                    rel_info[safe] = (prop_uri, range_name)
+            rel_info: Dict[str, RelTarget] = {}
+            rel_label_info: Dict[str, str] = {}
+            for edge in rel_by_domain.get(name, []):
+                safe = self.safe_name(edge.prop_name)
+                if edge.range_name in gql_types:
+                    pred_to_field[edge.prop_uri] = safe
+                    field_to_pred[safe] = edge.prop_uri
+                    rel_info[safe] = RelTarget(edge.prop_uri, edge.range_name)
+                    if rel_labels.get(edge.prop_name):
+                        rel_label_info[safe] = rel_labels[edge.prop_name]
 
+            inverse_info: Dict[str, InverseSource] = {
+                inv.field_name: InverseSource(inv.prop_uri, inv.domain_name)
+                for inv in inv_by_range.get(name, [])
+                if inv.domain_name in gql_types
+            }
+            all_fields = list(field_to_pred) + list(inverse_info)
             metadata.register(
                 TypeInfo(
                     name=name,
@@ -379,9 +466,42 @@ class GraphQLSchemaBuilder:
                     predicate_to_field=pred_to_field,
                     field_to_predicate=field_to_pred,
                     relationships=rel_info,
+                    inverse_relationships=inverse_info,
+                    graphql_names={f: to_camel_case(f) for f in all_fields},
+                    label=cls_data.get("label") or "",
+                    relationship_labels=rel_label_info,
                 )
             )
         return metadata
+
+    @staticmethod
+    def _root_fields(
+        metadata: SchemaMetadata, name: str, gql_type: type
+    ) -> List[Tuple[str, str, Any, str]]:
+        """Root query fields of type *name* as
+        ``(TypeInfo attribute, field name, resolver, description)``."""
+        plural = GraphQLSchemaBuilder.pluralize(name)
+        singular = name[0].lower() + name[1:] if name else name
+        return [
+            (
+                "list_field",
+                plural,
+                ResolverFactory.make_list_resolver(metadata, name, gql_type),
+                f"List {name} entities (limit <= {MAX_LIST_LIMIT}).",
+            ),
+            (
+                "count_field",
+                f"{plural}Count",
+                ResolverFactory.make_count_resolver(metadata, name),
+                f"Exact count of {name} matches (distinctBy: distinct field values).",
+            ),
+            (
+                "single_field",
+                singular,
+                ResolverFactory.make_single_resolver(metadata, name, gql_type),
+                f"Get a single {name} by ID.",
+            ),
+        ]
 
     @staticmethod
     def _build_query(
@@ -390,30 +510,30 @@ class GraphQLSchemaBuilder:
         metadata: SchemaMetadata,
     ) -> Optional[strawberry.Schema]:
         query_fields = []
+        used: Set[str] = set()
         for name in order:
             if name not in gql_types:
                 continue
-            gql_type = gql_types[name]
-            plural = GraphQLSchemaBuilder.pluralize(name)
-            query_fields.append(
-                strawberry.field(
-                    name=plural,
-                    resolver=ResolverFactory.make_list_resolver(
-                        metadata, name, gql_type
-                    ),
-                    description=f"List {name} entities from the knowledge graph.",
+            info = metadata.types.get(name)
+            for attr, field_name, resolver, description in (
+                GraphQLSchemaBuilder._root_fields(metadata, name, gql_types[name])
+            ):
+                if field_name in used:
+                    logger.warning(
+                        "GraphQL root field %s skipped (name collision)", field_name
+                    )
+                    continue
+                used.add(field_name)
+                query_fields.append(
+                    strawberry.field(
+                        name=field_name, resolver=resolver, description=description
+                    )
                 )
-            )
-            singular = name[0].lower() + name[1:] if name else name
-            query_fields.append(
-                strawberry.field(
-                    name=singular,
-                    resolver=ResolverFactory.make_single_resolver(
-                        metadata, name, gql_type
-                    ),
-                    description=f"Get a single {name} by ID.",
-                )
-            )
+                if info:
+                    setattr(info, attr, field_name)
+        # Root field names land on TypeInfo after register(); drop any digest
+        # rendered in between so it lists them.
+        metadata.reset_digest()
         if not query_fields:
             logger.warning("No query fields could be created")
             return None

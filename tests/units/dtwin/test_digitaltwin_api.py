@@ -292,6 +292,7 @@ class TestBfsTraversalSql:
         store.execute_query = fake_execute
         store._sql_relation = lambda t: t
         store._bfs_edge_filter = GraphDBBackend._bfs_edge_filter
+        store._subject_tail_expr = GraphDBBackend._subject_tail_expr
         store._bfs_walk_cte = lambda *a, **kw: GraphDBBackend._bfs_walk_cte(
             store, *a, **kw
         )
@@ -384,6 +385,37 @@ class TestBfsTraversalSql:
             "entity_count": 5,
             "has_more": True,
         }
+
+    def test_find_triples_bfs_page_alias_join_is_equi_join(self):
+        """Alias expansion hash-joins on the URI tail, not a per-row LIKE scan."""
+        captured = {}
+
+        def fake_execute(sql):
+            captured["sql"] = sql
+            return []
+
+        store = self._bfs_store(fake_execute)
+        GraphDBBackend.find_triples_bfs_page(store, "tbl", " WHERE 1=1", 1, limit=1)
+        sql = captured["sql"]
+        assert "LIKE CONCAT('%/', alias.local_id)" not in sql
+        assert "regexp_replace(candidate.subject, '^.*/', '') = alias.local_id" in sql
+
+    @pytest.mark.parametrize(
+        "subject,local_id",
+        [
+            ("https://x/Demo/Customer/CUST00001", "CUST00001"),
+            ("https://x/Demo/B2CCustomer/CUST00001", "CUST00001"),
+            ("https://x/Demo/Customer/CUST000010", "CUST00001"),
+            ("https://x/Demo#Customer", "Customer"),
+            ("https://x/Demo/Sales/ORG_SEL_GN", "ORG_SEL_GN"),
+        ],
+    )
+    def test_uri_tail_match_equals_like_suffix_match(self, subject, local_id):
+        """tail(subject) = id selects exactly what LIKE '%/' || id selected."""
+        import re
+
+        tail = re.sub(r"^.*/", "", subject)
+        assert (tail == local_id) == subject.endswith("/" + local_id)
 
     def test_find_triples_bfs_page_flags_has_more(self):
         """has_more is derived from exact total and page size."""

@@ -576,6 +576,30 @@ else
     fi
 fi
 
+# Run the idempotent app self-permission bootstrap as its own step.
+#   $1  step label        $2  success message        $3  failure warning
+# A failure only warns: the grant is retried (step 10 / `make bootstrap-perms`).
+grant_app_self_permissions() {
+    begin_step "$1"
+    chmod +x scripts/bootstrap/app-permissions.sh
+    if scripts/bootstrap/app-permissions.sh "$APP_NAME" "$MCP_APP_NAME"; then
+        ok "$2"
+    else
+        warn "$3"
+    fi
+}
+
+# ── 6c. App self-permissions BEFORE start ───────────────────────────
+# `bundle deploy` rewrites the app ACL from databricks.yml `permissions:`,
+# which drops the app SP's self CAN_MANAGE. If the app restarts before the
+# grant is restored (step 10), every visitor hits /access-denied?reason=bootstrap
+# until it is. The app (and its SP) already exist after `bundle deploy`, so
+# restore the grant here, before step 8 starts the app. Step 10 stays as an
+# idempotent backstop.
+grant_app_self_permissions "App self-permissions (pre-start)" \
+    "app self-permissions restored before start" \
+    "pre-start self-permission grant failed — step 10 retries after start."
+
 # ── 7. Bind resources (first-time only) ────────────────────────────
 if $DO_BIND; then
     begin_step "Bind existing app"
@@ -726,7 +750,9 @@ if ! $DO_BOOTSTRAP; then
     exit 0
 fi
 
-# ── 10. App self-permissions (first-deploy bootstrap) ──────────────
+# ── 10. App self-permissions (idempotent backstop) ─────────────────
+# Re-applies the grant step 6c already made before start, in case that
+# attempt failed or the ACL changed while the apps were starting.
 # The app's service principal needs CAN_MANAGE on its OWN app so the
 # middleware can read the ACL to resolve admin/app-user roles.
 # The MCP app service principal also needs CAN_USE on the main app so
@@ -736,13 +762,9 @@ fi
 # the UI reports a misleading "job not found").
 # Idempotent — safe to re-run. The bootstrap script reads APP_NAME /
 # MCP_APP_NAME from the env we exported via deploy.config.sh.
-begin_step "App self-permissions"
-chmod +x scripts/bootstrap/app-permissions.sh
-if scripts/bootstrap/app-permissions.sh "$APP_NAME" "$MCP_APP_NAME"; then
-    ok "app self-permissions applied"
-else
-    warn "app self-permission bootstrap returned non-zero — the app may not yet be reachable; re-run \`make bootstrap-perms\` once it is RUNNING."
-fi
+grant_app_self_permissions "App self-permissions (backstop)" \
+    "app self-permissions applied" \
+    "app self-permission bootstrap returned non-zero — the app may not yet be reachable; re-run \`make bootstrap-perms\` once it is RUNNING."
 
 # ── 11. Registry Lakebase schema permissions (dev-lakebase only) ───
 # When the postgres resource binding is unbound/rebound — which happens

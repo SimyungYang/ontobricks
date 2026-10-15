@@ -8,7 +8,8 @@ or not configured.
 
 import os
 import functools
-from typing import Optional
+import inspect
+from typing import Any, Optional
 
 from back.core.logging import get_logger
 
@@ -17,6 +18,26 @@ logger = get_logger(__name__)
 _TRACING_READY = False
 
 EXPERIMENT_NAME = os.getenv("ONTOBRICKS_MLFLOW_EXPERIMENT", "ontobricks-agents")
+
+# Per-field character cap for message / tool payloads recorded on spans.
+TRACE_MAX_CHARS = int(os.getenv("ONTOBRICKS_TRACE_MAX_CHARS", "4000"))
+# Argument names never recorded on a span: credentials (token, host,
+# client) and opaque runtime objects (ctx, handlers) with no trace value.
+_UNTRACED_ARG_NAMES = frozenset({"token", "host", "client", "ctx", "handlers"})
+
+
+def trace_payloads_enabled() -> bool:
+    """Return True when message / tool payloads should be recorded on spans.
+
+    On by default so a failed chat turn can be diagnosed from the trace alone;
+    set ``ONTOBRICKS_TRACE_PAYLOADS=false`` to record only sizes and counts.
+    """
+    return os.getenv("ONTOBRICKS_TRACE_PAYLOADS", "true").strip().lower() not in (
+        "0",
+        "false",
+        "no",
+        "off",
+    )
 
 
 def _resolve_experiment_name(name: str) -> str:
@@ -102,27 +123,21 @@ def trace_llm(name: Optional[str] = None):
             with mlflow.start_span(
                 name=name or fn.__name__, span_type=SpanType.LLM
             ) as span:
-                span.set_inputs(
-                    {
-                        "endpoint": kwargs.get("endpoint_name")
-                        or (args[2] if len(args) > 2 else "?"),
-                        "message_count": len(
-                            kwargs.get("messages") or (args[3] if len(args) > 3 else [])
-                        ),
-                    }
-                )
+                bound = _bind_call_arguments(fn, args, kwargs)
+                messages = bound.get("messages") or []
+                tools = bound.get("tools") or []
+                inputs = {
+                    "endpoint": bound.get("endpoint_name") or "?",
+                    "message_count": len(messages),
+                    "tool_count": len(tools),
+                    "max_tokens": bound.get("max_tokens"),
+                }
+                if trace_payloads_enabled():
+                    inputs["messages"] = _summarize_messages(messages)
+                span.set_inputs(inputs)
                 result = fn(*args, **kwargs)
                 if isinstance(result, dict):
-                    usage = result.get("usage", {})
-                    span.set_outputs(
-                        {
-                            "finish_reason": result.get("choices", [{}])[0].get(
-                                "finish_reason"
-                            ),
-                            "prompt_tokens": usage.get("prompt_tokens"),
-                            "completion_tokens": usage.get("completion_tokens"),
-                        }
-                    )
+                    span.set_outputs(_summarize_llm_response(result))
                 return result
 
         return wrapper
@@ -141,21 +156,23 @@ def trace_tool(name: Optional[str] = None):
             import mlflow
             from mlflow.entities import SpanType
 
-            tool_name = kwargs.get("tool_name") or (args[1] if len(args) > 1 else "?")
-            tool_args = kwargs.get("arguments") or (args[2] if len(args) > 2 else {})
+            tool_name, tool_args = _bind_tool_call(fn, name, args, kwargs)
             with mlflow.start_span(
                 name=f"tool:{tool_name}", span_type=SpanType.TOOL
             ) as span:
                 span.set_inputs(
                     {
                         "tool_name": tool_name,
-                        "arguments": _truncate(str(tool_args), 500),
+                        "arguments": _truncate(str(tool_args), TRACE_MAX_CHARS),
                     }
                 )
                 result = fn(*args, **kwargs)
-                span.set_outputs(
-                    {"result_length": len(result) if isinstance(result, str) else None}
-                )
+                outputs: dict = {
+                    "result_length": len(result) if isinstance(result, str) else None
+                }
+                if trace_payloads_enabled() and isinstance(result, str):
+                    outputs["result"] = _truncate(result, TRACE_MAX_CHARS)
+                span.set_outputs(outputs)
                 return result
 
         return wrapper
@@ -164,11 +181,10 @@ def trace_tool(name: Optional[str] = None):
 
 
 def _safe_inputs(kwargs: dict) -> dict:
-    """Extract trace-safe inputs from kwargs, excluding secrets."""
-    exclude = {"token", "host", "client"}
+    """Extract trace-safe inputs from kwargs, excluding untraced names."""
     out = {}
     for k, v in kwargs.items():
-        if k in exclude:
+        if k in _UNTRACED_ARG_NAMES:
             continue
         if isinstance(v, (str, int, float, bool, type(None))):
             out[k] = _truncate(str(v), 300)
@@ -190,6 +206,134 @@ def _safe_result(result) -> dict:
         val = getattr(result, attr, None)
         if val is not None:
             out[attr] = val
+    reply = getattr(result, "reply", None)
+    if trace_payloads_enabled() and isinstance(reply, str) and reply:
+        out["reply"] = _truncate(reply, TRACE_MAX_CHARS)
+    return out
+
+
+def _bind_call_arguments(fn, args: tuple, kwargs: dict) -> dict:
+    """Map a call's positional and keyword arguments to *fn*'s parameter names.
+
+    Only explicitly passed arguments are returned (defaults are not filled
+    in). Falls back to *kwargs* when the call does not match the signature.
+    """
+    try:
+        return dict(inspect.signature(fn).bind_partial(*args, **kwargs).arguments)
+    except TypeError:
+        return dict(kwargs)
+
+
+def _bind_tool_call(fn, default_name: Optional[str], args: tuple, kwargs: dict):
+    """Return ``(tool_name, arguments)`` for a traced tool function call.
+
+    Works for both dispatchers (``dispatch_tool(handlers, ctx, tool_name,
+    arguments)``) and individual tools (``tool_x(ctx, *, uri=...)``), where the
+    tool name falls back to the decorator name and the arguments are the bound
+    call parameters minus context objects and secrets.
+    """
+    bound = _bind_call_arguments(fn, args, kwargs)
+    tool_name = bound.get("tool_name") or default_name or fn.__name__
+    if "arguments" in bound:
+        tool_args = bound["arguments"]
+    else:
+        tool_args = {}
+        for key, val in bound.items():
+            if key in _UNTRACED_ARG_NAMES:
+                continue
+            if key == "_kwargs" or key == "kwargs":
+                tool_args.update(val or {})
+            else:
+                tool_args[key] = val
+    return tool_name, tool_args
+
+
+def _content_text(content: Any, markers: bool = True) -> str:
+    """Flatten an OpenAI / Anthropic-style message content into readable text.
+
+    Text blocks keep their text; other blocks (reasoning, images, …) are shown
+    as ``[<type>]`` markers (or dropped when *markers* is False) so their
+    presence is visible without leaking opaque payloads such as reasoning
+    signatures.
+    """
+    if content is None:
+        return ""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        return "\n".join(
+            filter(None, (_content_text(item, markers) for item in content))
+        )
+    if isinstance(content, dict):
+        block_type = content.get("type")
+        if block_type in (None, "text", "output_text"):
+            for key in ("text", "content", "value"):
+                if key in content:
+                    return _content_text(content[key], markers)
+        return f"[{block_type}]" if markers else ""
+    return str(content)
+
+
+def content_block_types(content: Any) -> list:
+    """Return the block types of a message content (``["str"]`` for plain text)."""
+    if isinstance(content, list):
+        return [
+            (b.get("type") if isinstance(b, dict) else type(b).__name__)
+            for b in content
+        ]
+    if content is None:
+        return []
+    return [type(content).__name__]
+
+
+def _summarize_tool_calls(tool_calls: Any) -> list:
+    out = []
+    for call in tool_calls or []:
+        func = (call or {}).get("function", {}) if isinstance(call, dict) else {}
+        out.append(
+            {
+                "name": func.get("name"),
+                "arguments": _truncate(str(func.get("arguments", "")), TRACE_MAX_CHARS),
+            }
+        )
+    return out
+
+
+def _summarize_messages(messages: list) -> list:
+    """Return a trace-safe copy of chat *messages* with truncated contents."""
+    out = []
+    for msg in messages or []:
+        if not isinstance(msg, dict):
+            continue
+        entry: dict = {
+            "role": msg.get("role"),
+            "content": _truncate(_content_text(msg.get("content")), TRACE_MAX_CHARS),
+        }
+        if msg.get("tool_calls"):
+            entry["tool_calls"] = _summarize_tool_calls(msg["tool_calls"])
+        if msg.get("tool_call_id"):
+            entry["tool_call_id"] = msg["tool_call_id"]
+        out.append(entry)
+    return out
+
+
+def _summarize_llm_response(result: dict) -> dict:
+    """Return finish reason, token usage and (optionally) the reply for a span."""
+    choice = (result.get("choices") or [{}])[0] or {}
+    message = choice.get("message") or {}
+    usage = result.get("usage") or {}
+    content = message.get("content")
+    text = _content_text(content)
+    out = {
+        "finish_reason": choice.get("finish_reason"),
+        "prompt_tokens": usage.get("prompt_tokens"),
+        "completion_tokens": usage.get("completion_tokens"),
+        "content_block_types": content_block_types(content),
+        "text_length": len(_content_text(content, markers=False)),
+        "tool_calls": _summarize_tool_calls(message.get("tool_calls")),
+    }
+    if trace_payloads_enabled():
+        out["text"] = _truncate(text, TRACE_MAX_CHARS)
     return out
 
 

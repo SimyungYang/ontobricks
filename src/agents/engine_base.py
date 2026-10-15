@@ -17,7 +17,7 @@ import requests
 
 from back.core.logging import get_logger
 from agents.llm_utils import call_llm_with_retry
-from agents.tracing import trace_llm
+from agents.tracing import trace_llm, trace_tool
 
 logger = get_logger(__name__)
 
@@ -139,6 +139,9 @@ def call_serving_endpoint(
 # =====================================================
 
 
+# The span is named ``tool:{tool_name}`` from the bound ``tool_name``
+# argument; "agent:tool" is only the fallback when that name is missing.
+@trace_tool("agent:tool")
 def dispatch_tool(
     handlers: Dict[str, Callable],
     ctx: Any,

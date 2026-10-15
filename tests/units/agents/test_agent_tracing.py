@@ -165,3 +165,134 @@ class TestTraceDecorators:
             pass
 
         assert original_name.__name__ == "original_name"
+
+
+class TestPayloadSummaries:
+    """Trace payload helpers used by the LLM / tool spans."""
+
+    def test_reasoning_only_reply_has_no_text(self):
+        result = {
+            "choices": [
+                {
+                    "finish_reason": "length",
+                    "message": {
+                        "content": [
+                            {"type": "reasoning", "summary": [{"signature": "SECRET"}]}
+                        ]
+                    },
+                }
+            ],
+            "usage": {"prompt_tokens": 10, "completion_tokens": 2048},
+        }
+        out = tracing_mod._summarize_llm_response(result)
+        assert out["finish_reason"] == "length"
+        assert out["content_block_types"] == ["reasoning"]
+        assert out["text_length"] == 0
+
+    def test_reasoning_signature_not_recorded(self):
+        content = [
+            {"type": "reasoning", "summary": [{"signature": "SECRET"}]},
+            {"type": "text", "text": "answer"},
+        ]
+        text = tracing_mod._content_text(content)
+        assert "SECRET" not in text
+        assert "answer" in text
+
+    def test_reply_text_recorded(self):
+        result = {"choices": [{"message": {"content": "hello"}, "finish_reason": "stop"}]}
+        assert tracing_mod._summarize_llm_response(result)["text"] == "hello"
+
+    def test_payloads_can_be_disabled(self, monkeypatch):
+        monkeypatch.setenv("ONTOBRICKS_TRACE_PAYLOADS", "false")
+        result = {"choices": [{"message": {"content": "hello"}, "finish_reason": "stop"}]}
+        assert "text" not in tracing_mod._summarize_llm_response(result)
+
+    def test_messages_keep_tool_calls(self):
+        msgs = [
+            {
+                "role": "assistant",
+                "content": None,
+                "tool_calls": [
+                    {"id": "c1", "function": {"name": "describe_entity", "arguments": "{}"}}
+                ],
+            }
+        ]
+        out = tracing_mod._summarize_messages(msgs)
+        assert out[0]["tool_calls"][0]["name"] == "describe_entity"
+
+    def test_message_content_truncated(self, monkeypatch):
+        monkeypatch.setattr(tracing_mod, "TRACE_MAX_CHARS", 10)
+        out = tracing_mod._summarize_messages([{"role": "tool", "content": "x" * 50}])
+        assert out[0]["content"] == "x" * 10 + "…"
+
+    def test_safe_result_includes_reply(self):
+        class FakeResult:
+            success = True
+            reply = "final answer"
+
+        assert _safe_result(FakeResult())["reply"] == "final answer"
+
+
+class TestBindToolCall:
+    def test_dispatcher_signature(self):
+        def dispatch_tool(handlers, ctx, tool_name, arguments, *, trace_name=""):
+            return ""
+
+        name, args = tracing_mod._bind_tool_call(
+            dispatch_tool, "agent:tool", ({}, object(), "describe_entity", {"search": "x"}), {}
+        )
+        assert (name, args) == ("describe_entity", {"search": "x"})
+
+    def test_plain_tool_drops_context(self):
+        def tool_get(ctx, *, uri, **_kwargs):
+            return ""
+
+        name, args = tracing_mod._bind_tool_call(
+            tool_get, "get_entity_details", (object(),), {"uri": "u1"}
+        )
+        assert (name, args) == ("get_entity_details", {"uri": "u1"})
+
+
+class TestActiveSpans:
+    """With tracing ready, spans record payloads."""
+
+    def setup_method(self):
+        tracing_mod._TRACING_READY = True
+
+    def teardown_method(self):
+        tracing_mod._TRACING_READY = False
+
+    def _mlflow(self):
+        mock_mlflow = MagicMock()
+        span = MagicMock()
+        mock_mlflow.start_span.return_value.__enter__.return_value = span
+        return mock_mlflow, span
+
+    def test_llm_span_records_messages_and_text(self):
+        mock_mlflow, span = self._mlflow()
+
+        @trace_llm("agent:llm")
+        def call(host, token, endpoint_name, messages, *, tools=None, max_tokens=0):
+            return {"choices": [{"message": {"content": "hi"}, "finish_reason": "stop"}]}
+
+        with patch.dict("sys.modules", {"mlflow": mock_mlflow, "mlflow.entities": MagicMock()}):
+            call("h", "t", "ep", [{"role": "user", "content": "q"}], max_tokens=8192)
+
+        inputs = span.set_inputs.call_args[0][0]
+        outputs = span.set_outputs.call_args[0][0]
+        assert inputs["messages"][0]["content"] == "q"
+        assert inputs["max_tokens"] == 8192
+        assert outputs["text"] == "hi"
+
+    def test_tool_span_records_result(self):
+        mock_mlflow, span = self._mlflow()
+
+        @trace_tool("agent:tool")
+        def dispatch_tool(handlers, ctx, tool_name, arguments):
+            return "tool output"
+
+        with patch.dict("sys.modules", {"mlflow": mock_mlflow, "mlflow.entities": MagicMock()}):
+            dispatch_tool({}, None, "list_entity_types", {})
+
+        assert mock_mlflow.start_span.call_args.kwargs["name"] == "tool:list_entity_types"
+        assert span.set_outputs.call_args[0][0]["result"] == "tool output"

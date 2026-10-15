@@ -1,0 +1,356 @@
+# Record LLM, tool and reply payloads on agent traces
+
+Context: Graph Chat turns that ended with the "couldn't display that answer"
+fallback could not be diagnosed from MLflow: LLM spans only carried token
+counts, tool calls produced no span at all, and the agent span had no reply.
+The app log also gave no hint of why the final message had no text. Spans now
+carry the (truncated) conversation, the model reply with its content block
+types and finish reason, and every tool call with its arguments and result.
+Graph Chat also logs each iteration's finish reason and warns when the final
+message has no readable text.
+
+Changes:
+
+1. src/agents/tracing.py
+   LLM spans record max_tokens, tool count, the truncated messages, the reply
+   text, content block types, text length and tool calls. Tool spans record
+   the truncated result and resolve the tool name / arguments from the call
+   signature (works for dispatchers and single tools). Agent spans record the
+   final reply. Reasoning blocks appear as `[reasoning]` markers; their
+   signatures are never recorded. `ONTOBRICKS_TRACE_PAYLOADS=false` keeps
+   sizes only; `ONTOBRICKS_TRACE_MAX_CHARS` (default 4000) caps each field.
+2. src/agents/engine_base.py
+   `dispatch_tool` is traced, so every agent's tool calls become TOOL spans.
+3. src/agents/agent_dtwin_chat/engine.py
+   Logs finish_reason, completion tokens, content block types and tool-call
+   count per iteration, and warns when the final reply has no readable text.
+4. tests/units/agents/test_agent_tracing.py
+   Coverage for payload summaries, signature redaction, the payload switch,
+   tool-call binding and active LLM / tool spans.
+5. tests/units/agents/test_agent_dtwin_chat_engine.py
+   Coverage for the unreadable-reply warning.
+
+Modified files:
+- src/agents/tracing.py
+- src/agents/engine_base.py
+- src/agents/agent_dtwin_chat/engine.py
+- tests/units/agents/test_agent_tracing.py
+- tests/units/agents/test_agent_dtwin_chat_engine.py
+
+Tests: `uv run --frozen pytest -q -m "not scenario"`
+→ 5890 passed, 2 failed, 316 skipped in 23.92s (run with
+`--deselect tests/units/core/test_health.py::TestRunReadinessChecks --ignore tests/units/api/test_routes.py`,
+which block on live network calls in this local environment). The 2 failures
+are in `tests/units/settings/test_deploy_instance_id.py` and come from the
+local `scripts/deploy.config.sh` instance override, not from this change.
+`tests/units/agents/` → 192 passed.
+
+================================================================================
+Graph explorer entity floor, smaller chat tool results, reverse-edge hash index
+================================================================================
+
+Context:
+MLflow traces showed Graph Chat turns of 50-190 s with 170k-270k prompt
+tokens per question; describe_entity returned 500-triple pages that were
+re-sent to the LLM on every later iteration. On Lakebase, BFS reverse-edge
+lookups (`object IN (...)`) go through the union view, which does not expose
+`object_hash`, so they seq-scan the triple table (EXPLAIN: Seq Scan,
+95k rows removed by filter). The explorer could not request fewer than 100
+entities.
+
+Changes:
+1. src/agents/agent_dtwin_chat/tools.py
+   describe_entity page limit 500 -> 200 triples (`_FIND_PAGE_LIMIT`), and
+   describe_entity / query_graphql results capped at 20k chars with a
+   "narrow the search" hint (`_cap_result`).
+2. src/back/core/graphdb/lakebase/_companion_ddl.py
+   `ensure_graph_indexes` also creates `USING hash (object)` (`*_obj`).
+   Hash index has no btree row-size limit, so it is safe on long literals.
+   Applied on the next Knowledge Graph build.
+3. src/front/templates/partials/dtwin/_query_sigmagraph.html
+   Max-entities selector gains 50 / 100 / 200; default 5000 -> 500.
+4. src/api/routers/internal/dtwin.py
+   Filter-expand entity floor 100 -> 50 so the 50 option is honoured.
+5. tests/units/agents/test_agent_dtwin_chat.py,
+   tests/units/core/test_lakebase_flat_store.py
+   Coverage for the page limit, result truncation and the hash index DDL.
+
+Modified files:
+- src/agents/agent_dtwin_chat/tools.py
+- src/back/core/graphdb/lakebase/_companion_ddl.py
+- src/front/templates/partials/dtwin/_query_sigmagraph.html
+- src/api/routers/internal/dtwin.py
+- tests/units/agents/test_agent_dtwin_chat.py
+- tests/units/core/test_lakebase_flat_store.py
+
+Tests: `uv run --frozen pytest -q -m "not scenario"` (same network-bound
+deselects as above) -> 5899 passed, 2 failed, 316 skipped. The 2 failures are
+the pre-existing `tests/units/settings/test_deploy_instance_id.py` cases
+caused by the local `scripts/deploy.config.sh` override.
+Note: tools.py is under src/agents/**; no eval delta was run for this
+local demo deployment (cap only trims oversized tool output).
+
+================================================================================
+Graph explorer: honour max entities, show and centre the focused node
+================================================================================
+
+Context:
+With max entities = 50 the explorer still drew 367 nodes: filter_expand
+returned every triple of the capped entity set, including edges to
+neighbours outside it, and the viewer turns each edge target into a node.
+Opening the explorer on a focus URI (e.g. ?focus=.../SalesTransaction/SAL00677)
+neither selected nor centred that node: groups start collapsed, so the
+target was hidden inside a one-member "group #N (1)" super-node, and the
+render can defer itself before the focus lookup runs.
+
+Changes:
+1. src/back/objects/digitaltwin/DigitalTwin.py
+   `_drop_out_of_set_edges`: filter_expand keeps literal and rdf:type
+   triples, and only relationship triples whose both ends are in the BFS set.
+2. src/front/static/query/js/query-sigmagraph.js
+   - One-member group components render as the real instance node.
+   - Expanded seed entities are never collapsed into group super-nodes.
+   - Focus-by-URI uses the exact URI as seed when found, pins that node at
+     the layout centre (`fixed` during ForceAtlas2), and waits for the
+     deferred render before selecting it.
+   - Max-entities fallback 5000 -> 50.
+3. src/front/templates/partials/dtwin/_query_sigmagraph.html
+   Max-entities default 500 -> 50.
+4. tests/units/dtwin/test_filter_expand_bounds.py
+   Coverage for dropping out-of-set edges and keeping literals/types.
+
+Modified files:
+- src/back/objects/digitaltwin/DigitalTwin.py
+- src/front/static/query/js/query-sigmagraph.js
+- src/front/templates/partials/dtwin/_query_sigmagraph.html
+- tests/units/dtwin/test_filter_expand_bounds.py
+
+Tests: tests/units/dtwin/test_filter_expand_bounds.py +
+tests/units/dtwin/test_digitaltwin_api.py -> 63 passed. `node --check` on
+query-sigmagraph.js OK. Full suite run pending (with the Graph Chat changes).
+
+================================================================================
+Graph Chat fast path: GraphQL inverse fields, filters, counts, schema digest
+================================================================================
+
+Context:
+MLflow traces (experiment /Shared/ontobricks-agents) showed entity-centric and
+filtered questions taking 7-9 LLM iterations (34-44 s). "What did customer X
+buy" ran describe_entity depth=2 (35k triples, truncated), guessed entity
+types, re-fetched the GraphQL SDL, and only then issued the one useful
+salesTransactions(search:...) query. "Customers who bought product P at store
+S" guessed the wrong entity type five times, pulled unfiltered 200/500-row
+lists that hit the 20k-char tool cap, and reported only a fraction of the
+true buyers. Root causes: no inverse GraphQL fields (Customer could not
+reach its purchases), list queries only had limit/offset/search, every
+forward relationship was resolved eagerly to depth 2 regardless of the
+selection, and the system prompt forced describe_entity first (and also told
+the agent to use depth >= 2) while the schema was rediscovered every turn.
+
+Changes:
+1. src/back/core/graphdb/SubjectFilter.py (new), src/back/core/graphdb/__init__.py
+   Backend-neutral AND filter (data contains / relationship target label
+   contains or id equals / entity id equals), re-exported from the package.
+2. src/back/core/graphdb/GraphDBBackend.py
+   find_subjects_by_type accepts filters; new count_subjects_by_type
+   (COUNT DISTINCT subject, or COUNT DISTINCT object of a predicate for
+   distinctBy) and find_subjects_by_predicate_objects (reverse-edge lookup:
+   predicate = p AND object IN (...), optional rdf:type restriction, row cap).
+   Shared by Delta and Lakebase; same _sql_escape quoting as existing SQL.
+   Unfiltered SQL is byte-identical to before.
+3. src/back/core/graphdb/neo4j/Neo4jReadOps.py, src/back/core/graphdb/neo4j/Neo4jStore.py
+   Native Cypher implementations of the same three methods (pattern
+   comprehension for relationship filters, dynamic property keys for data
+   filters). A filter on a predicate the graph never stored matches nothing
+   instead of raising.
+4. src/back/core/graphql/GraphQLSchemaBuilder.py
+   One inverse list field per object property on its range type, named
+   <pluralOfDomain>Via<Property> (e.g. Customer.salesTransactionsViaSoldTo);
+   skipped on Python/camelCase name collision; self-references and cycles
+   build fine. New root field <plural>Count(search, filters, distinctBy) per
+   type; root-field name collisions are skipped. TypeInfo now records
+   inverse fields, GraphQL names, class / relationship labels and root names.
+5. src/back/core/graphql/ResolverFactory.py, src/back/core/graphql/FieldFilter.py (new)
+   List resolvers take filters: [FieldFilter!] ({field, value}, AND) and
+   pass the strawberry selection tree (fragments merged) to the metadata;
+   new count resolver.
+6. src/back/core/graphql/SchemaMetadata.py
+   Selection-aware resolution: only selected forward / inverse fields are
+   loaded, identity-only selections ({ id } / { uri }) skip the triple load,
+   selection-aware queries are bounded by the query nesting (MAX_DEPTH)
+   instead of DEFAULT_DEPTH. Without selection info the legacy eager
+   behaviour is unchanged and inverse fields stay unresolved. Filters are
+   validated (unknown field -> ValidationError listing the valid fields);
+   filtered lists, counts and inverse lookups raise InfrastructureError
+   instead of silently returning []. List limit clamped to 1..1000. The
+   "predicate mismatch" warning no longer fires for rdf:type on every entity.
+7. src/back/core/graphql/SchemaDigest.py (new), src/back/core/graphql/constants.py,
+   src/back/core/graphql/models.py, src/back/core/graphql/__init__.py
+   Compact per-type digest (root fields, attributes, relationships with
+   labels, inverse fields) memoised on SchemaMetadata, so it is cached per
+   domain with the schema; shrinks attribute detail to stay under 9,000
+   chars (29-class demo ontology: 8.7 KB vs 23 KB SDL). New constants
+   DEFAULT_LIST_LIMIT / MAX_LIST_LIMIT / INVERSE_MAX_ROWS / MAX_DIGEST_CHARS.
+8. src/agents/agent_dtwin_chat/engine.py
+   System prompt rewritten around a fast path: one query_graphql call on the
+   fact type with relationship filters / inverse fields for entity-centric
+   questions, rows + <list>Count + distinctBy in the same request for
+   filtered lists, describe_entity only for single-entity profiles at the
+   default depth (the "depth >= 2" advice is removed), omit entity_type when
+   unsure, group by entity id on name collisions, Count/filters for
+   aggregations and an explicit "use Genie/SQL" hand-off for sums/rankings,
+   answers capped at ~10 rows plus totals with partial results flagged.
+   New build_system_prompt() and run_agent(schema_digest=...) inject the
+   digest per turn.
+9. src/agents/agent_dtwin_chat/tools.py
+   query_graphql gets its own 32,000-char cap (one or two GraphQL calls per
+   turn on the fast path; a complete ~110-row list with nested refs + uris
+   is ~20-27k chars); truncation notes now say the result is PARTIAL and
+   point to Count. Tool descriptions aligned with the digest / filters.
+10. src/agents/tools/graph_formatting.py
+   format_graphql_response renders one line per entity
+   ("label [id] <uri> | field=value | rel=..."), long nested lists as
+   sub-rows, and a "distinct <rel>: N" summary per root list. A 110-row
+   fact list with three nested refs is 13.8k chars (was >20k at 200 rows).
+11. src/api/routers/internal/dtwin.py
+   _chat_schema_digest() builds the digest from the cached session schema
+   and both Graph Chat routes pass it to run_agent; /dtwin/graphql/schema
+   also returns "digest". The /sync/filter route is untouched.
+12. tests/eval/datasets/agent_dtwin_chat/regression.jsonl (new),
+    .planning/agents/agent_dtwin_chat/SPEC.md
+   Two production-derived regression examples (the two traced questions)
+   and the SPEC regression section.
+14. src/agents/tools/graph_formatting.py (KRW units)
+   An internal evaluation run showed replies with 10-100x KRW -> 억
+   conversion errors when the model converted units itself. New with_krw_unit / krw_eok_text: every
+   field whose name ends in "krw" (any case) gets a deterministic 억 value
+   next to the raw number, plus 만원 below 1억
+   (`grossKrw: 1409235 (0.014억, 140.9만원)`), in GraphQL rows,
+   describe_entity attributes, dataset rows and action result rows.
+15. src/agents/agent_dtwin_chat/engine.py (prompt + token bloat)
+   Prompt rules: copy the tool's 억 value and never convert units
+   (1억 = 100,000,000 KRW); never add up / average / count sampled rows;
+   for aggregates check pre-aggregated *Summary / *Performance / *Target
+   types first, then aliased Count fields per group. New
+   compact_tool_messages(): before each LLM call, tool results of the
+   latest assistant turn plus the newest 2 stay in full and older ones are
+   cut to their first 1,500 chars with a "[compacted ...]" note (baseline
+   median 132k / max 545k prompt tokens per question). Works on a copy;
+   order, roles and tool_call_id pairing are unchanged.
+16. Tests:
+   tests/units/api/test_graphql_relationship_queries.py (new) builds the
+   schema from a Customer / Product / SalesOrganization / SalesChannel /
+   SalesTransaction ontology and runs the real generated SQL on in-memory
+   SQLite: inverse SDL + resolution, cycles / self-reference / collision,
+   relationship / data / id filters, AND semantics, counts + distinctBy,
+   selection-aware loading, legacy eager path, the two production questions
+   end to end, formatter compactness, digest content / cap and the route
+   helper. tests/units/core/test_graph_store_subject_filters.py (new) pins
+   the inverse / filter / count SQL incl. escaping.
+   tests/units/graphdb/test_neo4j_subject_filters.py (new) covers the
+   Cypher variants. tests/units/agents/test_agent_dtwin_chat_engine.py and
+   tests/units/agents/test_agent_dtwin_chat.py cover the prompt (digest
+   injection, no "depth >= 2", filters/count docs, unit-conversion rule),
+   the GraphQL cap, and tool-history compaction (older results compacted at
+   iteration k, latest parallel batch kept whole, tool_call_id pairing
+   intact, input not mutated). tests/units/agents/test_graph_formatting_krw.py
+   (new) checks the two baseline amounts (11.44억, 197.48억) and 0.014억.
+
+Modified files:
+- src/back/core/graphdb/SubjectFilter.py (new)
+- src/back/core/graphdb/__init__.py
+- src/back/core/graphdb/GraphDBBackend.py
+- src/back/core/graphdb/neo4j/Neo4jReadOps.py
+- src/back/core/graphdb/neo4j/Neo4jStore.py
+- src/back/core/graphql/FieldFilter.py (new)
+- src/back/core/graphql/SchemaDigest.py (new)
+- src/back/core/graphql/GraphQLSchemaBuilder.py
+- src/back/core/graphql/ResolverFactory.py
+- src/back/core/graphql/SchemaMetadata.py
+- src/back/core/graphql/constants.py
+- src/back/core/graphql/models.py
+- src/back/core/graphql/__init__.py
+- src/agents/agent_dtwin_chat/engine.py
+- src/agents/agent_dtwin_chat/tools.py
+- src/agents/tools/graph_formatting.py
+- src/api/routers/internal/dtwin.py
+- .planning/agents/agent_dtwin_chat/SPEC.md
+- tests/eval/datasets/agent_dtwin_chat/regression.jsonl (new)
+- tests/units/api/test_graphql_relationship_queries.py (new)
+- tests/units/core/test_graph_store_subject_filters.py (new)
+- tests/units/graphdb/test_neo4j_subject_filters.py (new)
+- tests/units/agents/test_agent_dtwin_chat_engine.py
+- tests/units/agents/test_agent_dtwin_chat.py
+- tests/units/agents/test_graph_formatting_krw.py (new)
+
+Tests: `uv run --frozen pytest -q -m "not scenario" -p no:cacheprovider
+--deselect tests/units/core/test_health.py::TestRunReadinessChecks
+--ignore tests/units/api/test_routes.py`
+-> 5991 passed, 2 failed, 316 skipped, 8 deselected. The 2 failures are the
+pre-existing `tests/units/settings/test_deploy_instance_id.py` cases caused
+by the local `scripts/deploy.config.sh` override.
+
+AI-feature gate (src/agents/**): eval delta PENDING. Not deployed; it will be
+measured with an internal evaluation set (and the regression.jsonl cases)
+after the next deploy, comparing iterations, latency, prompt tokens and
+answer correctness with the current baseline.
+
+# Graph Chat: exact server-side aggregation tool (analyze_graphql)
+
+Context: In an internal evaluation run, the chat model paged hundreds of
+rows into its context and counted, intersected or summed them itself, and
+failed most cross-condition and Genie-style aggregate questions. The new analyze_graphql tool runs the
+GraphQL query server-side, pages every root list to the end, computes the
+aggregate deterministically and returns only a small result table. Run
+offline against a live demo graph (real executor, no LLM), it reproduced
+the SQL ground truth for the cross-condition evaluation questions in 3-7 s
+each.
+
+Changes:
+
+1. src/agents/agent_dtwin_chat/analysis.py (new)
+   Pure aggregation logic: fetch_all_rows (re-queries each root list with
+   limit/offset until a short page, capped at 20,000 rows), dotted-path
+   resolution through nested lists, where conditions (=, !=, ~, >, <, >=,
+   <=, and "@otherPath" for field-to-field comparison), group ranking
+   (count / count_distinct / sum / avg / min / max, ties share a rank),
+   set operations (intersect / difference / union) with an optional
+   per-key "having" aggregate, and restrict (keep rows whose entity is, or
+   is not, in another list's key set). KRW sums carry the pre-computed 억
+   text. When where matches nothing, the values present are listed.
+2. src/agents/agent_dtwin_chat/tools.py
+   tool_analyze_graphql handler (loopback /dtwin/graphql/execute
+   executor), _ANALYZE_GRAPHQL_DEF, and TOOL_DEFINITIONS / TOOL_HANDLERS
+   entries. The isReturned example value is now "Y" (the real value).
+3. src/agents/agent_dtwin_chat/engine.py
+   System prompt changes: a TOOLS entry; route D (rankings / sums via
+   analyze_graphql, never add up rows of a multi-dimension summary type);
+   new route F (cross conditions via set operations, walk customer ->
+   purchases / devices with restrict); new route G (data not in the schema
+   -> say so, no substitute field); a revenue glossary (총매출=grossKrw,
+   순매출=netKrw, 수수료=commissionKrw, 인식매출=recognizedNetKrw); a rule
+   never to end a turn by announcing a further lookup.
+4. .planning/agents/agent_dtwin_chat/SPEC.md
+   Tool table (8 tools), analyze_graphql semantics, and a "hand-counted
+   aggregates" failure mode.
+5. tests/eval/datasets/agent_dtwin_chat/regression.jsonl
+   Three cross-condition regression cases (questions 81, 84, 87).
+
+Modified files:
+- src/agents/agent_dtwin_chat/analysis.py (new)
+- src/agents/agent_dtwin_chat/tools.py
+- src/agents/agent_dtwin_chat/engine.py
+- .planning/agents/agent_dtwin_chat/SPEC.md
+- tests/eval/datasets/agent_dtwin_chat/regression.jsonl
+- tests/units/agents/test_agent_dtwin_chat_analysis.py (new, 25 tests)
+
+Tests: `uv run --frozen pytest -q -m "not scenario" -p no:cacheprovider
+--deselect tests/units/core/test_health.py::TestRunReadinessChecks
+--ignore tests/units/api/test_routes.py`
+-> 6013 passed, 2 failed, 316 skipped, 8 deselected. The 2 failures are the
+pre-existing tests/units/settings/test_deploy_instance_id.py cases, caused
+by the local scripts/deploy.config.sh override. After the having / field
+comparison additions, tests/units/agents: 244 passed.
+
+AI-feature gate (src/agents/**): eval delta to be measured after deploy
+with the internal evaluation set.

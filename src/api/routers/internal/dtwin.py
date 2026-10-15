@@ -63,6 +63,17 @@ logger = get_logger(__name__)
 
 router = APIRouter(prefix="/dtwin", tags=["Query"])
 
+# Graph-search ("filter") expansion bounds on ``max_entities``. The server
+# default matches the UI default (``#sgMaxEntities``, fallback in
+# query-sigmagraph.js); the UI always sends an explicit value, so the
+# default only applies to callers that omit it. Values are clamped to
+# [FILTER_MIN_ENTITIES, cap], where the cap is lower on Databricks Apps to
+# stay within its memory and request-time limits.
+FILTER_MIN_ENTITIES = 50
+FILTER_DEFAULT_ENTITIES = FILTER_MIN_ENTITIES
+FILTER_APP_ENTITY_CAP = 3_000
+FILTER_LOCAL_ENTITY_CAP = 50_000
+
 
 def _graph_query_table(
     domain,
@@ -1159,9 +1170,11 @@ async def filter_triplestore(
             include_rels = data.get("include_rels", True)
             max_depth_cap = 3 if is_databricks_app() else 5
             depth = min(int(data.get("depth", 3)), max_depth_cap)
-            client_max = int(data.get("max_entities", 5000))
-            server_entity_cap = 3_000 if is_databricks_app() else 50_000
-            max_entities = max(100, min(client_max, server_entity_cap))
+            client_max = int(data.get("max_entities", FILTER_DEFAULT_ENTITIES))
+            server_entity_cap = (
+                FILTER_APP_ENTITY_CAP if is_databricks_app() else FILTER_LOCAL_ENTITY_CAP
+            )
+            max_entities = max(FILTER_MIN_ENTITIES, min(client_max, server_entity_cap))
             batch_size = 250 if is_databricks_app() else 1000
             max_fetch_seconds = 40.0 if is_databricks_app() else 120.0
             payload = await run_blocking(
@@ -2252,6 +2265,15 @@ def _chat_domain_key(domain) -> str:
     return _chat_resolve_domain_name(domain) or "__default__"
 
 
+def _chat_schema_digest(domain) -> str:
+    """Schema digest for the chat prompt, keyed by the session display name.
+
+    Delegates to :meth:`DigitalTwin.chat_schema_digest` with the same
+    display name ``/dtwin/graphql/*`` uses, so both share the cached schema.
+    """
+    return DigitalTwin(domain).chat_schema_digest(_chat_resolve_domain_name(domain))
+
+
 def _chat_clamp_limit(limit) -> int:
     try:
         value = int(limit)
@@ -2439,6 +2461,8 @@ async def dtwin_assistant_chat(
         llm_endpoint,
     )
 
+    schema_digest = _chat_schema_digest(domain)
+
     with map_route_errors("Graph Chat agent request failed", logger):
         agent_result = await asyncio.to_thread(
             run_chat_agent,
@@ -2453,6 +2477,7 @@ async def dtwin_assistant_chat(
             user_message=user_message,
             conversation_history=history,
             describe_depth=describe_depth,
+            schema_digest=schema_digest,
         )
 
     if not agent_result.success:
@@ -2574,6 +2599,8 @@ async def dtwin_assistant_chat_stream(
         llm_endpoint,
     )
 
+    schema_digest = _chat_schema_digest(domain)
+
     loop = asyncio.get_event_loop()
     event_queue: asyncio.Queue = asyncio.Queue()
 
@@ -2597,6 +2624,7 @@ async def dtwin_assistant_chat_stream(
                     user_message=user_message,
                     conversation_history=history,
                     describe_depth=describe_depth,
+                    schema_digest=schema_digest,
                     on_event=_on_event,
                 )
             await event_queue.put(("done", result))
@@ -2763,12 +2791,13 @@ async def dtwin_graphql_schema(
         raise ValidationError(
             "Could not generate GraphQL schema from the current ontology."
         )
-    schema, _metadata = result
+    schema, metadata = result
     return {
         "success": True,
         "ready": True,
         "domain": display_name,
         "sdl": print_schema(schema),
+        "digest": metadata.digest(),
     }
 
 

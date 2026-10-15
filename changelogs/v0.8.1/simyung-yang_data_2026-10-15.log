@@ -1,0 +1,103 @@
+# Readability review fixes for the Graph Chat / GraphQL / explorer changes
+
+Context: A readability review of the 2026-10-14 Graph Chat performance work
+(analyze_graphql, GraphQL fast path, explorer fixes, tracing, KRW formatting)
+found four real bugs in the server-side aggregation tool plus code that was
+hard to follow: anonymous positional tuples, a 75-line resolver method, prompt
+routes lettered out of order, the same id-matching rule written six times,
+domain logic in a route and unnamed magic numbers. All changes below are
+behaviour-preserving refactors except the bug fixes and the two items marked
+"behaviour change".
+
+Changes:
+
+1. src/agents/agent_dtwin_chat/analysis.py
+   Bug fixes:
+   - fetch_all_rows clamps the effective page limit to MAX_LIST_LIMIT, the
+     same clamp the server applies. A query asking for limit 5000 was marked
+     complete after the first 1000 rows.
+   - Per-list status (LIST_COMPLETE / LIST_ROW_CAP / LIST_PAGE_ERROR)
+     replaces the bool, so a failed page is no longer reported as "row cap
+     reached". The caller's variables object is passed to the executor
+     unchanged.
+   - group_rows computes the clamped top once, so the "... more" line is
+     shown when top exceeds MAX_TOP. Tie counts come from a Counter.
+   - _scalar_matches returns no match for a dict without label/id/uri
+     (raised IndexError). "!=" in restrict.compare raised KeyError.
+   Readability: EntityRef NamedTuple instead of positional tuples, a _Group
+   dataclass and _ranked_lines instead of a dict plus closure, shared _OPS /
+   _AGGREGATES tables, restrict split into membership and compare helpers,
+   _condition_targets extracted, MAX_HINT_VALUES constant, GraphQLError
+   instead of a broad except, AnalysisError now subclasses ValidationError.
+2. src/agents/agent_dtwin_chat/tools.py
+   Shared _graphql_executor for query_graphql and analyze_graphql; defaults
+   and enum lists come from the analysis constants; argument normalisation
+   before the HTTP call; type hints fixed.
+3. src/agents/agent_dtwin_chat/engine.py, .planning/agents/agent_dtwin_chat/SPEC.md
+   Prompt routes re-lettered A..H in order (no wording change). The
+   describe_entity depth uses a <<DESCRIBE_DEPTH>> placeholder instead of a
+   fragile string replace; the default render is unchanged. Stale SPARQL
+   mention removed (no SPARQL tool is offered). Named compaction threshold.
+4. src/back/core/graphql/ (models, GraphQLSchemaBuilder, SchemaMetadata,
+   ResolverFactory, SchemaDigest, constants)
+   RelEdge / InverseField / RelTarget / InverseSource NamedTuples;
+   _build_entities split into collect / resolve / apply helpers with one
+   docstring for the selection semantics; _build_query uses a root-field
+   table plus reset_digest() so the digest cannot go stale; FieldFilter
+   passed straight through; narrow excepts in selection_tree.
+5. src/back/core/graphdb/ (GraphDBBackend, SubjectFilter, SubjectFilterKind
+   (new), constants, neo4j/Neo4jReadOps, neo4j/Neo4jStore, lakebase/_companion_ddl)
+   Shared _local_id_match_sql / _local_id_match_cypher helpers for the six
+   copies of the id-matching rule; relationship-filter SQL built from named
+   fragments (note: % and _ in values still act as LIKE wildcards);
+   REVERSE_LOOKUP_MAX_ROWS constant; Cypher WHERE built from a small
+   structure with explicit spacing and role-named parameters; one index
+   table and loop in ensure_graph_indexes. Emitted SQL, Cypher (apart from
+   parameter names) and DDL were captured before/after and are identical.
+   Behaviour change: an unknown SubjectFilterKind now raises ValidationError
+   instead of being treated as a data filter.
+6. src/back/objects/digitaltwin/DigitalTwin.py, src/api/routers/internal/dtwin.py
+   New DigitalTwin.chat_schema_digest() holds the digest logic (narrow
+   excepts, tuple unpacked by name); the router keeps a one-line delegate.
+   Named FILTER_* entity constants. Behaviour change: the /sync/filter
+   server default for max_entities is 50 (was 5000) to match the UI; the
+   explorer always sends the value. _drop_out_of_set_edges uses
+   URIHelpers.is_uri.
+7. src/front/static/query/js/query-sigmagraph.js
+   LAYOUT_EXTENT / NODE_WAIT_POLL_MS / NODE_WAIT_TIMEOUT_MS /
+   DEFAULT_MAX_ENTITIES constants; _waitForNode resolves true/false and the
+   caller warns on timeout; comments on why seed URIs join the expanded set.
+8. src/agents/tracing.py, src/agents/engine_base.py
+   _UNTRACED_ARG_NAMES (was _SECRET_ARGS) used by both helpers; trace_llm
+   binds arguments by name like trace_tool; comment on the fallback span name.
+9. src/agents/tools/graph_formatting.py
+   _is_entity_list / _entity_key helpers, math.isfinite, KRW_FIELD_SUFFIX,
+   English comments (output strings unchanged).
+10. scripts/deploy.sh
+   grant_app_self_permissions() shared by step 6c and step 10 (retitled as
+   the idempotent backstop); printed messages unchanged.
+
+Modified files:
+- src/agents/agent_dtwin_chat/analysis.py, tools.py, engine.py
+- .planning/agents/agent_dtwin_chat/SPEC.md
+- src/back/core/graphql/models.py, GraphQLSchemaBuilder.py, SchemaMetadata.py,
+  ResolverFactory.py, SchemaDigest.py, constants.py
+- src/back/core/graphdb/GraphDBBackend.py, SubjectFilter.py,
+  SubjectFilterKind.py (new), constants.py, __init__.py,
+  neo4j/Neo4jReadOps.py, neo4j/Neo4jStore.py, lakebase/_companion_ddl.py
+- src/back/objects/digitaltwin/DigitalTwin.py, src/api/routers/internal/dtwin.py
+- src/front/static/query/js/query-sigmagraph.js
+- src/agents/tracing.py, src/agents/engine_base.py
+- src/agents/tools/graph_formatting.py
+- scripts/deploy.sh
+- tests/units/agents/test_agent_dtwin_chat_analysis.py,
+  test_agent_dtwin_chat_engine.py, tests/units/core/test_graph_store_subject_filters.py,
+  tests/units/graphdb/test_neo4j_subject_filters.py
+
+Tests (per area, `uv run --frozen pytest -q -p no:cacheprovider ...`):
+- tests/units/agents -> 276 passed (was 245; bug tests written first)
+- tests/units/core + graphdb + api/test_graphql_relationship_queries.py +
+  dtwin -> 1352 passed (TestRunReadinessChecks deselected: live network)
+- tests/units/dtwin + tracing + formatting + front -> 1439 passed
+- node --check on both JS files, bash -n scripts/deploy.sh: OK
+Full-suite run delegated to the verification session before deploy.

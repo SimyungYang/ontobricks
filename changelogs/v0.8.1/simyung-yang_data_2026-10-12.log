@@ -1,0 +1,22 @@
+# Raise graph chat output-token budget (2048 -> 8192, configurable)
+
+Context: Reasoning-capable Claude models (Sonnet/Opus 4.6+, 5.x) spend part of
+max_tokens on hidden reasoning. With the hard-coded 2048 budget the chat agent
+often received a reasoning-only completion (finish_reason=length, no text) and
+the UI showed "I couldn't display that answer". Verified against the workspace
+endpoints: claude-sonnet-4-6 at 8192 finishes with finish_reason=stop.
+
+Changes:
+
+1. `src/agents/agent_dtwin_chat/engine.py`
+   New `CHAT_MAX_TOKENS` (env `ONTOBRICKS_CHAT_MAX_TOKENS`, default 8192) used
+   for every chat LLM call instead of the literal 2048.
+2. `tests/units/agents/test_agent_dtwin_chat_engine.py`
+   Contract: a chat turn requests a token budget of at least 8192.
+
+Modified files:
+- src/agents/agent_dtwin_chat/engine.py
+- tests/units/agents/test_agent_dtwin_chat_engine.py
+
+Tests: `uv run --frozen pytest -q tests/units/agents/test_agent_dtwin_chat_engine.py tests/units/agents/test_agent_dtwin_chat.py`
+→ 48 passed.
