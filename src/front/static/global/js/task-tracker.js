@@ -304,6 +304,12 @@ function renderTaskItem(task) {
         }
     }
 
+    const runUrl = task.result && /^https?:\/\//i.test(task.result.run_page_url || '')
+        ? task.result.run_page_url : '';
+    const runLinkHtml = runUrl
+        ? `<a class="small d-inline-block mt-1" href="${escapeAttr(runUrl)}" target="_blank" rel="noopener" onclick="event.stopPropagation()"><i class="bi bi-box-arrow-up-right me-1"></i>Open run in Databricks</a>`
+        : '';
+
     const actionsHtml = task.status === 'running'
         ? `<button class="btn btn-link btn-sm p-0 text-danger" onclick="event.stopPropagation(); cancelTask('${task.id}')" title="Cancel">
             <i class="bi bi-x-circle"></i>
@@ -330,6 +336,7 @@ function renderTaskItem(task) {
                         <span class="fw-medium">${escapeHtml(task.name)}</span>
                     </div>
                     <small class="text-muted">${escapeHtml(task.message || statusConfig.label)}</small>
+                    ${runLinkHtml}
                     ${progressHtml}
                 </div>
                 <div class="d-flex align-items-center gap-2">

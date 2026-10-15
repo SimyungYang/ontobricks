@@ -148,9 +148,59 @@ def test_action_modal_posts_to_the_invoke_endpoint():
     assert "method: 'POST'" in js
     assert "action_full_name" in js
     assert "function _entityActionIsJob" in js
-    assert "Running in Background Tasks" in js
-    assert "if (_entityActionIsJob(actionFullName))" in js
     assert "refreshTasks()" in js
+
+
+def test_job_action_opens_a_popup_and_follows_the_background_task():
+    js = DASHBOARD_JS.read_text(encoding="utf-8")
+    opener = js.split("function openEntityActionModal", 1)[1].split("\nfunction ", 1)[0]
+    assert "_runEntityAction(entityUri, actionFullName).then(function () {});" not in opener
+    assert "_openJobActionModal(" in opener
+    assert "Starting job" in js
+    assert "bootstrap.Modal.getOrCreateInstance" in js
+    assert "/tasks/' + encodeURIComponent(" in js
+    assert "run_page_url" in js
+    assert "toggleTaskDropdown" in js
+    assert "Tracked in Background Tasks" in js
+    assert "showNotification(" in js.split("function _openJobActionModal", 1)[1]
+    assert 'style="' not in js.split("function _openJobActionModal", 1)[1].split("\nfunction findAttributeValue", 1)[0]
+
+
+def _job_status(task_status, life_cycle):
+    import json
+    import shutil
+    import subprocess
+
+    import pytest
+
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("node is not installed")
+    js = DASHBOARD_JS.read_text(encoding="utf-8")
+    fn = "function _jobRunStatus" + js.split("function _jobRunStatus", 1)[1].split("\n}\n", 1)[0] + "\n}\n"
+    script = fn + f"process.stdout.write(JSON.stringify(_jobRunStatus({json.dumps(task_status)}, {json.dumps(life_cycle)})));"
+    out = subprocess.run([node, "-e", script], capture_output=True, text=True, check=True)
+    return json.loads(out.stdout)
+
+
+def test_job_status_mapping_has_an_icon_and_a_label():
+    running = _job_status("running", "RUNNING")
+    queued = _job_status("running", "PENDING")
+    done = _job_status("completed", "TERMINATED")
+    failed = _job_status("failed", "INTERNAL_ERROR")
+    assert running["label"] == "Running" and running["icon"]
+    assert queued["label"] == "Queued" and queued["icon"]
+    assert done["label"] == "Succeeded" and done["terminal"] is True
+    assert failed["label"] == "Failed" and failed["terminal"] is True
+    assert running["terminal"] is False
+
+
+def test_background_task_links_to_the_databricks_run():
+    tracker = (REPO_ROOT / "src/front/static/global/js/task-tracker.js").read_text(encoding="utf-8")
+    item = tracker.split("function renderTaskItem", 1)[1].split("\nfunction ", 1)[0]
+    assert "run_page_url" in item
+    assert "escapeAttr(" in item
+    assert 'rel="noopener"' in item
 
 
 def test_action_modal_shows_function_description():

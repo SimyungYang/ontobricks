@@ -874,8 +874,12 @@ returning several sets `message` instead of aggregating.
 Invoke a class action on a node: a Unity Catalog function or a Databricks Job
 (`job:<job_id>`). UC functions receive **exactly one argument: the entity's
 local ID**, extracted from `entity_uri`. Jobs must declare an `entity_id`
-parameter; OntoBricks calls Jobs `run_now` and returns immediately with a
-`task_id` (navbar Background Tasks). Spark still uses the Job's run-as
+parameter; OntoBricks calls Jobs `run_now`, reads the run state once to verify
+it started, and returns immediately with a `task_id` (navbar Background Tasks),
+`run_id`, `run_state` (Databricks life-cycle state such as `RUNNING` or
+`PENDING`, or `UNKNOWN` if it could not be read) and `run_page_url`. The
+`message` reports the verified state (for example "Job enrich-customer is
+running"). Spark still uses the Job's run-as
 identity. On Lakehouse domains in App mode the trigger uses the caller's
 forwarded token (OBO).
 

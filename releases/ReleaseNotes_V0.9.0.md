@@ -15,7 +15,7 @@
 - **SPARQL playground** — run SPARQL against the graph in the Knowledge Graph UI and inspect the generated SQL after execution.
 - **Entity business rules** — attach SWRL rules (including aggregate rules and decision tables) to a class in Studio; run them scoped to one entity from Explorer or MCP.
 - **Entity Data Quality Checks** — right-click a node in Explorer (or call MCP `check_entity_shacl_facets`) to check that one entity against every SHACL shape on its class, its parent classes, and the global ones. A popup shows per-dimension gauges and the pass/fail detail with the values found; checked nodes get a quality ring on the canvas.
-- **Class actions include Databricks Jobs** — Studio Actions bind Unity Catalog functions **and** workspace Jobs that declare `entity_id`. Runs appear in navbar Background Tasks; MCP `invoke_entity_action` accepts `job:<id>`.
+- **Class actions include Databricks Jobs** — Studio Actions bind Unity Catalog functions **and** workspace Jobs that declare `entity_id`. Triggering one from Explorer opens a popup that verifies the run started (Running / Queued) and follows it; the run is tracked in navbar Background Tasks with a link to the Databricks run. MCP `invoke_entity_action` accepts `job:<id>`.
 - **Ontology Studio** — Designer is renamed Studio. Multi-select, group move, selected-only Business Views, import entity from another domain, inherited outgoing relations on subclasses, and OWL/R2RML export on the canvas.
 - **OBO and MCP Team gate** — per-backend on-behalf-of identity, MCP Team gate fail-closed on public graph reads, and admin-only domain creation.
 - **AI Gateway and No LLM** — domain LLM target comes from the AI Gateway picker; a global No-LLM gate turns off ontology, mapping, and Graph AI routes.

@@ -323,6 +323,7 @@ class NodeActionResponse(BaseModel):
     rows: Optional[List[Dict[str, Any]]] = None
     task_id: Optional[str] = None
     run_id: Optional[int] = None
+    run_state: Optional[str] = None
     run_page_url: Optional[str] = None
     message: Optional[str] = None
 

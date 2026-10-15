@@ -224,6 +224,31 @@ def test_wait_for_failed_run_is_not_success():
     assert out["message"] == "spark oops"
 
 
+def test_run_state_reads_the_run_once():
+    client = _Client(
+        [], runs=[_Run(_State("RUNNING"), run_page_url="https://example/run/77")]
+    )
+    state = _runner(client).run_state(77)
+    assert state == {
+        "life_cycle_state": "RUNNING",
+        "result_state": "",
+        "message": "",
+        "run_page_url": "https://example/run/77",
+    }
+    assert client.jobs.get_run_calls == 1
+
+
+def test_run_state_wraps_sdk_errors():
+    client = _Client([])
+
+    def boom(**_kwargs):
+        raise RuntimeError("network down")
+
+    client.jobs.get_run = boom
+    with pytest.raises(InfrastructureError, match="state of job run 77"):
+        _runner(client).run_state(77)
+
+
 def test_run_now_without_run_id_raises():
     client = _Client([_Job(2, "keep-me")])
     client.jobs.run_now = lambda **_kwargs: object()

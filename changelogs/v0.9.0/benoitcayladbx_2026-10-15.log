@@ -1,0 +1,68 @@
+================================================================================
+## Explorer Job actions: verify the run, show it in a popup, follow it in Background Tasks
+================================================================================
+
+Context:
+Triggering a class Job from Explorer gave no popup and no confirmation that
+the run had actually started: a toast appeared only after `run_now`
+returned, and Background Tasks showed a generic message. The user asked for
+a popup that verifies the job is running, informs the user immediately, and
+follows the run state through Background Tasks.
+
+Changes:
+
+1. src/back/core/databricks/jobs/JobActionRunner.py
+   New `run_state(run_id)`: one `get_run` returning `life_cycle_state`,
+   `result_state`, `message` and `run_page_url`; SDK errors become
+   InfrastructureError.
+2. src/back/objects/digitaltwin/node/JobActionService.py
+   After `run_now`, the run state is read once (`_verified_state`, never fails
+   the trigger; falls back to UNKNOWN). The response carries `run_state`,
+   `run_page_url` and a message naming the state ("Job X is running" /
+   "is queued" / "was started"). The Background Task starts with
+   "Databricks run N: Running", stores `life_cycle_state` and `run_page_url`
+   in its result, and each poll updates both (`_record_progress`).
+3. src/api/routers/digitaltwin.py
+   `NodeActionResponse.run_state` added.
+4. src/front/static/query/js/query-dashboard.js
+   - Shared `_showEntityActionModal` / `_actionSpinner` (UC functions and Jobs
+     use the same modal; `bootstrap.Modal.getOrCreateInstance`).
+   - Job actions open a popup immediately ("Starting job…"), then show the
+     verified state with an icon and a label (Running / Queued / Starting),
+     the run id, an "Open run in Databricks" link and a "Show Background
+     Tasks" button; a success notification fires at once.
+   - While the popup is open it polls `/tasks/<task_id>` every 3 s and moves
+     to Succeeded / Failed / Cancelled; closing the popup stops polling.
+   - `_jobRunStatus` maps task status + life-cycle state to icon/label.
+   - Job branch removed from `_runEntityAction` (UC functions only).
+5. src/front/static/global/js/task-tracker.js
+   Background Task items show "Open run in Databricks" when the task result
+   has an http(s) `run_page_url` (escaped, `rel="noopener"`).
+6. Docs: docs/api.md (`run_state`, verified message), docs/user-guide.md
+   (Job popup and Background Tasks), releases/ReleaseNotes_V0.9.0.md.
+7. Tests
+   - tests/units/core/test_job_action_runner.py: `run_state` read once, SDK
+     error wrapped.
+   - tests/units/dtwin/test_job_action_service.py: running / queued /
+     state-check-failure responses, live state recorded on the task.
+   - tests/units/api/test_node_job_action.py: `run_state` and `run_page_url`
+     in the API response.
+   - tests/units/front/test_class_actions_ui.py: Job popup contract, Node
+     check of the status mapping (icon + label for every state), run link in
+     Background Tasks.
+
+Modified files:
+- src/back/core/databricks/jobs/JobActionRunner.py
+- src/back/objects/digitaltwin/node/JobActionService.py
+- src/api/routers/digitaltwin.py
+- src/front/static/query/js/query-dashboard.js
+- src/front/static/global/js/task-tracker.js
+- docs/api.md
+- docs/user-guide.md
+- releases/ReleaseNotes_V0.9.0.md
+- tests/units/core/test_job_action_runner.py
+- tests/units/dtwin/test_job_action_service.py
+- tests/units/api/test_node_job_action.py
+- tests/units/front/test_class_actions_ui.py
+
+Tests: `uv run --frozen pytest -q -m "not scenario"` → 9409 passed, 326 skipped, 6 deselected, 1 xfailed, 40 warnings in 52.03s.

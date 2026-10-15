@@ -36,6 +36,12 @@ def _domain():
 def test_job_invoke_returns_task_id(client):
     runner = MagicMock()
     runner.run_now.return_value = 99
+    runner.run_state.return_value = {
+        "life_cycle_state": "RUNNING",
+        "result_state": "",
+        "message": "",
+        "run_page_url": "https://example/run/99",
+    }
     runner.wait_for.return_value = {
         "success": True,
         "result_state": "SUCCESS",
@@ -67,6 +73,8 @@ def test_job_invoke_returns_task_id(client):
     assert body["action"] == "job:42"
     assert body["task_id"]
     assert body["run_id"] == 99
+    assert body["run_state"] == "RUNNING"
+    assert body["run_page_url"] == "https://example/run/99"
     runner.run_now.assert_called_once()
 
 

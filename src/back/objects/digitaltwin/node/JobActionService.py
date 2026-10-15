@@ -21,6 +21,42 @@ from back.objects.digitaltwin.DigitalTwin import DigitalTwin
 
 logger = get_logger(__name__)
 
+_QUEUED_STATES = {"PENDING", "QUEUED", "BLOCKED", "WAITING_FOR_RETRY"}
+_FINISHED_STATES = {"TERMINATED", "SKIPPED", "INTERNAL_ERROR"}
+
+
+def _state_label(life_cycle: str) -> str:
+    return (life_cycle or "unknown").replace("_", " ").capitalize()
+
+
+def _started_message(job_name: str, life_cycle: str) -> str:
+    if life_cycle == "RUNNING":
+        return f"Job {job_name} is running"
+    if life_cycle in _QUEUED_STATES:
+        return f"Job {job_name} is queued"
+    if life_cycle in _FINISHED_STATES:
+        return f"Job {job_name} has already finished"
+    return f"Job {job_name} was started"
+
+
+def _verified_state(runner: JobActionRunner, run_id: int) -> Dict[str, str]:
+    """One ``get_run`` right after ``run_now``; never fails the trigger."""
+    try:
+        state = runner.run_state(run_id)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Could not verify job run %s: %s", run_id, exc)
+        state = None
+    if not isinstance(state, dict):
+        return {"life_cycle_state": "UNKNOWN", "run_page_url": ""}
+    return state
+
+
+def _record_progress(tm: Any, task_id: str, run_id: int, percent: int, life_cycle: str) -> None:
+    running = tm.get_task(task_id)
+    if running is not None and isinstance(running.result, dict):
+        running.result["life_cycle_state"] = life_cycle
+    tm.update_progress(task_id, percent, f"Databricks run {run_id}: {_state_label(life_cycle)}")
+
 
 def _poll_job_task(
     tm: Any,
@@ -36,13 +72,14 @@ def _poll_job_task(
     try:
         outcome = runner.wait_for(
             run_id,
-            on_progress=lambda pct, msg: tm.update_progress(task_id, pct, msg),
+            on_progress=lambda pct, state: _record_progress(tm, task_id, run_id, pct, state),
         )
         payload = {
             "kind": JOB_KIND,
             "job_id": job_id,
             "entity_id": local_id,
             "run_id": run_id,
+            "life_cycle_state": outcome.get("life_cycle_state"),
             "run_page_url": outcome.get("run_page_url"),
             "result_state": outcome.get("result_state"),
             "output": outcome.get("output"),
@@ -111,6 +148,10 @@ class JobActionService:
             class_name=class_name,
             domain=dname,
         )
+        state = await run_blocking(_verified_state, runner, run_id)
+        life_cycle = state.get("life_cycle_state") or "UNKNOWN"
+        run_page_url = state.get("run_page_url") or ""
+        message = _started_message(job_name, life_cycle)
 
         task = tm.create_task(
             name=f"Job: {job_name} on {local_id}",
@@ -125,8 +166,10 @@ class JobActionService:
             "entity_id": local_id,
             "run_id": run_id,
             "kind": JOB_KIND,
+            "life_cycle_state": life_cycle,
+            "run_page_url": run_page_url,
         }
-        tm.start_task(task.id, f"Started Databricks run {run_id}")
+        tm.start_task(task.id, f"Databricks run {run_id}: {_state_label(life_cycle)}")
         threading.Thread(
             target=_poll_job_task,
             args=(tm, runner, task.id, job_id, local_id, run_id, full_name, entity_uri),
@@ -150,7 +193,9 @@ class JobActionService:
             "action": full_name,
             "task_id": task.id,
             "run_id": run_id,
+            "run_state": life_cycle,
+            "run_page_url": run_page_url or None,
             "returns_table": False,
             "rows": None,
-            "message": "Running in Background Tasks",
+            "message": message,
         }

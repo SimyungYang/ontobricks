@@ -337,6 +337,24 @@ class JobActionRunner:
         logger.info("Started entity job run %s (job %s) for %s", run_id, job_id, entity_id)
         return int(run_id)
 
+    def run_state(self, run_id: int) -> Dict[str, str]:
+        """Read the run's current state once (no polling)."""
+        try:
+            run = self._w().jobs.get_run(run_id=run_id)
+        except (AuthorizationError, InfrastructureError, ValidationError):
+            raise
+        except Exception as exc:  # noqa: BLE001
+            raise InfrastructureError(
+                f"Could not read the state of job run {run_id}", detail=str(exc)
+            ) from exc
+        state = getattr(run, "state", None)
+        return {
+            "life_cycle_state": _enum_name(getattr(state, "life_cycle_state", None)),
+            "result_state": _enum_name(getattr(state, "result_state", None)),
+            "message": getattr(state, "state_message", "") or "",
+            "run_page_url": getattr(run, "run_page_url", "") or "",
+        }
+
     def wait_for(
         self,
         run_id: int,
