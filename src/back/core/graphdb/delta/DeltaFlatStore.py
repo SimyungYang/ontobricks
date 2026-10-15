@@ -10,6 +10,8 @@ from back.core.graphdb.GraphDBBackend import GraphDBBackend
 from back.core.graphdb.adjacency import expand_and_fetch_sql
 from back.core.graphdb.constants import RDF_TYPE, RDFS_LABEL
 from back.core.graphdb.delta import _table_naming, materialize
+from back.core.graphdb.delta.DeltaOverviewStats import DeltaOverviewStats
+from back.core.graphdb.entity_search import is_missing_relation_error
 from back.core.graphdb.props import (
     execute_expand_with_props_fallback,
     forget_missing_props,
@@ -445,47 +447,92 @@ class DeltaFlatStore(GraphDBBackend):
             return int(rows[0].get("cnt", 0))
         return 0
 
-    def table_exists(self, table_name: str) -> bool:
-        """Check existence with a cheap ``LIMIT 1`` probe.
+    def describe_detail(self, table_name: str) -> Dict[str, Any]:
+        """Return the first ``DESCRIBE DETAIL`` row, or ``{}`` if it fails."""
+        if not table_name or not table_name.strip():
+            return {}
+        validate_table_name(table_name)
+        try:
+            rows = self._client.execute_query(f"DESCRIBE DETAIL {table_name}")
+        except Exception as exc:  # noqa: BLE001
+            if is_missing_relation_error(exc):
+                return {}
+            raise
+        return rows[0] if rows else {}
 
-        A full ``COUNT(*)`` over the union graph view scans a chain of views on
-        the serverless warehouse (~4s here); a ``SELECT 1 … LIMIT 1`` short-circuits
-        after the first row (~0.8s) and answers the only question this method
-        asks — does the relation resolve? Existence is orthogonal to row count,
-        so an empty-but-present graph still returns True. Missing relations raise
-        ``TABLE_OR_VIEW_NOT_FOUND`` / "does not exist", which we map to False;
-        any other error propagates.
+    def _graph_index_probe_fqn(self, table_name: str) -> str:
+        """Prefer ``…_entity_search`` when *table_name* is the union ``…_graph`` VIEW."""
+        leaf = table_name.rsplit(".", 1)[-1]
+        if leaf.endswith(_table_naming.graph_suffix()):
+            search = self.entity_search_table_id(table_name)
+            if search:
+                return search
+        return table_name
+
+    def table_exists(self, table_name: str) -> bool:
+        """Check existence with catalog metadata, not a row scan.
+
+        For the union ``…_graph`` VIEW, describe ``…_entity_search`` first.
+        ``DESCRIBE DETAIL`` on a pass-through mapping view can fail the same
+        way a ``COUNT(*)`` does (timeout / cloud I/O), which the KG badge
+        treats as unknown.
         """
         if not table_name or not table_name.strip():
             return False
         validate_table_name(table_name)
-        try:
-            self._client.execute_query(f"SELECT 1 FROM {table_name} LIMIT 1")
+        probe = self._graph_index_probe_fqn(table_name)
+        if probe != table_name and self._describe_exists(probe) is True:
             return True
-        except Exception as e:
-            error_msg = str(e)
-            if (
-                "TABLE_OR_VIEW_NOT_FOUND" in error_msg
-                or "does not exist" in error_msg.lower()
-            ):
+        exists = self._describe_exists(table_name)
+        if exists is not None:
+            return exists
+        return False
+
+    def _describe_exists(self, table_name: str) -> Optional[bool]:
+        try:
+            self._client.execute_query(f"DESCRIBE DETAIL {table_name}")
+            return True
+        except Exception as exc:
+            if is_missing_relation_error(exc):
                 return False
             raise
 
     def get_status(self, table_name: str) -> Dict[str, Any]:
-        """Return dict with count, last_modified, etc."""
+        """Return count/metadata without touching a live mapping VIEW."""
         validate_table_name(table_name)
-        count = self.count_triples(table_name)
-        status: Dict[str, Any] = {"count": count, "last_modified": None}
-        try:
-            detail = self._client.execute_query(f"DESCRIBE DETAIL {table_name}")
-            if detail and len(detail) > 0:
-                row = detail[0]
-                status["last_modified"] = row.get("lastModified")
-                status["path"] = row.get("path")
-                status["format"] = row.get("format")
-        except Exception as e:
-            logger.debug("Could not get DESCRIBE DETAIL for %s: %s", table_name, e)
+        probe = self._graph_index_probe_fqn(table_name)
+        status: Dict[str, Any] = {"count": 0, "last_modified": None}
+        row = self.describe_detail(probe)
+        if row:
+            status["last_modified"] = row.get("lastModified")
+            status["path"] = row.get("path")
+            status["format"] = row.get("format")
+        total = (
+            DeltaOverviewStats(self).triple_count(table_name)
+            if probe != table_name
+            else None
+        )
+        status["count"] = total if total else self._companion_has_row_count(probe)
         return status
+
+    def _companion_has_row_count(self, table_name: str) -> int:
+        """``1``/``0`` from ``LIMIT 1`` on *table_name* (already a probe FQN)."""
+        try:
+            rows = self._client.execute_query(f"SELECT 1 FROM {table_name} LIMIT 1")
+            return 1 if rows else 0
+        except Exception as exc:  # noqa: BLE001
+            if is_missing_relation_error(exc):
+                return 0
+            raise
+
+    def get_aggregate_stats(self, table_name: str) -> Dict[str, int]:
+        return DeltaOverviewStats(self).aggregate(table_name)
+
+    def get_type_distribution(self, table_name: str) -> List[Dict[str, Any]]:
+        return DeltaOverviewStats(self).type_distribution(table_name)
+
+    def get_predicate_distribution(self, table_name: str) -> List[Dict[str, Any]]:
+        return DeltaOverviewStats(self).predicate_distribution(table_name)
 
     def optimize_table(self, table_name: str) -> None:
         """Run OPTIMIZE to trigger Liquid Clustering compaction."""

@@ -673,6 +673,53 @@ class TestExportImport:
         assert domain_session.info["name"] == "Imported"
         assert len(domain_session.get_classes()) == 1
 
+    def test_import_requested_v1_does_not_silently_take_latest(self, domain_session):
+        """Loading V1 must keep current_version and ontology slice on V1.
+
+        Registry load posts JSON ``version: 1`` (int). Version keys in the
+        document are strings, so a raw ``1 in versions`` miss used to pick
+        lexicographic latest and then query ``…_V2_graph``.
+        """
+        domain_data = {
+            "info": {"name": "BigCustomers100m"},
+            "versions": {
+                "1": {
+                    "ontology": {
+                        "name": "v1",
+                        "base_uri": "http://v1.org#",
+                        "classes": [{"name": "CustomerV1"}],
+                        "properties": [],
+                        "constraints": [],
+                        "swrl_rules": [],
+                        "axioms": [],
+                        "expressions": [],
+                    },
+                    "assignment": {"entities": [], "relationships": []},
+                    "design_layout": {"views": {}, "map": {}},
+                },
+                "2": {
+                    "ontology": {
+                        "name": "v2",
+                        "base_uri": "http://v2.org#",
+                        "classes": [{"name": "CustomerV2"}],
+                        "properties": [],
+                        "constraints": [],
+                        "swrl_rules": [],
+                        "axioms": [],
+                        "expressions": [],
+                    },
+                    "assignment": {"entities": [], "relationships": []},
+                    "design_layout": {"views": {}, "map": {}},
+                },
+            },
+        }
+        domain_session.import_from_file(domain_data, version=1)
+        assert domain_session.current_version == "1"
+        assert domain_session.get_classes()[0]["name"] == "CustomerV1"
+        assert domain_session.delta["table_name"] == (
+            "triplestore_bigcustomers100m_V1"
+        )
+
 
 class TestLegacyMigration:
     def test_migrates_flat_constraints(self, mock_session_mgr):

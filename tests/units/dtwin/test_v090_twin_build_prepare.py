@@ -372,6 +372,15 @@ class TestGraphStats:
         }
         assert TwinGraphStats.cache_is_fresh(cached) is True
 
+    def test_cache_with_types_but_zero_triples_is_stale(self):
+        cached = {
+            "top_predicates": [{"uri": "p", "kind": "attribute"}],
+            "analytics_job_blocked_reason": "",
+            "entity_types": [{"uri": "t", "count": 5}],
+            "total_triples": 0,
+        }
+        assert TwinGraphStats.cache_is_fresh(cached) is False
+
     def test_assemble_derives_relationship_count_and_classifies(self):
         classified = [{"uri": "p", "kind": "relationship"}]
         with patch.object(

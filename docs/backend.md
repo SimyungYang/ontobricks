@@ -1108,6 +1108,10 @@ The semantics differ by mode:
 > from the same snapshot, avoid running reads concurrently with Build/Refresh
 > and read after the task completes.
 >
+> **Overview / status badge:** those probes use companion metadata
+> (`DESCRIBE DETAIL`, `_entity_search` ``LIMIT 1``, `_props` / `_adj_out`
+> aggregates). They must not ``COUNT(*)`` a pass-through `_graph` VIEW.
+
 > **Important:** On a Lakehouse domain in `table` materialization mode, the
 > Explorer's entity expansion (which uses adjacency tables) and a raw SPARQL
 > scan of `_graph` can disagree between builds.  Expansion reflects the

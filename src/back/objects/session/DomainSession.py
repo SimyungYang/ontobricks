@@ -1450,18 +1450,14 @@ class DomainSession:
 
         # Check for new versioned format
         if "versions" in data:
+            from back.objects.domain.payload import loaded_version_document
+
             versions = data["versions"]
-            version_keys = sorted(versions.keys(), reverse=True)
-
-            if version_keys:
-                # Use specified version or default to latest
-                if version and version in versions:
-                    selected_version = version
-                else:
-                    selected_version = version_keys[0]  # Latest version
-
-                self._data["domain"]["current_version"] = selected_version
-                version_data = versions[selected_version]
+            if versions:
+                selected_version, version_data = loaded_version_document(
+                    versions, requested=version
+                )
+                self.current_version = selected_version
 
                 if "ontology" in version_data:
                     merged_ont = {**empty["ontology"], **version_data["ontology"]}

@@ -3,7 +3,11 @@
 from back.objects.domain.Domain import Domain
 from back.objects.domain.WorkspacePresence import WorkspacePresence
 from back.objects.domain.HomeService import HomeService
-from back.objects.domain.payload import get_domain_info, resolve_domain_slice
+from back.objects.domain.payload import (
+    get_domain_info,
+    resolve_domain_slice,
+    select_loaded_version,
+)
 from back.objects.domain.settings.SettingsService import SettingsService
 from back.objects.domain.settings.graphengine.GraphEngineSettings import GraphEngineSettings
 from back.objects.domain.settings.graphengine.GraphEngineLakebaseSettings import GraphEngineLakebaseSettings
@@ -41,4 +45,5 @@ __all__ = [
     "get_domain_info",
     "get_version_status_cache_snapshot",
     "resolve_domain_slice",
+    "select_loaded_version",
 ]

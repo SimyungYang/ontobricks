@@ -140,7 +140,7 @@ class SQLHelpers:
         catalog = delta.get("catalog", "")
         schema = delta.get("schema", "")
         name = (getattr(domain, "info", None) or {}).get("name", "")
-        version = (
+        version = str(
             getattr(domain, "current_version", DEFAULT_GRAPH_VERSION)
             or DEFAULT_GRAPH_VERSION
         )
@@ -167,7 +167,7 @@ class SQLHelpers:
     def effective_graph_name(domain) -> str:
         """Graph table/name derived from the domain name and version."""
         name = (getattr(domain, "info", None) or {}).get("name", DEFAULT_GRAPH_NAME)
-        version = (
+        version = str(
             getattr(domain, "current_version", DEFAULT_GRAPH_VERSION)
             or DEFAULT_GRAPH_VERSION
         )

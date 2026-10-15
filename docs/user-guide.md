@@ -1250,7 +1250,7 @@ Short version:
 | Neo4j | Yes, twice: UC `_data` TABLE + Neo4j nodes | Build `MERGE` | None — native Bolt traversal |
 
 **Performance:**
-- **Delta** materialises the R2RML VIEW into `_data` with **Liquid Clustering** (`CLUSTER BY (predicate, subject)`), co-locating rows by predicate and subject for faster filtering. After each build, an `OPTIMIZE` runs on `_data` to compact files and apply the clustering layout. Interactive reads typically hit the `_graph` union VIEW. Under `Views only` materialization there is nothing to cluster or optimise, and that read cost moves from a single Delta scan to a full re-execution of the mapping SQL.
+- **Delta** materialises the R2RML VIEW into `_data` with **Liquid Clustering** (`CLUSTER BY (predicate, subject)`), co-locating rows by predicate and subject for faster filtering. After each build, an `OPTIMIZE` runs on `_data` to compact files and apply the clustering layout. Interactive reads typically hit the `_graph` union VIEW. **Overview** and the KG status badge read the graph-index companions (`_entity_search`, `_adj_*`, `_props`) instead of `COUNT(*)` on that VIEW — a pass-through `_graph` on a large mapping would otherwise time out. Under `Views only` materialization there is nothing to cluster or optimise on `_data`, and SPARQL / uncached traversals still re-execute the mapping SQL.
 - **Lakebase** stores triples in Postgres flat tables. Two modes are available: `managed_synced` (what Settings → Lakebase proposes: Databricks Lakeflow Snapshot-syncs a table from the mapped view; Triggered/Continuous need CDF and cannot run on a view) and `app_managed` (the app streams batches via `COPY FROM STDIN`, used at runtime when `sync_mode` was never saved).
 
 #### Materialization modes (Lakehouse)

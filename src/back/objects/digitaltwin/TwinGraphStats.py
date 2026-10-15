@@ -24,7 +24,11 @@ class TwinGraphStats:
         preds = cached.get("top_predicates") or []
         has_kind = preds and "kind" in preds[0]
         has_job_reason = "analytics_job_blocked_reason" in cached
-        return bool(has_kind and has_job_reason)
+        # Typed entities with no triples is not a real graph state.
+        inconsistent = bool(cached.get("entity_types")) and not cached.get(
+            "total_triples"
+        )
+        return bool(has_kind and has_job_reason and not inconsistent)
 
     @staticmethod
     def assemble(

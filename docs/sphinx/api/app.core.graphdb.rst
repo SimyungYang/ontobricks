@@ -48,6 +48,11 @@ Delta (Unity Catalog) backend
    :undoc-members:
    :show-inheritance:
 
+.. automodule:: back.core.graphdb.delta.DeltaOverviewStats
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 Delta relation lifecycle
 ------------------------
 
