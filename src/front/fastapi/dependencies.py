@@ -141,19 +141,24 @@ def brand_page_title(context: dict, page_label: str = "") -> str:
     return _brand_page_title(get_request_ui_branding(request), page_label)
 
 
-# Keep UI_LANG_COOKIE / SUPPORTED_UI_LANGS / DEFAULT_UI_LANG in sync with
-# COOKIE / SUPPORTED / DEFAULT_LANG in src/front/static/global/js/i18n.js.
+# Keep UI_LANG_COOKIE / SUPPORTED_UI_LANGS in sync with COOKIE / SUPPORTED in
+# src/front/static/global/js/i18n.js.
 UI_LANG_COOKIE = "ob_lang"
 SUPPORTED_UI_LANGS = ("en", "ko")
-_ENV_UI_LANG = os.getenv("ONTOBRICKS_UI_LANG", "en")
-DEFAULT_UI_LANG = _ENV_UI_LANG if _ENV_UI_LANG in SUPPORTED_UI_LANGS else "en"
+FALLBACK_UI_LANG = "en"
+
+
+def default_ui_lang() -> str:
+    """Return the deploy-wide default language (``ONTOBRICKS_UI_LANG``), read per call."""
+    env_lang = os.getenv("ONTOBRICKS_UI_LANG", FALLBACK_UI_LANG)
+    return env_lang if env_lang in SUPPORTED_UI_LANGS else FALLBACK_UI_LANG
 
 
 def resolve_ui_lang(cookie_value) -> str:
-    """Return the UI language for a cookie value, falling back to the default."""
+    """Return the UI language for a cookie value, falling back to the deploy default."""
     if cookie_value in SUPPORTED_UI_LANGS:
         return cookie_value
-    return DEFAULT_UI_LANG
+    return default_ui_lang()
 
 
 @pass_context

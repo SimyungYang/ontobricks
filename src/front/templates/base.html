@@ -1,5 +1,6 @@
 <!DOCTYPE html>
-<html lang="{{ get_ui_lang() }}" data-max-notifications="{{ max_notifications }}">
+{% set _ui_lang = get_ui_lang() -%}
+<html lang="{{ _ui_lang }}" data-max-notifications="{{ max_notifications }}">
 <head>
     {% set _branding = ui_branding_for() %}
     <meta charset="UTF-8">
@@ -36,8 +37,11 @@
     <!-- permissions.js MUST stay first so window.OB.permissions exists before
          every other script (navbar, version-check, ...) reads it. -->
     <script defer src="{{ url_for('static', filename='global/js/permissions.js') }}?v={{ asset_version }}"></script>
-    <!-- i18n runs right after permissions.js so every later script's DOM output is observed. -->
-    <script defer src="{{ url_for('static', filename='global/js/i18n-ko.js') }}?v={{ asset_version }}"></script>
+    <!-- i18n runs right after permissions.js so every later script's DOM output is observed.
+         The dictionary is only fetched for a non-English page. -->
+    {% if _ui_lang != 'en' %}
+    <script defer src="{{ url_for('static', filename='global/js/i18n-' ~ _ui_lang ~ '.js') }}?v={{ asset_version }}"></script>
+    {% endif %}
     <script defer src="{{ url_for('static', filename='global/js/i18n.js') }}?v={{ asset_version }}"></script>
     <script defer src="{{ url_for('static', filename='global/js/utils.js') }}?v={{ asset_version }}"></script>
     <script defer src="{{ url_for('static', filename='global/js/review-modals.js') }}?v={{ asset_version }}"></script>

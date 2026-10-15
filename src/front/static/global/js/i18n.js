@@ -3,26 +3,28 @@
  *
  * Translates the English UI into the selected language on the client:
  *   - server-rendered text nodes and attributes (placeholder, title, aria-label)
- *   - text injected later by page scripts (MutationObserver)
- *   - native alert / confirm / prompt messages
+ *   - text injected later by page scripts (MutationObserver), which also
+ *     covers showNotification / showConfirmDialog output
  *
  * Dictionaries register themselves in ``window.OB_I18N_DICTS[<lang>]`` as a
  * flat ``{ "English source": "Translation" }`` map (see i18n-ko.js). Keys are
  * whitespace-normalised; digit runs in a key are written as ``{n}``.
  *
  * The language is stored in the ``ob_lang`` cookie so the server can render
- * ``<html lang>`` on first paint. English is the identity language: no
- * dictionary, no DOM work.
+ * ``<html lang>`` on first paint and only ship the dictionary to non-English
+ * pages. English is the identity language: no dictionary, no DOM work.
  *
  * Content inside code, editors, SVG, form values, and any element marked
  * ``translate="no"`` / ``.notranslate`` / ``[data-i18n-skip]`` is never touched,
- * so user data (entity names, SQL, SPARQL, ...) stays verbatim.
+ * so user data (entity names, SQL, SPARQL, ...) stays verbatim. Templates and
+ * scripts mark the containers that render user-authored content with
+ * ``data-i18n-skip``.
  */
 (function () {
     'use strict';
 
     // Keep COOKIE / SUPPORTED / DEFAULT_LANG in sync with UI_LANG_COOKIE /
-    // SUPPORTED_UI_LANGS / DEFAULT_UI_LANG in src/front/fastapi/dependencies.py
+    // SUPPORTED_UI_LANGS / FALLBACK_UI_LANG in src/front/fastapi/dependencies.py
     // (a server-side ONTOBRICKS_UI_LANG override reaches us via <html lang>).
     var COOKIE = 'ob_lang';
     var SUPPORTED = ['en', 'ko'];
@@ -197,21 +199,10 @@
         return mo;
     }
 
-    function wrapDialogs(translator) {
-        ['alert', 'confirm', 'prompt'].forEach(function (name) {
-            var original = window[name];
-            if (typeof original !== 'function') return;
-            window[name] = function (message) {
-                var args = Array.prototype.slice.call(arguments);
-                if (typeof message === 'string') args[0] = translator.t(message);
-                return original.apply(window, args);
-            };
-        });
-    }
-
     function setLang(lang) {
         if (SUPPORTED.indexOf(lang) < 0) return;
-        document.cookie = COOKIE + '=' + lang + '; path=/; max-age=' + ONE_YEAR_SECONDS + '; SameSite=Lax';
+        var secure = window.location.protocol === 'https:' ? '; Secure' : '';
+        document.cookie = COOKIE + '=' + lang + '; path=/; max-age=' + ONE_YEAR_SECONDS + '; SameSite=Lax' + secure;
         window.location.reload();
     }
 
@@ -258,13 +249,17 @@
         if (dict) {
             translator.translateTree(document.body);
             observe(translator);
-            wrapDialogs(translator);
         }
         document.documentElement.classList.add('ob-i18n-ready');
     }
 
     // Exposed for unit tests (no DOM required).
-    window.OB_I18N_CORE = { normalize: normalize, translateWith: translateWith, keepPadding: keepPadding };
+    window.OB_I18N_CORE = {
+        normalize: normalize,
+        translateWith: translateWith,
+        keepPadding: keepPadding,
+        createTranslator: createTranslator
+    };
 
     if (typeof document !== 'undefined' && document.body) {
         init();
