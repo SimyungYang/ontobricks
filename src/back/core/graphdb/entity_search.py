@@ -19,6 +19,7 @@ __all__ = [
     "entity_search_uri_search_sql",
     "is_asserted_only_relation",
     "is_missing_relation_error",
+    "is_view_not_table_error",
     "preview_select_sql",
     "sort_preview_rows",
 ]
@@ -38,6 +39,11 @@ def is_missing_relation_error(exc: Exception) -> bool:
         or "does not exist" in message
         or "undefined table" in message
     )
+
+
+def is_view_not_table_error(exc: Exception) -> bool:
+    """Whether *exc* is a table-only statement (``DESCRIBE DETAIL``) run on a view."""
+    return "expect_table_not_view" in str(exc).lower()
 
 
 def entity_search_select(spo: str) -> str:

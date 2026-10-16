@@ -12,6 +12,7 @@ from back.core.graphdb.entity_search import (
     entity_search_uri_search_sql,
     is_asserted_only_relation,
     is_missing_relation_error,
+    is_view_not_table_error,
     preview_select_sql,
     sort_preview_rows,
 )
@@ -29,6 +30,16 @@ def test_is_missing_relation_error_matches_known_markers() -> None:
     assert is_missing_relation_error(RuntimeError("relation g does not exist")) is True
     assert is_missing_relation_error(RuntimeError("undefined table g")) is True
     assert is_missing_relation_error(RuntimeError("permission denied")) is False
+
+
+def test_is_view_not_table_error_matches_describe_detail_on_a_view() -> None:
+    exc = RuntimeError(
+        "[EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE] 'DESCRIBE DETAIL' expects a table "
+        "but `cat`.`sch`.`g_data` is a view. SQLSTATE: 42809"
+    )
+    assert is_view_not_table_error(exc) is True
+    assert is_missing_relation_error(exc) is False
+    assert is_view_not_table_error(RuntimeError("TABLE_OR_VIEW_NOT_FOUND: g")) is False
 
 
 def test_asserted_only_suffixes() -> None:

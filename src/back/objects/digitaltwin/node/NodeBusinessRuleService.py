@@ -122,7 +122,7 @@ class NodeBusinessRuleService:
 
         local_id = DigitalTwin.extract_local_id(entity_uri)
         snap = DomainSnapshot(domain)
-        store = get_graphdb(snap, settings)
+        store = get_graphdb(snap, settings, for_write=True)
         if store is None:
             raise InfrastructureError("Graph store is not available for this domain")
 

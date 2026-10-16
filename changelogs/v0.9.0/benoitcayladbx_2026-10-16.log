@@ -1,0 +1,131 @@
+================================================================================
+## Live scenario campaign runs against a deployed Databricks App
+================================================================================
+
+Context:
+`make scenario-campaign ONTOBRICKS_LIVE_BASE=<app-url>` (documented in
+tests/e2e/scenarios/README.md) could not target a deployed app. The scenario
+browser context carried no workspace bearer, so the Apps gateway answered
+every call with its 200 HTML login page (scenarios 1 and 4 failed on empty
+JSON, and the health probe "passed" on that login page). Once authenticated,
+the shared trailing-slash redirect workaround resolved navigations with a
+cookieless httpx client and also followed the app's session-dependent 303s
+("no domain loaded → /"), so the browser silently landed on Home instead of
+the requested workspace page. Separately, the local `test_full_lifecycle.py`
+journey was stale against two UI changes: workspace pages now bounce an
+unloaded session to Home, and the R2RML view moved from Mapping to
+Domain → W3C Standards.
+
+Changes:
+
+1. tests/e2e/scenarios/conftest.py
+   ``scenario_page`` uses the session ``_live_bearer`` (``None`` on localhost)
+   as an ``Authorization`` header plus ``_install_redirect_fix`` for deployed
+   apps; ``scenario_base`` probes health with the same token. Local campaigns
+   are unchanged.
+2. tests/e2e/scenarios/_harness.py
+   ``probe_app`` accepts an optional bearer ``token``.
+3. tests/e2e/conftest.py
+   ``_install_redirect_fix._canonical`` only follows 307/308 (the wrong-host
+   slash redirects); session redirects (303) are left to the browser, which
+   holds the session cookie.
+4. tests/e2e/scenarios/test_full_lifecycle.py
+   Names the domain via ``/domain/info`` before opening ``/domain`` (then
+   asserts the field shows the saved name), and drives R2RML regeneration
+   from the Domain page's W3C Standards section.
+
+Campaign result (deployed ontobricks-09x, profile DEFAULT):
+`make scenario-campaign` → 5 passed in 22m39s (scenarios 01–04 + validation;
+validation report 13 passed, 0 failed, 2 info).
+`ONTOBRICKS_E2E_FAKE_CREDS=1 pytest tests/e2e/scenarios/test_full_lifecycle.py -m scenario`
+→ 1 passed.
+
+Modified files:
+- tests/e2e/conftest.py
+- tests/e2e/scenarios/conftest.py
+- tests/e2e/scenarios/_harness.py
+- tests/e2e/scenarios/test_full_lifecycle.py
+- changelogs/v0.9.0/benoitcayladbx_2026-10-16.log
+
+Tests: `uv run --frozen pytest -q -m "not scenario"` → 9431 passed, 326 skipped, 6 deselected, 1 xfailed, 40 warnings in 49.83s.
+
+================================================================================
+## Scenario 5: Lakehouse zero-copy + entity virtual attributes / actions / business rules
+================================================================================
+
+Context:
+New independent live scenario covering a domain switched to the Lakehouse
+backend in zero-copy mode (`…_data` is a VIEW over the R2RML gateway view),
+then the per-entity features: virtual attributes backed by a UC table
+function, a UC scalar function action, and a SWRL rule declared as a
+business rule and triggered on one entity. Writing it surfaced two app bugs
+on that path:
+- The Lakehouse status probe ran `DESCRIBE DETAIL` on the `…_data` VIEW,
+  which Databricks rejects with `EXPECT_TABLE_NOT_VIEW`; the probe re-raised
+  it, so a successful zero-copy build reported the triple store as missing.
+- Writes of inferred triples (entity business rule, reasoning "append to
+  graph", materialise inferred to graph) opened the graph store with the
+  default read path, i.e. on the Lakehouse *query* warehouse. That warehouse
+  may be read-only and rejected the `CREATE TABLE … CLUSTER BY` of the
+  `…_inferred` companion (`DELTA_CLUSTERING_NOT_SUPPORTED`), so the business
+  rule confirm returned 502. Writes now use the build warehouse.
+
+Changes:
+
+1. tests/e2e/scenarios/test_scenario_05_zero_copy_entity_features.py (new)
+   Creates scratch UC tables (customers, orders) and functions (a table
+   function for virtual attributes, a scalar function for the action); builds
+   a fresh `TestZeroCopy` domain; sets `graph_backend=databricks` +
+   `lakehouse_materialization=view`; builds; checks the relation is present
+   with data; inserts a new customer in UC and asserts it appears in `_data`
+   with no rebuild; lists both functions as picker-eligible; declares the
+   virtual attributes / action / business rule on `Customer`; asserts the
+   node context, the computed virtual attributes, the action result plus
+   one-time token, and the rule inference (1 triple for a customer with an
+   order, 0 for one without). Drops the scratch objects on teardown.
+2. src/back/core/graphdb/entity_search.py
+   New ``is_view_not_table_error`` helper.
+3. src/back/core/graphdb/delta/DeltaFlatStore.py
+   ``describe_detail`` returns ``{}`` for a view, and ``_describe_exists``
+   treats the view error as "exists".
+4. src/back/objects/digitaltwin/node/NodeBusinessRuleService.py
+   Opens the graph store with ``for_write=True``.
+5. src/back/objects/digitaltwin/TwinBackgroundTasks.py
+   Reasoning "append inferred triples to graph" opens the store with
+   ``for_write=True``.
+6. src/back/objects/digitaltwin/build/TwinInferredMaterialize.py
+   Materialise-to-graph opens the store with ``for_write=True``.
+7. tests/units/graphdb/test_entity_search_sql.py,
+   tests/units/graphdb/delta/test_delta_status_probe.py
+   View-error helper test; zero-copy `_data` view exists and reports status
+   without Delta detail.
+8. tests/units/dtwin/test_entity_business_rules.py,
+   tests/units/dtwin/test_v090_twin_build_prepare.py
+   Assert the business rule and materialise-to-graph writes request the
+   build warehouse (both red before the fix).
+9. tests/e2e/scenarios/README.md
+   Lists scenarios 4 and 5 in the journey table and documents scenario 5's
+   prerequisites and env vars (`ONTOBRICKS_SCENARIO5_PREFIX`,
+   `ONTOBRICKS_SCENARIO5_BUILD_TIMEOUT`).
+
+Scenario result (local dev server, profile DEFAULT):
+`ONTOBRICKS_SCENARIO_LIVE=1 ONTOBRICKS_LIVE_BASE=http://localhost:8000 pytest
+tests/e2e/scenarios/test_scenario_05_zero_copy_entity_features.py -m scenario`
+→ 1 passed in 112s. Not yet run on ontobricks-09x: the two app fixes need a
+redeploy first.
+
+Modified files:
+- tests/e2e/scenarios/test_scenario_05_zero_copy_entity_features.py (new)
+- src/back/core/graphdb/entity_search.py
+- src/back/core/graphdb/delta/DeltaFlatStore.py
+- src/back/objects/digitaltwin/node/NodeBusinessRuleService.py
+- src/back/objects/digitaltwin/TwinBackgroundTasks.py
+- src/back/objects/digitaltwin/build/TwinInferredMaterialize.py
+- tests/units/graphdb/test_entity_search_sql.py
+- tests/units/graphdb/delta/test_delta_status_probe.py
+- tests/units/dtwin/test_entity_business_rules.py
+- tests/units/dtwin/test_v090_twin_build_prepare.py
+- tests/e2e/scenarios/README.md
+- changelogs/v0.9.0/benoitcayladbx_2026-10-16.log
+
+Tests: `uv run --frozen pytest -q -m "not scenario"` → 9436 passed, 326 skipped, 7 deselected, 1 xfailed, 40 warnings in 48.67s.

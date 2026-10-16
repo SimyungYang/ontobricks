@@ -78,7 +78,7 @@ class TwinInferredMaterialize:
 
         if do_graph and uri_triples:
             try:
-                store = get_store(domain_snap, settings)
+                store = get_store(domain_snap, settings, for_write=True)
                 if store is None:
                     result["materialize_graph_error"] = "Graph store not available"
                 else:

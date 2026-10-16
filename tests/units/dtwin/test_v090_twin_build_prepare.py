@@ -286,6 +286,10 @@ class TestInferredMaterialize:
             ("http://ex.org/s1", "http://ex.org/p", "http://ex.org/o1", "swrl:rule1")
         ]
 
+    def test_graph_write_opens_the_store_on_the_build_warehouse(self):
+        _r, _cls, _svc, get_store, *_ = _materialize(do_delta=False)
+        assert get_store.call_args.kwargs == {"for_write": True}
+
     def test_delta_write_goes_to_the_named_table_with_uri_triples(self):
         result, cls, _svc, _gs, _gc, _s, client = _materialize(do_graph=False, delta_count=1)
 

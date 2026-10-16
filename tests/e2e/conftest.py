@@ -128,7 +128,10 @@ def _install_redirect_fix(ctx, base: str, token: str) -> None:
         ) as client:
             for _ in range(5):
                 resp = client.get(url)
-                if resp.status_code not in (301, 302, 303, 307, 308):
+                # Only the slash redirects (307/308) are wrong-host. Session
+                # redirects (303, e.g. "no domain loaded → /") depend on the
+                # browser's cookies, which this cookieless client lacks.
+                if resp.status_code not in (307, 308):
                     return url
                 loc = resp.headers.get("location", "")
                 if not loc:

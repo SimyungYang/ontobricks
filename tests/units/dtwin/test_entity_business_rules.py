@@ -199,7 +199,12 @@ def test_resolve_rejects_undeclared_rule_and_disabled_feature():
 
 def _patch_store(monkeypatch, store):
     module = sys.modules["back.objects.digitaltwin.node.NodeBusinessRuleService"]
-    monkeypatch.setattr(module, "get_graphdb", lambda snap, settings: store)
+
+    def _get_graphdb(snap, settings, *, for_write=False):
+        store.for_write = for_write
+        return store
+
+    monkeypatch.setattr(module, "get_graphdb", _get_graphdb)
 
 
 class _FakeStore:
@@ -241,6 +246,16 @@ async def test_run_business_rule_scopes_inference_and_materialises(monkeypatch):
     assert result["materialized_count"] == 1
     assert result["rule"] == "VipCustomer"
     assert result["class_name"] == "Customer"
+
+
+async def test_run_business_rule_writes_through_the_build_warehouse(monkeypatch):
+    """The Lakehouse query warehouse may be read-only; the write needs the build one."""
+    store = _FakeStore([])
+    _patch_store(monkeypatch, store)
+    await NodeContextService.run_business_rule(
+        _domain(), object(), entity_uri=ENTITY, rule_name="VipCustomer"
+    )
+    assert store.for_write is True
 
 
 async def test_run_business_rule_without_new_facts_writes_nothing(monkeypatch):

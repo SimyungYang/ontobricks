@@ -466,7 +466,7 @@ class TwinBackgroundTasks:
                     task_id, 92, "Appending inferred triples to graph..."
                 )
                 try:
-                    graph_store = get_graphdb(domain_snap, settings)
+                    graph_store = get_graphdb(domain_snap, settings, for_write=True)
                     if graph_store is None:
                         logger.warning(
                             "%s %s: cannot append to graph — store unavailable",

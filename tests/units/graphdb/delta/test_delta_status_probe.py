@@ -44,6 +44,41 @@ class TestDeltaTableExistsUsesCatalog:
         assert store.table_exists("cat.sch.missing_graph") is False
 
 
+_VIEW_ERROR = (
+    f"[EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE] 'DESCRIBE DETAIL' expects a table "
+    f"but {DATA} is a view. SQLSTATE: 42809"
+)
+
+
+class TestZeroCopyDataView:
+    """Zero-copy materialization makes ``…_data`` a VIEW, which DESCRIBE DETAIL rejects."""
+
+    def test_data_view_exists(self):
+        client = MagicMock()
+        client.execute_query.side_effect = RuntimeError(_VIEW_ERROR)
+        store = DeltaFlatStore(client, domain=_domain())
+
+        assert store.table_exists(DATA) is True
+
+    def test_data_view_status_has_no_delta_detail_and_no_full_count(self):
+        client = MagicMock()
+
+        def _query(sql):
+            if sql == f"DESCRIBE DETAIL {DATA}":
+                raise RuntimeError(_VIEW_ERROR)
+            if sql == f"SELECT 1 FROM {DATA} LIMIT 1":
+                return [{"1": 1}]
+            raise AssertionError(f"unexpected SQL: {sql}")
+
+        client.execute_query.side_effect = _query
+        store = DeltaFlatStore(client, domain=_domain())
+
+        status = store.get_status(DATA)
+        assert status["count"] == 1
+        assert status.get("format") is None
+        assert not any("COUNT(" in sql for sql in _sqls(client))
+
+
 class TestDeltaGetStatusAvoidsFullCount:
     def test_data_table_status_does_not_count_star(self):
         client = MagicMock()

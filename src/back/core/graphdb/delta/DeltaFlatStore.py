@@ -11,7 +11,10 @@ from back.core.graphdb.adjacency import expand_and_fetch_sql
 from back.core.graphdb.constants import RDF_TYPE, RDFS_LABEL
 from back.core.graphdb.delta import _table_naming, materialize
 from back.core.graphdb.delta.DeltaOverviewStats import DeltaOverviewStats
-from back.core.graphdb.entity_search import is_missing_relation_error
+from back.core.graphdb.entity_search import (
+    is_missing_relation_error,
+    is_view_not_table_error,
+)
 from back.core.graphdb.props import (
     execute_expand_with_props_fallback,
     forget_missing_props,
@@ -448,14 +451,17 @@ class DeltaFlatStore(GraphDBBackend):
         return 0
 
     def describe_detail(self, table_name: str) -> Dict[str, Any]:
-        """Return the first ``DESCRIBE DETAIL`` row, or ``{}`` if it fails."""
+        """Return the first ``DESCRIBE DETAIL`` row, or ``{}`` if it fails.
+
+        A view (zero-copy ``…_data``) has no Delta detail, so it also yields ``{}``.
+        """
         if not table_name or not table_name.strip():
             return {}
         validate_table_name(table_name)
         try:
             rows = self._client.execute_query(f"DESCRIBE DETAIL {table_name}")
         except Exception as exc:  # noqa: BLE001
-            if is_missing_relation_error(exc):
+            if is_missing_relation_error(exc) or is_view_not_table_error(exc):
                 return {}
             raise
         return rows[0] if rows else {}
@@ -493,6 +499,8 @@ class DeltaFlatStore(GraphDBBackend):
             self._client.execute_query(f"DESCRIBE DETAIL {table_name}")
             return True
         except Exception as exc:
+            if is_view_not_table_error(exc):
+                return True
             if is_missing_relation_error(exc):
                 return False
             raise

@@ -39,14 +39,17 @@ def needs_apps_gateway_token(base: Optional[str]) -> bool:
     return not is_loopback_base(base)
 
 
-def probe_app(base: str, *, timeout: float = PROBE_TIMEOUT_S) -> None:
+def probe_app(
+    base: str, *, timeout: float = PROBE_TIMEOUT_S, token: Optional[str] = None
+) -> None:
     """Hit ``/health`` then ``/healthz``; raise the last error if neither is 200."""
     import httpx
 
+    headers = {"Authorization": f"Bearer {token}"} if token else {}
     last_exc: Exception | None = None
     for probe in PROBE_PATHS:
         try:
-            resp = httpx.get(f"{base}{probe}", timeout=timeout)
+            resp = httpx.get(f"{base}{probe}", timeout=timeout, headers=headers)
             if resp.status_code == 200:
                 return
             last_exc = RuntimeError(f"{probe} → HTTP {resp.status_code}")
