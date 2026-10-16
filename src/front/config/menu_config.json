@@ -53,7 +53,7 @@
                     "items": [
                         {
                             "id": "information",
-                            "label": "Information",
+                            "label": "General",
                             "icon": "bi-info-circle",
                             "default": true,
                             "requires": null
@@ -179,7 +179,7 @@
                     "items": [
                         {
                             "id": "information",
-                            "label": "Information",
+                            "label": "General",
                             "icon": "bi-info-circle",
                             "default": true,
                             "requires": null
@@ -299,7 +299,7 @@
                     "items": [
                         {
                             "id": "information",
-                            "label": "Information",
+                            "label": "General",
                             "icon": "bi-info-circle",
                             "default": true,
                             "requires": null,

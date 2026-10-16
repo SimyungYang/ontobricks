@@ -2116,7 +2116,7 @@ async function loadOntologyIntoDesigner(showAlert = true) {
         return true;
     } else {
         if (showAlert) {
-            showNotification('No ontology loaded. Please load an ontology first from the Information tab.', 'warning');
+            showNotification('No ontology loaded. Please load an ontology first from the General tab.', 'warning');
         }
         console.log('OntologyState not available');
         isLoadingData = false;

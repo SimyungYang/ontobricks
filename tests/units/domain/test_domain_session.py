@@ -450,7 +450,7 @@ class TestExportImport:
         assert domain_session.ontology["rdf_extras"] == extras
 
     def test_export_includes_graph_backend(self, domain_session):
-        """Per-domain graph backend must survive UC export (Domain → Information)."""
+        """Per-domain graph backend must survive UC export (Domain → General)."""
         domain_session.info["graph_backend"] = "neo4j"
         export = domain_session.export_for_save()
         assert export["info"]["graph_backend"] == "neo4j"

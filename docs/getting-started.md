@@ -270,7 +270,7 @@ All changes are **automatically saved**.
 
 Alternatively, use the traditional form interface:
 
-1. Click **Information** in the sidebar
+1. Click **General** in the sidebar
 2. Set an **Ontology Name** (e.g., "MyOrganization")
 3. The **Base URI** is auto-generated from the configured domain
 
@@ -415,7 +415,7 @@ other graph backends retain their native or iterative traversal.
 
 | Menu Item | Description |
 |-----------|-------------|
-| **Information** | Basic ontology settings (name, URI) |
+| **General** | Basic ontology settings (name, URI) |
 | **Import** | Import OWL, RDFS, FIBO, CDISC, IOF standards |
 | **Generate** | AI-powered ontology generation from database schema using an LLM |
 | **Studio** | Interactive force-directed ontology graph (OntoViz canvas) |

@@ -535,7 +535,7 @@ function refreshDtNamesFromForm() {
 
 /* ──────────────────────────────────────────────────────────────────────────
    Current-domain KPI / health band (moved here from the Home page).
-   Populates the #kpi* tiles rendered at the top of Domain → Information:
+   Populates the #kpi* tiles rendered at the top of Domain → General:
    entities, relationships, mappings, quality, status, version.
    Self-contained (IIFE) to avoid leaking generic helper names as globals.
    ────────────────────────────────────────────────────────────────────────── */

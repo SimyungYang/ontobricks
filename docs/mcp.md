@@ -361,7 +361,7 @@ than a lookup.
 
 ## Per-domain MCP policy
 
-Each domain decides what it publishes over MCP, from **Domain → Information
+Each domain decides what it publishes over MCP, from **Domain → General
 → MCP**. A domain that has never been configured behaves exactly as before
 0.8: every tool exposed, every attachment surfaced normally.
 

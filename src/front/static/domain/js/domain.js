@@ -25,7 +25,7 @@ function enforceCamelCase(value) {
 // Configure sidebar navigation
 window.SIDEBAR_NAV_MANUAL_INIT = true;
 document.addEventListener('DOMContentLoaded', function() {
-    // Show the global domain-loading overlay while the Domain Information
+    // Show the global domain-loading overlay while the Domain → General
     // page boots up after a "New Domain" action. domain-information.js
     // hides it once its Promise.all (info + version-status + LLM
     // endpoints) resolves. Flag is set by domainNew() in navbar.js right

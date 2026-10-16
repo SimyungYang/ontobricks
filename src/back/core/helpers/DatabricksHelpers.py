@@ -611,7 +611,7 @@ class DatabricksHelpers:
         endpoint = str(info.get("llm_endpoint") or "").strip()
         if not endpoint:
             raise ValidationError(
-                "No LLM selected. Select one in Domain Information → AI."
+                "No LLM selected. Select one in Domain → General → AI."
             )
         host, token = DatabricksHelpers.get_databricks_host_and_token(domain, settings)
         if not host or not token:

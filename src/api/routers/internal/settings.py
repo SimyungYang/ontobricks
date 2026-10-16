@@ -1160,7 +1160,7 @@ async def teams_save_batch(
 
 # NOTE: The graph backend *selection* (formerly GET/POST /graph-engine and
 # GET/POST /triple-store-backend) moved to a mandatory per-domain choice — see
-# the Domain Information -> Knowledge Graph tab (POST /domain/info). Only the
+# the Domain -> General -> Knowledge Graph tab (POST /domain/info). Only the
 # Delta connection info (which SQL warehouse) remains a workspace-global read.
 
 

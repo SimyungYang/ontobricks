@@ -201,7 +201,7 @@
                                     <div id="hw2" class="accordion-collapse collapse" data-bs-parent="#helpWorkflowAccordion">
                                         <div class="accordion-body">
                                             <ul>
-                                                <li><strong>Information</strong> &mdash; name, description, base URI, custom URI override</li>
+                                                <li><strong>General</strong> &mdash; name, description, base URI, custom URI override</li>
                                                 <li><strong>Versions</strong> &mdash; manage snapshots of your domain</li>
                                                 <li><strong>Cockpit</strong> &mdash; overall readiness dashboard (ontology &check;, mapping &check;, sync &check;)</li>
                                                 <li><strong>Data Assets</strong> &mdash; import Unity Catalog metadata (catalog, schema, tables, columns)</li>
@@ -389,7 +389,7 @@
                                 </div>
                                 <div class="accordion-item">
                                     <h2 class="accordion-header"><button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq3">Which triple store backends are supported?</button></h2>
-                                    <div id="faq3" class="accordion-collapse collapse" data-bs-parent="#helpFaqAccordion"><div class="accordion-body">OntoBricks always materializes a <strong>Delta</strong> view in Unity Catalog (governance + lineage). Each domain also picks a <strong>Graph DB</strong> engine &mdash; <strong>Lakebase</strong> (Postgres), <strong>Lakehouse</strong> (Delta triples), or <strong>Neo4j</strong> (typed property graph over Bolt) &mdash; under <em>Domain &rarr; Information &rarr; Knowledge Graph</em>. Engine connection settings live under <em>Settings &rarr; Back end</em>. See the in-app <a href="#help-docs/backend#neo4j-backend" data-help-jump="docs" data-help-doc="backend" data-help-anchor="neo4j-backend">Neo4j Backend</a> guide for Aura / Community / Enterprise requirements.</div></div>
+                                    <div id="faq3" class="accordion-collapse collapse" data-bs-parent="#helpFaqAccordion"><div class="accordion-body">OntoBricks always materializes a <strong>Delta</strong> view in Unity Catalog (governance + lineage). Each domain also picks a <strong>Graph DB</strong> engine &mdash; <strong>Lakebase</strong> (Postgres), <strong>Lakehouse</strong> (Delta triples), or <strong>Neo4j</strong> (typed property graph over Bolt) &mdash; under <em>Domain &rarr; General &rarr; Knowledge Graph</em>. Engine connection settings live under <em>Settings &rarr; Back end</em>. See the in-app <a href="#help-docs/backend#neo4j-backend" data-help-jump="docs" data-help-doc="backend" data-help-anchor="neo4j-backend">Neo4j Backend</a> guide for Aura / Community / Enterprise requirements.</div></div>
                                 </div>
                                 <div class="accordion-item">
                                     <h2 class="accordion-header"><button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq4">Why do I see grey/disabled menu items?</button></h2>

@@ -1,4 +1,4 @@
-"""Domain Information saves must synchronously refresh the No-LLM gate."""
+"""Domain → General saves must synchronously refresh the No-LLM gate."""
 
 import json
 import subprocess

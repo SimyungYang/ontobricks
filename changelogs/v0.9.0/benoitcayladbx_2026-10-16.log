@@ -333,3 +333,66 @@ Modified files:
 - changelogs/v0.9.0/benoitcayladbx_2026-10-16.log
 
 Tests: `uv run --frozen pytest -q -m "not scenario"` → 9474 passed, 326 skipped, 7 deselected, 1 xfailed, 40 warnings in 56.43s.
+
+================================================================================
+## Menus: Domain / Ontology / Mapping "Information" renamed to "General"
+================================================================================
+
+Context:
+The first item of the Domain, Ontology and Mapping menus was "Information",
+while the entity panel's first tab is now "General". The three menu items
+are renamed to "General" for one vocabulary. Section ids (``information``),
+URLs (``?section=information``), partial and JS/CSS file names are
+unchanged, so links, bookmarks and code keep working.
+
+Changes:
+
+1. src/front/config/menu_config.json
+   Labels of the ``information`` items in domain-main, ontology-editor and
+   assignment-main: "Information" → "General" (sidebar and navbar dropdowns).
+2. src/front/templates/partials/domain/_domain_information.html,
+   src/front/templates/partials/ontology/_ontology_information.html
+   Page headings "Domain Information" / "Ontology Information" → "General",
+   matching the single-word headings of the other menu pages; Ontology hints
+   point at "Domain → General".
+3. User-facing references: the No-LLM guidance
+   ("No LLM selected. Select one in Domain → General → AI.") in
+   src/front/static/global/js/permissions.js and
+   src/back/core/helpers/DatabricksHelpers.py; the missing-backend error in
+   src/back/core/graphdb/GraphDBFactory.py; the ``cache`` parameter
+   descriptions in src/api/routers/digitaltwin.py and
+   src/back/fastapi/graphql_routes.py (docstrings/comments in
+   NodeContextService.py and internal/settings.py too);
+   the help modal (Domain workflow item and the Graph DB FAQ), the Settings
+   back-end hint, the new-domain dialog (utils.js), the default-name warning
+   (ontology-core.js) and the "load an ontology first" toast
+   (ontology-design.js). Code comments naming the page updated alongside.
+4. Docs: README.md, docs/user-guide.md, docs/getting-started.md,
+   docs/backend.md, docs/deployment.md (ASCII grants table re-aligned),
+   docs/architecture.md, docs/api.md, docs/mcp.md,
+   releases/ReleaseNotes_V0.9.0.md and .cursor/11-frontend-design.mdc say
+   Domain / Ontology / Mapping → General; "Click **General** in the
+   sidebar" steps. Historical design specs under docs/superpowers/ and past
+   changelogs are left as written.
+5. Tests asserting the guidance text or naming the page updated
+   (test_domain_llm_guard, test_dtwin_assistant_chat, test_no_llm_ui_gate,
+   test_no_backend_ui, test_clarity_design_contract and docstrings).
+
+Check: local dev server renders "General" in the three sidebars and the
+navbar dropdowns; menu_config.json parses.
+
+Modified files:
+- src/front/config/menu_config.json
+- src/front/templates/partials/domain/_domain_information.html
+- src/front/templates/partials/ontology/_ontology_information.html
+- src/front/templates/partials/layout/help_modal.html
+- src/front/templates/settings.html
+- src/front/static/global/js/permissions.js, utils.js, ontology-core.js,
+  ontology-design.js and other front files with page-name comments
+- src/back/** and src/api/** guidance strings listed above
+- tests/** listed above
+- README.md, docs/*.md, releases/ReleaseNotes_V0.9.0.md,
+  .cursor/11-frontend-design.mdc
+- changelogs/v0.9.0/benoitcayladbx_2026-10-16.log
+
+Tests: `uv run --frozen pytest -q -m "not scenario"` → 9474 passed, 326 skipped, 7 deselected, 1 xfailed, 40 warnings in 55.66s.

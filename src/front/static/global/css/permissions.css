@@ -173,7 +173,7 @@ body:is(.read-only-version, .role-viewer, .read-only-locked) #manualAutoMapBtn,
 body:is(.read-only-version, .role-viewer, .read-only-locked) #manualSavePanelBtn,
 body:is(.read-only-version, .role-viewer, .read-only-locked) #mappingAutoExclude,
 body:is(.read-only-version, .role-viewer, .read-only-locked) #mappingIncludeExcluded,
-/* --- Mapping > Information / Designer: Unmap all. Kept visible (not
+/* --- Mapping > General / Designer: Unmap all. Kept visible (not
        hidden via ``.ontology-edit-btn``) so the operator sees the control
        is unavailable rather than wondering where it went. */
 body:is(.read-only-version, .role-viewer, .read-only-locked) #resetMappingsBtn,
@@ -315,7 +315,7 @@ body:is(.read-only-version, .role-viewer, .read-only-locked):not([data-page="dig
     cursor: not-allowed !important;
 }
 
-/* --- MCP policy controls (Domain → Information → MCP).
+/* --- MCP policy controls (Domain → General → MCP).
    Their ids are derived from the tool / context-feature name
    (``#mcpTool_<tool>`` / ``#mcpContext_<feature>``), so the tool named
    ``query_graphql`` yields ``#mcpTool_query_graphql`` and slips through the

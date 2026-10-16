@@ -147,7 +147,7 @@ The navbar domain badge restores the last confirmed loaded domain on page start 
 
 ## Identity, MCP, and AI gates
 
-- Per-backend OBO / permissions surface on Domain → Information **Backend** (renamed from Knowledge Graph). MCP OBO on Lakehouse carries the forwarded user token on the bypass path.
+- Per-backend OBO / permissions surface on Domain → General **Backend** (renamed from Knowledge Graph). MCP OBO on Lakehouse carries the forwarded user token on the bypass path.
 - MCP Team gate is fail-closed on public graph-read handlers. MCP sessions stay isolated.
 - **MCP client reference implementation and optimization guide** (PR #193) ships with tests.
 - AI Gateway model services appear in the LLM picker. Ontology Assistant and Graph AI honor the saved domain LLM target. A global **No LLM** UI gate turns those routes off; inherited privileges apply to Gateway discovery.

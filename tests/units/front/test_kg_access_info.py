@@ -1,6 +1,6 @@
 """UI contract for the Knowledge Graph tab's Data Access & Permissions block.
 
-The Domain → Information → Knowledge Graph tab explains, per backend, whose
+The Domain → General → Knowledge Graph tab explains, per backend, whose
 identity a graph read runs under (OBO vs service principal) and what a read
 requires (UC grants and/or Team membership). This locks that copy so the OBO
 model stays documented in the UI where users pick a backend.

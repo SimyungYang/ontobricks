@@ -891,7 +891,7 @@ rounded surface. `.ob-tabs` never owns card borders or corner geometry.
 
 #### Card-integrated page tabs
 
-This is the canonical page-level pattern used by Domain → Information,
+This is the canonical page-level pattern used by Domain → General,
 Ontology → Generate, Ontology → Data Quality, Ontology → Business Rules, and
 Ontology → Axioms:
 
@@ -977,7 +977,7 @@ surfaces:
   `ob-tabs`. The catalogued combinations are:
   - `nav nav-tabs ob-tabs mb-0` — independent Domain / Settings surfaces.
   - `nav nav-tabs ob-tabs` — Import / Registry modal.
-  - `nav nav-tabs ob-tabs nav-fill` — Domain Information / Ontology Generate /
+  - `nav nav-tabs ob-tabs nav-fill` — Domain → General / Ontology Generate /
     Ontology DQ / Business Rules / Axioms.
   - `nav nav-tabs ob-tabs nav-fill flex-shrink-0` —
     DT-DataQuality / DT-Inference (the `flex-shrink-0` keeps the
@@ -998,7 +998,7 @@ surfaces:
 - **Full-height pattern (preferred for tabbed pages).** Tabs +
   body should fill the page from below the section header to the
   shared sidebar/shell bottom (the 0.5rem viewport gutter),
-  exactly like the single card on Ontology > Information. Two
+  exactly like the single card on Ontology > General. Two
   ways to achieve this:
   1. Place the `<ul ob-tabs>` and the body card as **direct
      children of `.content-section`**. The existing
@@ -1038,7 +1038,7 @@ surfaces:
   height. Use the *Full-height pattern* above (direct children of
   `.content-section`, or `.ob-tabs-wrap`) so the tabs reach the
   shared sidebar/shell bottom (the 0.5rem viewport gutter) like
-  the Ontology > Information card.
+  the Ontology > General card.
 - ❌ Inline `style="gap:…"` or `style="font-size:…"` on the tab
   `<ul>`.
 - ❌ New hand-rolled tab engines. Use Bootstrap's `data-bs-toggle="tab"`. The

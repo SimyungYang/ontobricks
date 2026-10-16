@@ -26,7 +26,7 @@ async def query_page(
     """Query page.
 
     Ontology-only ("No Backend") domains have no graph, so the Knowledge
-    Graph page is disabled: fall back to the Domain Information page.
+    Graph page is disabled: fall back to the Domain → General page.
     """
     domain_session = get_domain(session_mgr)
     redirect = home_redirect_if_unloaded(domain_session)

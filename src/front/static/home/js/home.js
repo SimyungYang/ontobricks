@@ -6,7 +6,7 @@
  *   - "All Domains" gateway grid (the open door to every domain)
  *   - My Tasks review worklist
  *
- * The current-domain KPI / health band lives on Domain → Information
+ * The current-domain KPI / health band lives on Domain → General
  * (see domain-information.js); it is no longer rendered here.
  */
 

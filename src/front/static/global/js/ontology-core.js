@@ -282,7 +282,7 @@ async function autoGenerateOwl() {
     if (!name) {
         issues.push('Ontology name is required');
     } else if (name === 'myontology' || name === 'newproject' || name === 'newdomain') {
-        warnings.push('Ontology name is still set to the default. Set a Domain Name in Domain Information.');
+        warnings.push('Ontology name is still set to the default. Set a Domain Name in Domain → General.');
     }
     
     if (!baseUri) {

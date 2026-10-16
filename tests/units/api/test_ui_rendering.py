@@ -592,7 +592,7 @@ class TestDomainPage:
 
     def test_kpi_band(self, client):
         """The current-domain KPI / health band, moved here from the Home
-        page, sits at the top of Domain → Information."""
+        page, sits at the top of Domain → General."""
         html = _html(client, "/domain")
         assert _find(_tags(html), id_="domainKpiPanel") is not None
         for kpi_id in (

@@ -206,7 +206,7 @@ class TestTheBuildPageNamesTheStorageKind:
     Same FQN, very different cost and freshness: a materialized copy is a
     point-in-time snapshot refreshed only by a build, a view is always live.
     Whoever lands on the page has to be able to tell which one they have
-    without opening Domain → Information.
+    without opening Domain → General.
     """
 
     def test_the_badge_exists_and_is_addressable(self):

@@ -599,7 +599,7 @@
 .ob-kpi-tile.tile-accent-danger  { border-bottom: 3px solid #dc3545; }
 
 /* KPI / health band — responsive tile grid. Shared by the Home page and
-   Domain → Information (the "Current Domain" band). */
+   Domain → General (the "Current Domain" band). */
 .ob-kpi-band {
     display: grid;
     grid-template-columns: repeat(6, 1fr);

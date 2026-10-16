@@ -157,7 +157,7 @@ class GraphDBFactory:
         if not conn_name:
             logger.warning(
                 "Neo4jStore: domain has no neo4j_connection — pick one in "
-                "Domain → Information → Knowledge Graph"
+                "Domain → General → Knowledge Graph"
             )
             return None
 
@@ -267,7 +267,7 @@ class GraphDBFactory:
         """Return the mandatory per-domain graph backend.
 
         The choice lives in ``DomainSession.info['graph_backend']`` (set from the
-        Domain Information -> Knowledge Graph tab) and is versioned with the
+        Domain -> General -> Knowledge Graph tab) and is versioned with the
         domain.  Missing/invalid values default to ``lakebase`` so pre-existing
         domains keep working.
         """

@@ -1,4 +1,4 @@
-"""UI contracts for Domain → Information → Backend Search cache."""
+"""UI contracts for Domain → General → Backend Search cache."""
 
 from pathlib import Path
 

@@ -407,7 +407,7 @@ def test_frontend_rule_defines_card_integrated_page_tabs():
     assert '<div class="card-body p-0 ob-tabs-wrap">' in rule
     assert 'class="nav nav-tabs ob-tabs nav-fill"' in rule
     assert 'class="tab-content p-3"' in rule
-    assert "Domain → Information" in rule
+    assert "Domain → General" in rule
     assert "Ontology → Generate" in rule
 
 

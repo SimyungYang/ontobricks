@@ -794,7 +794,7 @@ async def dt_triples_find(
     cache: Optional[str] = Query(
         None,
         description="true/false: force search companions on or off. "
-        "Omitted uses Domain → Information → Backend Search cache.",
+        "Omitted uses Domain → General → Backend Search cache.",
     ),
     domain_name: Optional[str] = Query(
         None,

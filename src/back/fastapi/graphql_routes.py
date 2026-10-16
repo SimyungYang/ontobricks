@@ -373,7 +373,7 @@ async def graphql_execute(
     cache: Optional[str] = Query(
         None,
         description="true/false: force search companions on or off. "
-        "Omitted uses Domain → Information → Backend Search cache.",
+        "Omitted uses Domain → General → Backend Search cache.",
     ),
     session_mgr: SessionManager = Depends(get_session_manager),
     settings: Settings = Depends(get_settings),

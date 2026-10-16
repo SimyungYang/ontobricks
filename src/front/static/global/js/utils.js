@@ -873,7 +873,7 @@ function showNewDomainDialog() {
                             <div class="alert alert-light border small py-2 mb-3">
                                 <i class="bi bi-hdd-network me-1"></i>
                                 This domain uses the <strong>Lakehouse</strong> graph backend by default. You can
-                                change it anytime in <strong>Domain → Information</strong>:
+                                change it anytime in <strong>Domain → General</strong>:
                                 <ul class="mb-0 mt-1 ps-3">
                                     <li><strong>Lakehouse</strong> — graph stored as Delta tables in Unity Catalog (default).</li>
                                     <li><strong>Lakebase</strong> — graph stored in a managed Postgres instance.</li>

@@ -1,7 +1,7 @@
 # Graph backends
 
 Where the knowledge graph is stored and how it is read. Each domain picks
-an engine under **Domain → Information → Knowledge Graph**: Lakebase
+an engine under **Domain → General → Knowledge Graph**: Lakebase
 (Postgres), Lakehouse (Delta triples), or Neo4j. This guide covers the
 Lakebase and Neo4j engines, then the engine contract, Unity Catalog layout,
 and the query optimizations shared by all engines.
@@ -108,7 +108,7 @@ OntoBricks maintains **two complementary storage layers**:
 | **Triple Store** | Delta views in Unity Catalog (SQL Warehouse) | Governance, lineage, SPARQL source-of-truth |
 | **Graph DB** | Lakebase Postgres (flat triple table or UNION view) | Fast in-process graph traversal, reasoning, cohort writes |
 
-The Graph DB engine is selected **per domain** under **Domain → Information → Knowledge Graph** (defaults to `lakebase`). Engine *connection* settings remain workspace-global under **Settings → Back end**.
+The Graph DB engine is selected **per domain** under **Domain → General → Knowledge Graph** (defaults to `lakebase`). Engine *connection* settings remain workspace-global under **Settings → Back end**.
 
 ---
 
@@ -824,7 +824,7 @@ graph model internals see the module docstrings in
 
 ### 1. What the typed model stores
 
-When a domain's graph backend is **Neo4j** (Domain → Information → Knowledge
+When a domain's graph backend is **Neo4j** (Domain → General → Knowledge
 Graph → *Neo4j*), the build pipeline writes a property graph, not flat triples:
 
 | RDF construct | Neo4j representation |
@@ -895,7 +895,7 @@ flavors work with the caveats below.
 
 ### 4. Domain binding — named connection (required)
 
-When a domain's Graph Backend is **Neo4j**, Domain → Information → Knowledge
+When a domain's Graph Backend is **Neo4j**, Domain → General → Knowledge
 Graph requires a **Neo4j connection** dropdown value (`domain.info.neo4j_connection`).
 That name resolves to one Settings profile at build / query time. There is no
 blank “use default” and no per-domain database override — the database lives on
@@ -940,7 +940,7 @@ tab) and rebuild the domain.
 
 Domains that still have a flat workspace Neo4j config (no `connections[]`) must
 be reconfigured: add named connection(s) in Settings → Neo4j, then set each
-Neo4j domain's **Neo4j connection** on Domain → Information → Knowledge Graph.
+Neo4j domain's **Neo4j connection** on Domain → General → Knowledge Graph.
 
 ---
 
@@ -968,7 +968,7 @@ registration in the factory and global config, and a ready-to-use starter kit.
 ---
 
 OntoBricks ships three **runtime** graph engines. The backend is chosen **per domain** under
-**Domain → Information → Knowledge Graph** (mandatory; defaults to ``lakebase``) — the selection is
+**Domain → General → Knowledge Graph** (mandatory; defaults to ``lakebase``) — the selection is
 stored in ``DomainSession.info['graph_backend']``. Engine *connection* config stays workspace-global
 under **Settings → Back end**.
 
@@ -1681,7 +1681,7 @@ rebuild — this is a full snapshot replacement, **not** an incremental refresh.
 Build and **Refresh cache** both trigger the same `rebuild_adjacency` backend
 operation; Refresh cache is a lightweight alternative when the underlying source
 data has not changed and only the indexes need to be brought up to date.
-**Domain → Information → Backend → Search cache** skips that rebuild when
+**Domain → General → Backend → Search cache** skips that rebuild when
 off; turning the switch back on leaves the domain in `pending_refresh` until
 the next successful rebuild (live SPO until then). `cache=true` on a read
 requires the companions and returns 400 if they are missing.

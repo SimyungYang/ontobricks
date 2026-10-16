@@ -100,7 +100,7 @@ class NodeContextService:
         """Return the domain's ``{feature: mode}`` context policy.
 
         Reads the per-domain MCP policy the ontology designer edited in
-        Domain → Information → MCP. Missing or malformed policies yield an
+        Domain → General → MCP. Missing or malformed policies yield an
         empty mapping, which every consumer reads as "all normal".
         """
         info = getattr(domain, "info", None) or {}

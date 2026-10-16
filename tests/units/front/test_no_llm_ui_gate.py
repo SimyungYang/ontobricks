@@ -47,7 +47,7 @@ def test_gate_blocks_pointer_and_activation_keys_in_capture_phase():
     assert "event.key !== 'Enter' && event.key !== ' '" in permissions
     assert "event.preventDefault()" in permissions
     assert (
-        "'No LLM selected. Select one in Domain Information → AI.'" in permissions
+        "'No LLM selected. Select one in Domain → General → AI.'" in permissions
     )
 
 
@@ -183,7 +183,7 @@ def test_llm_configuration_controls_remain_available_without_an_llm():
 
     for control in ("tab-llm", "domainLlmBrowse"):
         matching_tags = [tag for tag in domain_tags if control in tag]
-        assert matching_tags, f"missing Domain Information control {control}"
+        assert matching_tags, f"missing Domain → General control {control}"
         assert all("data-requires-llm" not in tag for tag in matching_tags)
     assert picker_tags
     assert all("data-requires-llm" not in tag for tag in picker_tags)

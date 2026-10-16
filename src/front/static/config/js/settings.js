@@ -84,7 +84,7 @@ document.addEventListener('DOMContentLoaded', function () {
     function escapeHtmlSettings(str) { return escapeHtml(str); }
 
     // The graph backend *selection* moved to a mandatory per-domain choice
-    // (Domain Information -> Knowledge Graph tab). The Settings Graph DB pages
+    // (Domain -> General -> Knowledge Graph tab). The Settings Graph DB pages
     // now only configure the engine *connections* (Lakebase / Neo4j / Delta).
 
     loadCurrentConfig();
@@ -4203,7 +4203,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
     /** Persist the graph engine *connection* JSON config + Delta warehouse
      *  selection (used by global Save). The backend *selection* is per-domain
-     *  now (Domain Information -> Knowledge Graph tab), so nothing is chosen
+     *  now (Domain -> General -> Knowledge Graph tab), so nothing is chosen
      *  here — only the Lakebase / Neo4j / Delta connection settings. */
     async function saveGraphDbSettings(errors) {
         const ta = document.getElementById('graphEngineConfig');
