@@ -396,3 +396,38 @@ Modified files:
 - changelogs/v0.9.0/benoitcayladbx_2026-10-16.log
 
 Tests: `uv run --frozen pytest -q -m "not scenario"` → 9474 passed, 326 skipped, 7 deselected, 1 xfailed, 40 warnings in 55.66s.
+
+================================================================================
+## Release notes V0.9.0: catch up with the last commits
+================================================================================
+
+Context:
+The release notes did not yet cover the entity panel section layout, the
+Information → General menu rename, scenario 5, or the fixes shipped since
+the Explorer Job popup commit, and still called the functions section
+"UC functions".
+
+Changes:
+
+1. releases/ReleaseNotes_V0.9.0.md
+   - Test status updated to the latest run.
+   - Highlights: Jobs bullet points at the Behaviour tab; Studio bullet
+     mentions the regrouped tabs and shared section layout.
+   - Ontology Studio: new bullets for the section layout (counts, effect
+     chips, + Add / Change, ⓘ help, empty states, in-place descriptions,
+     Equivalent / Disjoint chip pickers) and the menu rename.
+   - Jobs as class actions: "UC functions" → Behaviour tab, Functions.
+   - Reliability: live scenario campaigns against deployed Apps and the
+     new zero-copy scenario 5.
+   - Bug fixes: inference writes through the Build warehouse, zero-copy
+     `DESCRIBE DETAIL` on the `_data` VIEW, `version: 1` load pinning and
+     Overview/status scans, Explorer right-click menus inside the viewport,
+     unescaped labels in the entity panel.
+   - Upgrade notes: new "Menu rename" section, including the changed
+     No-LLM guidance text.
+
+Modified files:
+- releases/ReleaseNotes_V0.9.0.md
+- changelogs/v0.9.0/benoitcayladbx_2026-10-16.log
+
+Tests: documentation-only change; last suite run 9474 passed, 326 skipped, 7 deselected, 1 xfailed.
