@@ -44,7 +44,8 @@ def test_entity_panel_lists_inherited_outgoing_relations():
     js = PANEL_JS.read_text(encoding="utf-8")
     assert 'id="sharedEntityInheritedRelations"' in js
     assert "outgoingRelationsForClass(" in js
-    assert "inherited from" in js
+    assert "Inherited relationships" in js
+    assert "from ${escapeHtml(r.inheritedFrom" in js
 
 
 def test_mapping_map_draws_inherited_outgoing_links():

@@ -13,7 +13,7 @@ function canRunBusinessRules() {
 }
 
 /**
- * Render the Business rules section body for a node.
+ * Render the Inference rules section body for a node.
  *
  * @param {string} entityUri Instance URI of the node.
  * @param {Array} rules Class business rules: [{ name, description }].

@@ -375,13 +375,3 @@ def test_form_tabs_inside_the_right_panel_use_the_shared_compact_rail():
     )
     assert _declaration(compact_link, "font-size") == "0.75rem"
     assert _declaration(compact_link, "padding") == "0.35rem 0.6rem"
-
-
-def test_entity_right_pane_tab_labels_are_compact():
-    """Selected-entity pane: Details→Infos, Attributes→Attrs. (same rail as Refs.)."""
-    js = _read(PANELS_JS)
-    entity_nav = js[js.index("id=\"sharedEntityForm\"") : js.index("data-form-tab-content=\"details\"")]
-    assert "{ id: 'details', icon: 'bi-info-circle', label: 'Infos' }" in entity_nav
-    assert "{ id: 'attributes', icon: 'bi-tags', label: 'Attrs.' }" in entity_nav
-    assert "label: 'Details'" not in entity_nav
-    assert "label: 'Attributes'" not in entity_nav

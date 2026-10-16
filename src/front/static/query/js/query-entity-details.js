@@ -502,7 +502,7 @@ async function showEntityDetails(entity) {
     if (businessRules.length > 0 && typeof renderBusinessRuleSection === 'function') {
         html += `
             <div class="entity-detail-section">
-                <h6><i class="bi bi-diagram-3"></i> Business rules</h6>
+                <h6><i class="bi bi-diagram-3"></i> Inference rules</h6>
                 ${renderBusinessRuleSection(entity.id, businessRules)}
             </div>
         `;

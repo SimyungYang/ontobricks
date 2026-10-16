@@ -399,8 +399,8 @@ You can assign Databricks dashboards to entity types for embedded visualization 
 
 1. Go to **Ontology** → **Entities**
 2. Select an entity type (e.g., Customer, Meter)
-3. In the entity details panel, find the **Dashboard** section
-4. Click **Assign** to open the dashboard picker
+3. In the entity details panel, open **Links** and find the **Dashboard** section
+4. Click **+ Add** (or **Change** when one is already linked) to open the dashboard picker
 5. Select a dashboard from your Databricks workspace
 6. If the dashboard has parameters, map them to entity attributes:
    - **Entity ID**: Maps the parameter to the entity's unique identifier
@@ -421,7 +421,7 @@ functions that operate on a single entity and can be run from the Graph Explorer
 or from an MCP client.
 
 1. Go to **Ontology** → **Entities** and select an entity type
-2. Open the **Actions** tab and find the **UC functions** section
+2. Open the **Behaviour** tab and find the **Functions** section
 3. Click **Add** to open the function picker, then choose a catalog and schema
 4. Pick a function and type a **description** — the description is what the LLM
    and the end user see, so make it explicit about what the action does
@@ -452,11 +452,11 @@ entity rather than a fact stored about it: a live risk score, a current
 inventory position, a distance to the nearest depot.
 
 The difference from an action is what it looks like, not what it runs. An action
-is a verb the user clicks; a virtual attribute is declared on the class like any
-other attribute and sits next to the mapped ones.
+is a verb the user clicks; a virtual attribute is shown on the entity like any
+other attribute, next to the mapped ones.
 
 1. Go to **Ontology** → **Entities** and select an entity type
-2. Open the **Attrs.** tab and find the **Virtual Attributes** section
+2. Open the **Attrs.** tab and find the **Virtual attributes** section, below the mapped attributes
 3. Click **Add** to open the function picker, then choose a catalog and schema
 4. Pick a function — the picker shows what it returns
 5. Fill in the **description** and, optionally, a display **label** per attribute
@@ -488,6 +488,53 @@ alone.
 > cannot be selected or filtered in SPARQL, GraphQL or a cohort. That is the
 > trade for a value that is always current. Use a mapped attribute when you need
 > to query it.
+
+### Inference Rules on an Entity (SWRL)
+
+An entity type can also expose **inference rules**: SWRL rules from
+**Ontology → Business Rules → SWRL** that a user can trigger on a single entity
+from the Graph Explorer. Unlike functions and jobs, a rule **writes to the
+graph**: the triples it infers for that entity are materialised.
+
+1. Go to **Ontology** → **Entities** and select an entity type
+2. Open the **Behaviour** tab and find the **Inference rules (SWRL)** section
+3. Click **Add** — the picker lists the rules that use this class or one of its
+   parents
+4. Click **Apply** (writes into the session; publish the domain to persist)
+
+In the Graph Explorer the rules appear under **Inference rules** in the entity
+details panel and the node right-click menu. Running one requires the Builder
+role on the domain and asks for confirmation first.
+
+### Entity Panel Tabs (Ontology Studio)
+
+Selecting an entity in the Studio opens its panel on the right, grouped by what
+each section does:
+
+| Tab | Contains |
+|-----|----------|
+| **General** | Name, label, icon, description, group |
+| **Attrs.** | Mapped attributes (data properties), then **Virtual attributes** (computed when viewed) |
+| **Model** | Inherits from, inherited relationships, equivalent to, disjoint with, bridges to other domains |
+| **Behaviour** | What the Knowledge Graph can run on one entity, each section tagged with its effect: **Functions** (return a result), **Jobs** (run in background), **Inference rules (SWRL)** (write to the graph) |
+| **Links** | Dashboard and dataset |
+
+Every section inside a tab has the same layout:
+
+- a header with the section icon and title, a count of its items, an effect
+  chip where relevant, and a **+ Add** button on the right (a small menu on
+  **Mapped attributes**: *From data assets* or *Manually*; **Change** on
+  Dashboard and Dataset once one is linked);
+- a one-line explanation, with the longer help behind the ⓘ button;
+- one row per item (icon, name, kind, full name, remove button), or a dashed
+  empty state with a direct "Add …" link.
+
+Descriptions on functions, jobs, virtual attributes and the dataset are always
+editable in place: the field shows its border only when hovered or focused.
+**Equivalent to** and **Disjoint with** show the chosen entities as chips;
+pick another entity from **+ Add entity…** and click a chip's × to remove it.
+
+Right-clicking an entity on the Studio map offers a shortcut to each tab.
 
 ### Option C: AI-Powered Wizard
 
@@ -2813,11 +2860,11 @@ After import you can:
 - **AI Graph Interpretation**: After running an Analytics computation, click **Interpret** to invoke the `agent_graph_interpreter` AI agent. The agent uses the LLM saved in **Domain Information → AI**, may call `get_entity_details` to look up top-ranked entities, and produces three structured insight sections (Key Findings, Notable Entities, Recommendations). Results are rendered as styled Bootstrap cards with markdown support. Clickable entity names in "Notable Entities" jump to the Graph Viewer. Unavailable when **No LLM** is selected.
 - **Audit Trail Integration**: From the AI Insights card, click **Add to audit trail** to post the AI-generated interpretation as a comment on the current domain version (markdown-formatted). The discussion panel opens automatically to show the new entry.
 - **Dashboard Embedding**: View assigned Databricks dashboards with entity-specific parameters directly in the Graph Viewer.
-- **Class Actions (Unity Catalog functions)**: Bind any number of UC functions to an ontology class in **Ontology → Studio → Actions**, each with its own description. Run them on a node from the details pane or its right-click menu; the result (scalar or table) opens in a popup. Each function must take exactly one argument — the entity's ID — and the invocation endpoint enforces an allow-list so only functions declared on the node's own class can be called. The same actions are surfaced to the MCP server through `get_entity_context` and `invoke_entity_action`.
-- **Class Actions (Databricks Jobs)**: In the same **Actions** tab, bind workspace Jobs that declare an `entity_id` parameter. OntoBricks only starts the Job (`run_now`); Spark still uses the Job's run-as identity. On Lakehouse domains in App mode the trigger is on-behalf-of the signed-in user. Triggering a Job from Explorer opens a popup that checks the run actually started and tells you right away whether it is **Running** or **Queued**, with a link to the run in Databricks. The popup keeps following the run while it is open (Running → Succeeded / Failed), and you can close it at any time: the run stays in the navbar **Background Tasks** hourglass, which shows its live state and the same run link. Invoke the same `job:<job_id>` name from Explorer or MCP `invoke_entity_action`.
+- **Class Actions (Unity Catalog functions)**: Bind any number of UC functions to an ontology class in **Ontology → Studio → Behaviour → Functions**, each with its own description. Run them on a node from the details pane or its right-click menu; the result (scalar or table) opens in a popup. Each function must take exactly one argument — the entity's ID — and the invocation endpoint enforces an allow-list so only functions declared on the node's own class can be called. The same actions are surfaced to the MCP server through `get_entity_context` and `invoke_entity_action`.
+- **Class Actions (Databricks Jobs)**: In the same **Behaviour** tab (**Jobs** section), bind workspace Jobs that declare an `entity_id` parameter. OntoBricks only starts the Job (`run_now`); Spark still uses the Job's run-as identity. On Lakehouse domains in App mode the trigger is on-behalf-of the signed-in user. Triggering a Job from Explorer opens a popup that checks the run actually started and tells you right away whether it is **Running** or **Queued**, with a link to the run in Databricks. The popup keeps following the run while it is open (Running → Succeeded / Failed), and you can close it at any time: the run stays in the navbar **Background Tasks** hourglass, which shows its live state and the same run link. Invoke the same `job:<job_id>` name from Explorer or MCP `invoke_entity_action`.
 
-- **Entity Business Rules (SWRL)**: In **Ontology → Studio → Actions**, attach one or more SWRL rules to a class. The picker lists only the rules whose atoms cite the class or one of its parent classes. In **Knowledge Graph → Explorer**, run a rule on a node from the details pane or its right-click menu. A confirmation modal shows the rule, then the rule runs **scoped to that entity**, the inferred triples are materialised into the graph, and the canvas refreshes. MCP clients get the same capability through `run_entity_business_rule`, which runs immediately without a confirmation step. Running a rule requires the **Builder** role on the domain. Renaming or deleting a rule in the SWRL editor updates the class references. Neo4j-backed domains infer nothing yet, because Cypher translation of SWRL rules is not implemented.
-- **Virtual Attributes (computed on demand)**: A class of attribute that no mapping feeds and no build materialises — a Unity Catalog function computes it from the entity's ID when someone asks. Declare them in **Ontology → Studio → Attributes → Virtual Attributes** by picking a UC function that takes exactly one parameter; one attribute is created per returned column (or a single one for a scalar function), read from `information_schema`. In the Graph Explorer they appear in their own **Virtual Attributes** section under the mapped ones with a per-function **Compute** button, a **Compute all**, and a right-click shortcut; computed values are cached per entity for the page's lifetime, with **Recompute** as the refresh. Over MCP the declarations always ride along with `get_entity_context`; when a question is about a virtual attribute's value, the model should call `compute_virtual_attributes(entity_uri)` to run the UC function — nothing is computed unless asked. A failing function reports its error without denying the attributes that still resolve. Because they are never materialised, virtual attributes are **not queryable** in SPARQL or GraphQL and take no part in mappings, R2RML, SHACL or data-quality checks.
+- **Entity Inference Rules (SWRL)**: In **Ontology → Studio → Behaviour → Inference rules (SWRL)**, attach one or more SWRL rules to a class. The picker lists only the rules whose atoms cite the class or one of its parent classes. In **Knowledge Graph → Explorer**, run a rule on a node from the details pane or its right-click menu. A confirmation modal shows the rule, then the rule runs **scoped to that entity**, the inferred triples are materialised into the graph, and the canvas refreshes. MCP clients get the same capability through `run_entity_business_rule`, which runs immediately without a confirmation step. Running a rule requires the **Builder** role on the domain. Renaming or deleting a rule in the SWRL editor updates the class references. Neo4j-backed domains infer nothing yet, because Cypher translation of SWRL rules is not implemented.
+- **Virtual Attributes (computed on demand)**: A class of attribute that no mapping feeds and no build materialises — a Unity Catalog function computes it from the entity's ID when someone asks. Declare them in **Ontology → Studio → Attrs. → Virtual attributes** by picking a UC function that takes exactly one parameter; one attribute is created per returned column (or a single one for a scalar function), read from `information_schema`. In the Graph Explorer they appear in their own **Virtual Attributes** section under the mapped ones with a per-function **Compute** button, a **Compute all**, and a right-click shortcut; computed values are cached per entity for the page's lifetime, with **Recompute** as the refresh. Over MCP the declarations always ride along with `get_entity_context`; when a question is about a virtual attribute's value, the model should call `compute_virtual_attributes(entity_uri)` to run the UC function — nothing is computed unless asked. A failing function reports its error without denying the attributes that still resolve. Because they are never materialised, virtual attributes are **not queryable** in SPARQL or GraphQL and take no part in mappings, R2RML, SHACL or data-quality checks.
 - **Entity SHACL facets**: Check one entity against every enabled SHACL shape that applies to it — the shapes on its class, on its parent classes, and the global ones. In **Knowledge Graph → Explorer**, right-click a node and choose **Data quality → Data Quality Checks (N)**, or use **Check** in the node's **Data quality** section. The **Data Quality Checks** popup opens with one gauge per dimension (completeness, cardinality, uniqueness, consistency, conformance, structural): the share of checked shapes that passed, ignoring the ones that did not apply, were not evaluated or errored — a dash means nothing in that dimension could be checked. Clicking a gauge opens its section. Below, the shapes are listed by dimension in sections that start collapsed, each with its status — passed, failed (with its severity), not applicable (guard condition false), not evaluated (no SQL translation, such as `sh:closed`) or error — the values the entity carries on the constrained property, and the ancestor an inherited shape comes from. The status chips filter the list and open the sections that hold a match. Results are cached per entity for the page's lifetime; **Re-check** recomputes them. Checked nodes get a ring on the canvas: red when a Violation failed, amber when a Warning/Info failed or a shape errored, green when every shape passed or did not apply. The **Quality** toolbar toggle hides the rings. MCP clients get the same check through `check_entity_shacl_facets(entity_uri)`, which can be disabled per domain in the MCP policy.
 - **Graph Chat ↔ MCP alignment**: Knowledge Graph → Chat discovers Datasets, Bridges, and Class Actions the same way MCP does (`get_entity_context`). Executing an Action from Graph Chat is **confirmation-gated**: the agent proposes via `request_entity_action`, the UI shows a Confirm/Cancel card, and only Confirm runs the allow-listed UC function. Graph Chat does **not** expose MCP's direct `invoke_entity_action` tool.
 - **Named Neo4j connections**: Settings → Neo4j holds multiple named Bolt profiles (URI, database, username, Databricks secret). Domains with Graph Backend = Neo4j must pick one connection on Domain → Information → Knowledge Graph; Test connection / Objects operate on the selected profile.

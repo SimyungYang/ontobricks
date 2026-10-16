@@ -382,7 +382,7 @@ async function initOntologyMap() {
             label: cls.label || cls.name,
             icon: cls.emoji || OntologyState.defaultClassEmoji || '📦',
             // True when the backing class has a Dashboard, Dataset, Actions, or
-            // Bridges configured under the entity panel's Refs. tab.
+            // Bridges configured (entity panel's Links / Behaviour / Model tabs).
             hasExternal: _classHasExternalConfig(cls),
             parent: cls.parent,
             // Use saved position if available, fix positions to prevent animation
@@ -796,7 +796,7 @@ async function initOntologyMap() {
         .text(d => d.label || d.name);
 
     // Small badge overlay signalling the class has Dashboard/Dataset/Actions/
-    // Bridges configured (entity panel's "Refs." tab). Purely visual — no
+    // Bridges configured (entity panel's Links / Behaviour / Model tabs). Purely visual — no
     // tooltip, no click handler — so it's rendered only for matching nodes
     // and marked pointer-events: none in CSS.
     const externalBadgeNodes = nodeElements.filter(d => d.hasExternal);
@@ -1812,23 +1812,23 @@ function showMapContextMenu(event, entityData, container) {
         <div class="map-context-divider"></div>
         <div class="map-context-item" data-action="open-tab-details">
             <i class="bi bi-info-circle"></i>
-            <span>Details</span>
+            <span>General</span>
         </div>
         <div class="map-context-item" data-action="open-tab-attributes">
             <i class="bi bi-tags"></i>
             <span>Attributes</span>
         </div>
-        <div class="map-context-item" data-action="open-tab-refs">
-            <i class="bi bi-link-45deg"></i>
-            <span>Refs.</span>
+        <div class="map-context-item" data-action="open-tab-model">
+            <i class="bi bi-diagram-2"></i>
+            <span>Model</span>
         </div>
-        <div class="map-context-item" data-action="open-tab-actions">
+        <div class="map-context-item" data-action="open-tab-behaviour">
             <i class="bi bi-lightning"></i>
-            <span>Actions</span>
+            <span>Behaviour</span>
         </div>
-        <div class="map-context-item" data-action="open-tab-constraints">
-            <i class="bi bi-sliders"></i>
-            <span>Constraints</span>
+        <div class="map-context-item" data-action="open-tab-links">
+            <i class="bi bi-link-45deg"></i>
+            <span>Links</span>
         </div>
         <div class="map-context-divider"></div>
         <div class="map-context-item" data-action="create-relationship">
@@ -1872,7 +1872,7 @@ function showMapContextMenu(event, entityData, container) {
     }
     
     // Handle menu item clicks
-    ['details', 'attributes', 'refs', 'actions', 'constraints'].forEach(tab => {
+    ['details', 'attributes', 'model', 'behaviour', 'links'].forEach(tab => {
         menu.querySelector(`[data-action="open-tab-${tab}"]`).addEventListener('click', () => {
             hideMapContextMenu();
             if (typeof editClassByName === 'function') {
@@ -1910,8 +1910,7 @@ function showMapContextMenu(event, entityData, container) {
 
 /**
  * Show a right-click context menu for a relationship link, offering
- * shortcuts straight to each tab of its edit panel (Details, Constraints —
- * relationships have no Attributes/Refs./Actions tab).
+ * shortcuts straight to each tab of its edit panel (General, Constraints).
  */
 function showMapRelationshipContextMenu(event, linkData, container) {
     // Remove existing menu
@@ -1928,7 +1927,7 @@ function showMapRelationshipContextMenu(event, linkData, container) {
         <div class="map-context-divider"></div>
         <div class="map-context-item" data-action="open-tab-details">
             <i class="bi bi-info-circle"></i>
-            <span>Details</span>
+            <span>General</span>
         </div>
         <div class="map-context-item" data-action="open-tab-constraints">
             <i class="bi bi-sliders"></i>

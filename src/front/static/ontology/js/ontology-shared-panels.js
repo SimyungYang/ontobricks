@@ -95,6 +95,7 @@ let sharedPanelVirtualAttributes = [];
 let sharedPanelDirty = false;
 
 // Remembered active tab per panel type — persists across entity/relationship selections
+const ENTITY_PANEL_TABS = ['details', 'attributes', 'model', 'behaviour', 'links'];
 let _entityPanelActiveTab = 'details';
 let _relPanelActiveTab = 'details';
 
@@ -249,6 +250,110 @@ function renderFormTabsNav(tabs, activeTab) {
     return `<ul class="nav nav-tabs ob-tabs ob-tabs--compact form-tabs-nav" role="tablist">${items}</ul>`;
 }
 
+// ---- Panel section helpers ----
+// Every section of the entity panel: a header (icon, title, count, effect
+// chip, Add), a one-line subtitle with the long help behind an info button,
+// then flat item rows or an actionable empty state. Text arguments are
+// escaped here; `badge` / `body` are HTML built by the caller. `onAdd`,
+// `onclick` and `removeOnclick` are inline handlers written by this file only.
+const EFFECT_CHIPS = {
+    viewed: { icon: 'bi-eye', label: 'Computed when viewed', tone: 'neutral' },
+    result: { icon: 'bi-box-arrow-right', label: 'Returns a result', tone: 'neutral' },
+    background: { icon: 'bi-hourglass-split', label: 'Runs in background', tone: 'neutral' },
+    graphWrite: { icon: 'bi-pencil-square', label: 'Writes to the graph', tone: 'warning' },
+};
+
+function _effectChipHtml(key) {
+    const chip = EFFECT_CHIPS[key];
+    if (!chip) return '';
+    const tone = chip.tone === 'warning'
+        ? 'bg-warning-subtle text-warning-emphasis'
+        : 'bg-secondary-subtle text-secondary';
+    return `<span class="badge entity-effect-chip ${tone} border fw-normal"><i class="bi ${chip.icon} me-1"></i>${chip.label}</span>`;
+}
+
+function panelSectionHeader({ targetId, icon, title, chip = '', subtitle = '', help = '', onAdd = '', menu = null, viewOnly = false, labelFor = '' }) {
+    let add = '';
+    if (!viewOnly && menu) {
+        add = `<div class="dropdown">
+                <button type="button" class="btn btn-sm btn-outline-primary py-0 px-1" data-bs-toggle="dropdown" aria-expanded="false" data-panel-passive><i class="bi bi-plus"></i> Add</button>
+                <ul class="dropdown-menu dropdown-menu-end">${menu.map(item =>
+                    `<li><button type="button" class="dropdown-item" onclick="${item.onclick}"><i class="bi ${item.icon} me-2"></i>${escapeHtml(item.label)}</button></li>`
+                ).join('')}</ul>
+            </div>`;
+    } else if (!viewOnly && onAdd) {
+        add = `<button type="button" class="btn btn-sm btn-outline-primary py-0 px-1" data-section-add-for="${targetId}" onclick="${onAdd}"><i class="bi bi-plus"></i> Add</button>`;
+    }
+    const heading = `<i class="bi ${icon} me-1"></i>${escapeHtml(title)}`;
+    const titleHtml = labelFor
+        ? `<label class="panel-section-title" for="${labelFor}">${heading}</label>`
+        : `<span class="panel-section-title">${heading}</span>`;
+    const helpBtn = help
+        ? `<button type="button" class="btn btn-link btn-sm p-0 panel-section-help" title="${escapeHtml(help)}" aria-label="About ${escapeHtml(title)}: ${escapeHtml(help)}" data-panel-passive><i class="bi bi-info-circle"></i></button>`
+        : '';
+    const subtitleHtml = (subtitle || help)
+        ? `<div class="panel-section-subtitle">${escapeHtml(subtitle)} ${helpBtn}</div>`
+        : '';
+    return `
+        <div class="panel-section-header">
+            <div class="panel-section-heading">
+                ${titleHtml}
+                <span class="panel-section-count" data-section-count-for="${targetId}"></span>
+                ${_effectChipHtml(chip)}
+            </div>
+            ${add}
+        </div>
+        ${subtitleHtml}`;
+}
+
+function panelEmptyState(text, addLabel, onAdd, viewOnly) {
+    const action = !viewOnly && onAdd
+        ? `<button type="button" class="btn btn-link btn-sm p-0" onclick="${onAdd}"><i class="bi bi-plus"></i> ${escapeHtml(addLabel)}</button>`
+        : '';
+    return `<div class="panel-empty-state"><span>${escapeHtml(text)}</span>${action}</div>`;
+}
+
+function panelItemRow({ icon, iconTone = 'text-primary', title, badge = '', meta = '', removeOnclick = '', removeTitle = 'Remove', viewOnly = false, body = '' }) {
+    const remove = !viewOnly && removeOnclick
+        ? `<button type="button" class="btn btn-sm btn-outline-danger py-0 px-1" onclick="${removeOnclick}" title="${escapeHtml(removeTitle)}" aria-label="${escapeHtml(removeTitle)}"><i class="bi bi-x"></i></button>`
+        : '';
+    const metaHtml = meta ? `<div class="panel-item-meta">${escapeHtml(meta)}</div>` : '';
+    return `
+        <div class="panel-item">
+            <div class="panel-item-head">
+                <i class="bi ${icon} ${iconTone} panel-item-icon"></i>
+                <div class="panel-item-text">
+                    <div class="panel-item-title">${escapeHtml(title)} ${badge}</div>
+                    ${metaHtml}
+                </div>
+                ${remove}
+            </div>
+            ${body}
+        </div>`;
+}
+
+function panelInlineField({ value = '', placeholder = '', oninput = '', viewOnly = false, id = '' }) {
+    if (viewOnly) {
+        return value ? `<div class="panel-item-desc">${escapeHtml(value)}</div>` : '';
+    }
+    const idAttr = id ? ` id="${id}"` : '';
+    return `<textarea class="form-control form-control-sm panel-inline-field"${idAttr} rows="1" placeholder="${escapeHtml(placeholder)}" aria-label="${escapeHtml(placeholder)}" oninput="${oninput}">${escapeHtml(value)}</textarea>`;
+}
+// ---- End panel section helpers ----
+
+/** Refresh a section header after its list re-renders: count and Add/Change. */
+function _updatePanelSection(targetId, { count = null, single = false } = {}) {
+    const root = sharedPanelElement || document;
+    const countEl = root.querySelector(`[data-section-count-for="${targetId}"]`);
+    if (countEl) countEl.textContent = count ? String(count) : '';
+    const add = root.querySelector(`[data-section-add-for="${targetId}"]`);
+    if (add && single) {
+        add.innerHTML = count
+            ? '<i class="bi bi-arrow-repeat"></i> Change'
+            : '<i class="bi bi-plus"></i> Add';
+    }
+}
+
 /**
  * Switch between form tabs inside the panel body.
  * Persists the selection so the same tab is restored when another
@@ -294,7 +399,8 @@ function attachDirtyTracking() {
     body.addEventListener('input', markPanelDirty);
     body.addEventListener('change', markPanelDirty);
     body.addEventListener('click', (e) => {
-        if (e.target.closest('button')) markPanelDirty();
+        const button = e.target.closest('button');
+        if (button && !button.hasAttribute('data-panel-passive')) markPanelDirty();
     });
 }
 
@@ -640,29 +746,40 @@ async function renderEntityForm(panel, cls, viewOnly = false) {
         console.warn('[SharedPanel] Could not load groups:', e);
     }
     
-    const _eTab = _entityPanelActiveTab || 'details';
+    const _eTab = ENTITY_PANEL_TABS.includes(_entityPanelActiveTab) ? _entityPanelActiveTab : 'details';
     body.innerHTML = `
         <div id="sharedEntityAssignmentLink"></div>
         <form id="sharedEntityForm">
             ${renderFormTabsNav([
-                { id: 'details', icon: 'bi-info-circle', label: 'Infos' },
+                { id: 'details', icon: 'bi-info-circle', label: 'General' },
                 { id: 'attributes', icon: 'bi-tags', label: 'Attrs.' },
-                { id: 'refs', icon: 'bi-link-45deg', label: 'Refs.' },
-                { id: 'actions', icon: 'bi-lightning', label: 'Actions' },
-                { id: 'constraints', icon: 'bi-sliders', label: 'Constraints' },
+                { id: 'model', icon: 'bi-diagram-2', label: 'Model' },
+                { id: 'behaviour', icon: 'bi-lightning', label: 'Behaviour' },
+                { id: 'links', icon: 'bi-link-45deg', label: 'Links' },
             ], _eTab)}
 
             <div class="form-tab-pane ${_eTab === 'details' ? 'active' : ''}" data-form-tab-content="details">
-                <div class="mb-3 p-2 bg-light rounded border">
-                    <label for="sharedEntityParent" class="form-label"><i class="bi bi-diagram-2"></i> Inherits From</label>
-                    <select class="form-select form-select-sm" id="sharedEntityParent" ${disabled} onchange="onSharedEntityParentChange()">
-                        <option value="">-- None --</option>
-                        ${parentOptions}
-                    </select>
+                <div class="mb-3">
+                    <label for="sharedEntityName" class="form-label">Icon and name <span class="text-danger">*</span></label>
+                    <div class="panel-identity-row">
+                        <div class="input-group input-group-sm panel-identity-icon">
+                            <input type="text" class="form-control" id="sharedEntityIcon" value="${escapeHtml(emoji)}" ${disabled} maxlength="2" aria-label="Icon">
+                            <button type="button" class="btn btn-outline-secondary" id="sharedEntityEmojiBtn" ${disabled} aria-label="Pick an icon"><i class="bi bi-emoji-smile"></i></button>
+                        </div>
+                        <input type="text" class="form-control form-control-sm" id="sharedEntityName" value="${escapeHtml(cls?.name || '')}" ${disabled} required>
+                    </div>
+                    <div id="sharedEntityEmojiPickerMount"></div>
                 </div>
-                <div class="mb-3 p-2 bg-light rounded border" id="sharedEntityInheritedRelations"></div>
-                <div class="mb-3 p-2 bg-light rounded border">
-                    <label for="sharedEntityGroup" class="form-label"><i class="bi bi-collection"></i> Group</label>
+                <div class="mb-3">
+                    <label for="sharedEntityLabel" class="form-label">Label</label>
+                    <input type="text" class="form-control form-control-sm" id="sharedEntityLabel" value="${escapeHtml(cls?.label || cls?.name || '')}" ${disabled} placeholder="Defaults to name if empty">
+                </div>
+                <div class="mb-3">
+                    <label for="sharedEntityDescription" class="form-label">Description</label>
+                    <textarea class="form-control form-control-sm" id="sharedEntityDescription" rows="2" ${disabled}>${escapeHtml(cls?.comment || cls?.description || '')}</textarea>
+                </div>
+                <div class="mb-3">
+                    <label for="sharedEntityGroup" class="form-label">Group</label>
                     <select class="form-select form-select-sm" id="sharedEntityGroup" ${disabled}
                         data-entity="${escapeHtml(cls?.name || '')}"
                         data-prev-group="${escapeHtml(currentGroup)}"
@@ -670,168 +787,106 @@ async function renderEntityForm(panel, cls, viewOnly = false) {
                         ${groupOptions}
                     </select>
                 </div>
-                <div class="mb-3">
-                    <label for="sharedEntityName" class="form-label">Name <span class="text-danger">*</span></label>
-                    <input type="text" class="form-control form-control-sm" id="sharedEntityName" value="${escapeHtml(cls?.name || '')}" ${disabled} required>
-                </div>
-                <div class="mb-3">
-                    <label for="sharedEntityLabel" class="form-label">Label</label>
-                    <input type="text" class="form-control form-control-sm" id="sharedEntityLabel" value="${escapeHtml(cls?.label || cls?.name || '')}" ${disabled} placeholder="Defaults to name if empty">
-                </div>
-                <div class="mb-3">
-                    <label class="form-label">Icon</label>
-                    <div class="input-group input-group-sm">
-                        <span class="input-group-text" id="sharedEntityEmojiPreview">${escapeHtml(emoji)}</span>
-                        <input type="text" class="form-control" id="sharedEntityIcon" value="${escapeHtml(emoji)}" ${disabled} maxlength="2" style="width: 45px;">
-                        <button type="button" class="btn btn-outline-secondary" id="sharedEntityEmojiBtn" ${disabled}><i class="bi bi-emoji-smile"></i></button>
-                    </div>
-                    <div id="sharedEntityEmojiPickerMount"></div>
-                </div>
-                <div class="mb-3">
-                    <label for="sharedEntityDescription" class="form-label">Description</label>
-                    <textarea class="form-control form-control-sm" id="sharedEntityDescription" rows="2" ${disabled}>${escapeHtml(cls?.comment || cls?.description || '')}</textarea>
-                </div>
             </div>
 
             <div class="form-tab-pane ${_eTab === 'attributes' ? 'active' : ''}" data-form-tab-content="attributes">
-                <div class="d-flex justify-content-end gap-1 mb-2">
-                    ${!viewOnly ? `
-                        <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-1" onclick="openMetadataAttributePicker()" title="Add from data assets"><i class="bi bi-database"></i></button>
-                        <button type="button" class="btn btn-sm btn-outline-primary py-0 px-1" onclick="addSharedEntityAttribute()" title="Add manually"><i class="bi bi-plus"></i></button>
-                    ` : ''}
-                </div>
-                <div id="sharedEntityAttributes" class="border rounded p-2 panel-box"></div>
-                <div class="mt-3">
-                    <label class="form-label d-flex justify-content-between align-items-center">
-                        <span><i class="bi bi-magic me-1"></i>Virtual Attributes</span>
-                        ${!viewOnly ? '<button type="button" class="btn btn-sm btn-outline-primary py-0 px-1" onclick="openVirtualAttributeSelectorModal()"><i class="bi bi-plus"></i> Add</button>' : ''}
-                    </label>
-                    <div id="sharedEntityVirtualAttributes" class="border rounded p-2 panel-box">
-                        <div id="sharedEntityVirtualAttributesContent">
-                            <small class="text-muted">No virtual attributes</small>
-                        </div>
-                    </div>
-                    <div class="form-text small">Computed on demand by a Unity Catalog function taking exactly one parameter: the ID of the entity. Not mapped, not stored in the graph, and not queryable in SPARQL or GraphQL.</div>
-                </div>
+                <section class="panel-section">
+                    ${panelSectionHeader({ targetId: 'sharedEntityAttributes', icon: 'bi-tags', title: 'Mapped attributes',
+                        subtitle: 'Data properties filled from the mapping.', viewOnly,
+                        menu: [
+                            { icon: 'bi-database', label: 'From data assets', onclick: 'openMetadataAttributePicker()' },
+                            { icon: 'bi-pencil', label: 'Manually', onclick: 'addSharedEntityAttribute()' },
+                        ] })}
+                    <div id="sharedEntityAttributes" class="panel-section-body"></div>
+                </section>
+                <section class="panel-section">
+                    ${panelSectionHeader({ targetId: 'sharedEntityVirtualAttributes', icon: 'bi-magic', title: 'Virtual attributes', chip: 'viewed',
+                        subtitle: 'Values computed by a Unity Catalog function.',
+                        help: 'The function takes exactly one parameter: the ID of the entity. Values are not mapped, not stored in the graph, and not queryable in SPARQL or GraphQL.',
+                        onAdd: 'openVirtualAttributeSelectorModal()', viewOnly })}
+                    <div id="sharedEntityVirtualAttributes" class="panel-section-body"><div id="sharedEntityVirtualAttributesContent"></div></div>
+                </section>
             </div>
 
-            <div class="form-tab-pane ${_eTab === 'refs' ? 'active' : ''}" data-form-tab-content="refs">
-                <div class="mb-3">
-                    <label class="form-label d-flex justify-content-between align-items-center">
-                        <span><i class="bi bi-speedometer2 me-1"></i>Dashboard</span>
-                        ${!viewOnly ? '<button type="button" class="btn btn-sm btn-outline-primary py-0 px-1" onclick="openDashboardSelectorModal()"><i class="bi bi-link-45deg"></i> Assign</button>' : ''}
-                    </label>
-                    <div id="sharedEntityDashboard" class="border rounded p-2" style="background: #ffffff;">
-                        <div id="sharedEntityDashboardContent">
-                            <small class="text-muted">No dashboard assigned</small>
-                        </div>
-                    </div>
-                </div>
-                <div class="mb-3">
-                    <label class="form-label d-flex justify-content-between align-items-center">
-                        <span><i class="bi bi-table me-1"></i>Dataset</span>
-                        ${!viewOnly ? '<button type="button" class="btn btn-sm btn-outline-primary py-0 px-1" onclick="openDatasetSelectorModal()"><i class="bi bi-search"></i> Select</button>' : ''}
-                    </label>
-                    <div id="sharedEntityDataset" class="border rounded p-2" style="background: #ffffff;">
-                        <div id="sharedEntityDatasetContent">
-                            <small class="text-muted">No dataset assigned</small>
-                        </div>
-                    </div>
-                </div>
-                <div class="mb-3">
-                    <label class="form-label d-flex justify-content-between align-items-center">
-                        <span><i class="bi bi-signpost-2 me-1"></i>Bridges</span>
-                        ${!viewOnly ? '<button type="button" class="btn btn-sm btn-outline-primary py-0 px-1" onclick="openBridgeSelectorModal()"><i class="bi bi-plus"></i> Add</button>' : ''}
-                    </label>
-                    <div id="sharedEntityBridges" class="border rounded p-2" style="background: #ffffff;">
-                        <div id="sharedEntityBridgesContent">
-                            <small class="text-muted">No bridges to other domains</small>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="form-tab-pane ${_eTab === 'actions' ? 'active' : ''}" data-form-tab-content="actions">
-                <div class="mb-3">
-                    <label class="form-label d-flex justify-content-between align-items-center">
-                        <span><i class="bi bi-lightning-charge me-1"></i>UC functions</span>
-                        ${!viewOnly ? '<button type="button" class="btn btn-sm btn-outline-primary py-0 px-1" onclick="openActionSelectorModal()"><i class="bi bi-plus"></i> Add</button>' : ''}
-                    </label>
-                    <div id="sharedEntityActions" class="border rounded p-2" style="background: #ffffff;">
-                        <div id="sharedEntityActionsContent">
-                            <small class="text-muted">No actions assigned</small>
-                        </div>
-                    </div>
-                    <div class="form-text small">Each action runs a Unity Catalog function that takes exactly one parameter: the ID of the entity.</div>
-                </div>
-                <div class="mb-3">
-                    <label class="form-label d-flex justify-content-between align-items-center">
-                        <span><i class="bi bi-play-circle me-1"></i>Jobs</span>
-                        ${!viewOnly ? '<button type="button" class="btn btn-sm btn-outline-primary py-0 px-1" onclick="openJobSelectorModal()"><i class="bi bi-plus"></i> Add</button>' : ''}
-                    </label>
-                    <div id="sharedEntityJobs" class="border rounded p-2" style="background: #ffffff;">
-                        <div id="sharedEntityJobsContent">
-                            <small class="text-muted">No jobs assigned</small>
-                        </div>
-                    </div>
-                    <div class="form-text small">Each job is a Databricks Job that declares an <code>entity_id</code> parameter. Spark still runs as the job&apos;s run-as identity; on Lakehouse domains the trigger is on-behalf-of the signed-in user.</div>
-                </div>
-                <div class="mb-3">
-                    <label class="form-label d-flex justify-content-between align-items-center">
-                        <span><i class="bi bi-diagram-3 me-1"></i>Business rules</span>
-                        ${!viewOnly ? '<button type="button" class="btn btn-sm btn-outline-primary py-0 px-1" onclick="openBusinessRuleSelectorModal()"><i class="bi bi-plus"></i> Add</button>' : ''}
-                    </label>
-                    <div id="sharedEntityBusinessRules" class="border rounded p-2" style="background: #ffffff;">
-                        <div id="sharedEntityBusinessRulesContent">
-                            <small class="text-muted">No business rules assigned</small>
-                        </div>
-                    </div>
-                    <div class="form-text small">SWRL rules triggered from the Knowledge Graph on a single entity; the inferred triples are written to the graph.</div>
-                </div>
-            </div>
-
-            <div class="form-tab-pane ${_eTab === 'constraints' ? 'active' : ''}" data-form-tab-content="constraints">
-                <div class="mb-3">
-                    <label class="form-label small text-muted mb-1" title="Entities that share no instances with this entity">
-                        <i class="bi bi-x-circle me-1"></i>Disjoint With
-                    </label>
-                    <select class="form-select form-select-sm" id="sharedEntityDisjointWith" ${disabled} multiple size="3" 
-                            title="Select entities that cannot share instances with this entity">
-                        ${otherClassOptions}
+            <div class="form-tab-pane ${_eTab === 'model' ? 'active' : ''}" data-form-tab-content="model">
+                <section class="panel-section">
+                    ${panelSectionHeader({ targetId: 'sharedEntityParent', icon: 'bi-diagram-2', title: 'Inherits from', labelFor: 'sharedEntityParent',
+                        subtitle: 'The parent’s attributes and relationships apply here too.' })}
+                    <select class="form-select form-select-sm" id="sharedEntityParent" ${disabled} onchange="onSharedEntityParentChange()">
+                        <option value="">-- None --</option>
+                        ${parentOptions}
                     </select>
-                    <div class="form-text small">No instance can belong to both this entity and the selected entities</div>
-                </div>
-                <div class="mb-3">
-                    <label class="form-label small text-muted mb-1" title="Entities that have exactly the same instances as this entity">
-                        <i class="bi bi-arrows-angle-expand me-1"></i>Equivalent To
-                    </label>
-                    <select class="form-select form-select-sm" id="sharedEntityEquivalentTo" ${disabled} multiple size="3"
-                            title="Select entities that are equivalent to this entity">
-                        ${otherClassOptions}
-                    </select>
-                    <div class="form-text small">Entities that have exactly the same instances</div>
-                </div>
+                    <div id="sharedEntityInheritedRelations" class="panel-inherited"></div>
+                </section>
+                <section class="panel-section">
+                    ${panelSectionHeader({ targetId: 'sharedEntityEquivalentTo', icon: 'bi-arrows-angle-expand', title: 'Equivalent to',
+                        subtitle: 'Entities with exactly the same instances.' })}
+                    <select id="sharedEntityEquivalentTo" class="d-none" multiple aria-hidden="true" tabindex="-1">${otherClassOptions}</select>
+                    <div id="sharedEntityEquivalentToChips" class="panel-axiom-chips"></div>
+                    ${!viewOnly ? `<select class="form-select form-select-sm panel-axiom-add" id="sharedEntityEquivalentToAdd" aria-label="Add an equivalent entity" onchange="addSharedAxiomChip('sharedEntityEquivalentTo', this)"></select>` : ''}
+                </section>
+                <section class="panel-section">
+                    ${panelSectionHeader({ targetId: 'sharedEntityDisjointWith', icon: 'bi-x-circle', title: 'Disjoint with',
+                        subtitle: 'No instance can belong to both.' })}
+                    <select id="sharedEntityDisjointWith" class="d-none" multiple aria-hidden="true" tabindex="-1">${otherClassOptions}</select>
+                    <div id="sharedEntityDisjointWithChips" class="panel-axiom-chips"></div>
+                    ${!viewOnly ? `<select class="form-select form-select-sm panel-axiom-add" id="sharedEntityDisjointWithAdd" aria-label="Add a disjoint entity" onchange="addSharedAxiomChip('sharedEntityDisjointWith', this)"></select>` : ''}
+                </section>
+                <section class="panel-section">
+                    ${panelSectionHeader({ targetId: 'sharedEntityBridges', icon: 'bi-signpost-2', title: 'Bridges',
+                        subtitle: 'Links to entities in other domains.', onAdd: 'openBridgeSelectorModal()', viewOnly })}
+                    <div id="sharedEntityBridges" class="panel-section-body"><div id="sharedEntityBridgesContent"></div></div>
+                </section>
+            </div>
+
+            <div class="form-tab-pane ${_eTab === 'behaviour' ? 'active' : ''}" data-form-tab-content="behaviour">
+                <div class="panel-pane-intro">What the Knowledge Graph can run on one entity.</div>
+                <section class="panel-section">
+                    ${panelSectionHeader({ targetId: 'sharedEntityActions', icon: 'bi-lightning-charge', title: 'Functions', chip: 'result',
+                        subtitle: 'Run on demand; the result is shown to the user.',
+                        help: 'A Unity Catalog function taking exactly one parameter: the ID of the entity.',
+                        onAdd: 'openActionSelectorModal()', viewOnly })}
+                    <div id="sharedEntityActions" class="panel-section-body"><div id="sharedEntityActionsContent"></div></div>
+                </section>
+                <section class="panel-section">
+                    ${panelSectionHeader({ targetId: 'sharedEntityJobs', icon: 'bi-play-circle', title: 'Jobs', chip: 'background',
+                        subtitle: 'Start a Databricks Job for this entity.',
+                        help: 'The job must declare an entity_id parameter. Spark runs as the job’s run-as identity; on Lakehouse domains the trigger is on behalf of the signed-in user.',
+                        onAdd: 'openJobSelectorModal()', viewOnly })}
+                    <div id="sharedEntityJobs" class="panel-section-body"><div id="sharedEntityJobsContent"></div></div>
+                </section>
+                <section class="panel-section">
+                    ${panelSectionHeader({ targetId: 'sharedEntityBusinessRules', icon: 'bi-diagram-3', title: 'Inference rules (SWRL)', chip: 'graphWrite',
+                        subtitle: 'Infer new facts for this entity.',
+                        help: 'SWRL rules from Ontology → Business Rules, triggered on a single entity. The inferred triples are written to the graph.',
+                        onAdd: 'openBusinessRuleSelectorModal()', viewOnly })}
+                    <div id="sharedEntityBusinessRules" class="panel-section-body"><div id="sharedEntityBusinessRulesContent"></div></div>
+                </section>
+            </div>
+
+            <div class="form-tab-pane ${_eTab === 'links' ? 'active' : ''}" data-form-tab-content="links">
+                <section class="panel-section">
+                    ${panelSectionHeader({ targetId: 'sharedEntityDashboard', icon: 'bi-speedometer2', title: 'Dashboard',
+                        subtitle: 'Opened from the entity, with parameters set from it.', onAdd: 'openDashboardSelectorModal()', viewOnly })}
+                    <div id="sharedEntityDashboard" class="panel-section-body"><div id="sharedEntityDashboardContent"></div></div>
+                </section>
+                <section class="panel-section">
+                    ${panelSectionHeader({ targetId: 'sharedEntityDataset', icon: 'bi-table', title: 'Dataset',
+                        subtitle: 'Unity Catalog table matched to the entity on a key column.', onAdd: 'openDatasetSelectorModal()', viewOnly })}
+                    <div id="sharedEntityDataset" class="panel-section-body"><div id="sharedEntityDatasetContent"></div></div>
+                </section>
             </div>
         </form>
     `;
     
-    // Set multi-select values for constraints
-    if (disjointWith.length > 0) {
-        const disjointSelect = panelGetById('sharedEntityDisjointWith');
-        if (disjointSelect) {
-            Array.from(disjointSelect.options).forEach(opt => {
-                opt.selected = disjointWith.includes(opt.value);
-            });
+    [['sharedEntityDisjointWith', disjointWith], ['sharedEntityEquivalentTo', equivalentTo]].forEach(([selectId, values]) => {
+        const select = panelGetById(selectId);
+        if (select) {
+            Array.from(select.options).forEach(opt => { opt.selected = values.includes(opt.value); });
         }
-    }
-    if (equivalentTo.length > 0) {
-        const equivalentSelect = panelGetById('sharedEntityEquivalentTo');
-        if (equivalentSelect) {
-            Array.from(equivalentSelect.options).forEach(opt => {
-                opt.selected = equivalentTo.includes(opt.value);
-            });
-        }
-    }
+    });
+    renderSharedAxiomChips('sharedEntityEquivalentTo', viewOnly);
+    renderSharedAxiomChips('sharedEntityDisjointWith', viewOnly);
     
     renderSharedEntityAttributes(viewOnly);
     renderSharedEntityVirtualAttributes(viewOnly);
@@ -846,7 +901,6 @@ async function renderEntityForm(panel, cls, viewOnly = false) {
         if (_btnEl) {
             EmojiPicker.create({
                 triggerEl:   _btnEl,
-                previewEl:   panelGetById('sharedEntityEmojiPreview'),
                 inputEl:     panelGetById('sharedEntityIcon'),
                 containerEl: panelGetById('sharedEntityEmojiPickerMount')
             });
@@ -859,40 +913,71 @@ async function renderEntityForm(panel, cls, viewOnly = false) {
     renderSharedInheritedRelations(cls);
 }
 
+/**
+ * Equivalent To / Disjoint With: the hidden multi-select stays the source
+ * read on save; chips show its selected options and the add list the rest.
+ */
+function renderSharedAxiomChips(selectId, viewOnly) {
+    const select = panelGetById(selectId);
+    const chips = panelGetById(`${selectId}Chips`);
+    if (!select || !chips) return;
+    const options = Array.from(select.options);
+    const selected = options.filter(o => o.selected);
+    chips.innerHTML = selected.length
+        ? selected.map(o => `
+            <span class="panel-axiom-chip">${escapeHtml(o.textContent.trim())}${viewOnly ? '' :
+                `<button type="button" class="btn-close" onclick="removeSharedAxiomChip('${selectId}', ${options.indexOf(o)})" aria-label="Remove ${escapeHtml(o.value)}"></button>`}</span>`).join('')
+        : `<span class="panel-axiom-none">None</span>`;
+    _updatePanelSection(selectId, { count: selected.length });
+
+    const add = panelGetById(`${selectId}Add`);
+    if (!add) return;
+    const free = options.filter(o => !o.selected);
+    add.innerHTML = `<option value="">+ Add entity…</option>` +
+        free.map(o => `<option value="${options.indexOf(o)}">${escapeHtml(o.textContent.trim())}</option>`).join('');
+    add.disabled = free.length === 0;
+}
+
+function addSharedAxiomChip(selectId, addSelect) {
+    const option = panelGetById(selectId)?.options[Number(addSelect.value)];
+    if (addSelect.value === '' || !option) return;
+    option.selected = true;
+    markPanelDirty();
+    renderSharedAxiomChips(selectId, false);
+    panelGetById(`${selectId}Add`)?.focus();
+}
+
+function removeSharedAxiomChip(selectId, optionIndex) {
+    const option = panelGetById(selectId)?.options[optionIndex];
+    if (!option) return;
+    option.selected = false;
+    renderSharedAxiomChips(selectId, false);
+    panelGetById(`${selectId}Add`)?.focus();
+}
+
 function renderSharedEntityAttributes(viewOnly = false) {
     const container = panelGetById('sharedEntityAttributes');
     if (!container) return;
-    
-    let html = '';
-    
-    if (sharedPanelInheritedAttributes.length > 0) {
-        html += '<div class="mb-1"><small class="text-muted fw-bold"><i class="bi bi-diagram-2"></i> Inherited</small></div>';
-        html += sharedPanelInheritedAttributes.map(attr => `
-            <div class="d-flex align-items-center gap-1 mb-1 opacity-75">
-                <input type="text" class="form-control form-control-sm bg-light" value="${attr.name || ''}" disabled readonly style="font-size:0.75rem;">
-                <span class="badge bg-secondary" style="font-size:0.6rem;"><i class="bi bi-lock"></i></span>
-            </div>
-        `).join('');
-        if (sharedPanelOwnAttributes.length > 0) html += '<hr class="my-1">';
+    const inherited = sharedPanelInheritedAttributes;
+    const own = sharedPanelOwnAttributes;
+    _updatePanelSection('sharedEntityAttributes', { count: inherited.length + own.length });
+    if (!inherited.length && !own.length) {
+        container.innerHTML = panelEmptyState('No mapped attributes yet.', 'Add an attribute', 'addSharedEntityAttribute()', viewOnly);
+        return;
     }
-    
-    if (sharedPanelOwnAttributes.length > 0) {
-        if (sharedPanelInheritedAttributes.length > 0) {
-            html += '<div class="mb-1"><small class="text-muted fw-bold"><i class="bi bi-tag"></i> Own</small></div>';
-        }
-        html += sharedPanelOwnAttributes.map((attr, idx) => `
-            <div class="d-flex align-items-center gap-1 mb-1">
-                <input type="text" class="form-control form-control-sm" value="${attr.name || ''}" ${viewOnly ? 'disabled' : ''} onchange="updateSharedEntityAttribute(${idx}, this.value)" style="font-size:0.75rem;">
-                ${!viewOnly ? `<button type="button" class="btn btn-sm btn-outline-danger py-0 px-1" onclick="removeSharedEntityAttribute(${idx})"><i class="bi bi-x"></i></button>` : ''}
-            </div>
-        `).join('');
-    }
-    
-    if (sharedPanelInheritedAttributes.length === 0 && sharedPanelOwnAttributes.length === 0) {
-        html = '<small class="text-muted">No attributes</small>';
-    }
-    
-    container.innerHTML = html;
+    const inheritedHtml = inherited.map(attr => `
+        <div class="panel-attr-row panel-attr-row--inherited">
+            <i class="bi bi-lock panel-item-icon" aria-hidden="true"></i>
+            <span class="panel-attr-name">${escapeHtml(attr.name || '')}</span>
+            <span class="panel-attr-origin">inherited</span>
+        </div>`).join('');
+    const ownHtml = own.map((attr, idx) => `
+        <div class="panel-attr-row">
+            <i class="bi bi-tag panel-item-icon" aria-hidden="true"></i>
+            <input type="text" class="form-control form-control-sm panel-inline-field" value="${escapeHtml(attr.name || '')}" ${viewOnly ? 'disabled' : ''} placeholder="Attribute name" aria-label="Attribute name" onchange="updateSharedEntityAttribute(${idx}, this.value)">
+            ${!viewOnly ? `<button type="button" class="btn btn-sm btn-outline-danger py-0 px-1" onclick="removeSharedEntityAttribute(${idx})" title="Remove attribute" aria-label="Remove attribute"><i class="bi bi-x"></i></button>` : ''}
+        </div>`).join('');
+    container.innerHTML = `<div class="panel-list">${inheritedHtml}${ownHtml}</div>`;
 }
 
 /**
@@ -975,18 +1060,14 @@ function renderSharedInheritedRelations(cls) {
     }
     box.style.display = '';
     box.innerHTML = `
-        <div class="small fw-semibold mb-1"><i class="bi bi-diagram-2"></i> Inherited relations</div>
-        ${inherited.map(r => {
-            const label = r.label || r.name;
-            const from = r.inheritedFrom || '';
-            const range = r.range || '';
-            return `<button type="button" class="btn btn-link btn-sm py-0 px-0 d-block text-start"
-                onclick="editPropertyByName(${JSON.stringify(r.name)})">
-                <span>${label}</span>
-                <span class="text-muted"> → ${range}</span>
-                <span class="badge bg-secondary ms-1" style="font-size:0.6rem;">inherited from ${from}</span>
-            </button>`;
-        }).join('')}
+        <div class="panel-inherited-title">Inherited relationships</div>
+        ${inherited.map(r => `
+            <button type="button" class="btn btn-link btn-sm panel-inherited-link" data-panel-passive
+                onclick="editPropertyByName(${escapeHtml(JSON.stringify(r.name))})">
+                <i class="bi bi-arrow-right-short" aria-hidden="true"></i>${escapeHtml(r.label || r.name)}
+                <span class="text-muted">→ ${escapeHtml(r.range || '')}</span>
+                <span class="panel-attr-origin">from ${escapeHtml(r.inheritedFrom || '')}</span>
+            </button>`).join('')}
     `;
 }
 
@@ -1047,7 +1128,8 @@ function onSharedEntityGroupChange(entityName, newGroup, previousGroup) {
 function renderSharedEntityDashboard(viewOnly = false) {
     const container = panelGetById('sharedEntityDashboardContent');
     if (!container) return;
-    
+    _updatePanelSection('sharedEntityDashboard', { count: sharedPanelDashboardUrl ? 1 : 0, single: true });
+
     if (sharedPanelDashboardUrl) {
         const dashboardName = extractDashboardNameFromUrl(sharedPanelDashboardUrl);
         
@@ -1056,37 +1138,31 @@ function renderSharedEntityDashboard(viewOnly = false) {
         let mappingsHtml = '';
         if (mappings.length > 0) {
             mappingsHtml = `
-                <div class="mt-2 pt-2 border-top">
-                    <small class="text-muted d-block mb-1"><i class="bi bi-link-45deg me-1"></i>Parameter Mappings:</small>
+                <div class="panel-item-sub">
+                    <div class="panel-item-sub-label">Parameters</div>
                     ${mappings.map(([param, mapping]) => {
                         // Handle both old format (string) and new format (object)
                         const attrName = typeof mapping === 'object' ? mapping.attribute : mapping;
                         const displayName = attrName === '__ID__' ? 'Entity ID' : attrName;
                         return `
-                            <div class="d-flex align-items-center gap-1 small">
-                                <span class="badge bg-secondary">${escapeHtml(param)}</span>
-                                <i class="bi bi-arrow-right text-muted"></i>
-                                <span class="badge bg-primary">${escapeHtml(displayName)}</span>
+                            <div class="panel-param-row">
+                                <code>${escapeHtml(param)}</code>
+                                <i class="bi bi-arrow-left-short text-muted" aria-hidden="true"></i>
+                                <span>${escapeHtml(displayName)}</span>
                             </div>
                         `;
                     }).join('')}
                 </div>
             `;
         }
-        
-        container.innerHTML = `
-            <div class="d-flex align-items-center gap-2">
-                <a href="${escapeHtml(sharedPanelDashboardUrl)}" target="_blank" class="text-decoration-none flex-grow-1" title="Open dashboard">
-                    <i class="bi bi-speedometer2 text-primary"></i>
-                    <span class="ms-1">${escapeHtml(dashboardName)}</span>
-                    <i class="bi bi-box-arrow-up-right ms-1 small"></i>
-                </a>
-                ${!viewOnly ? `<button type="button" class="btn btn-sm btn-outline-danger py-0 px-1" onclick="removeSharedEntityDashboard()" title="Remove dashboard"><i class="bi bi-x"></i></button>` : ''}
-            </div>
-            ${mappingsHtml}
-        `;
+        const openLink = `<a href="${escapeHtml(sharedPanelDashboardUrl)}" target="_blank" rel="noopener" class="panel-item-link">Open <i class="bi bi-box-arrow-up-right"></i></a>`;
+        container.innerHTML = panelItemRow({
+            icon: 'bi-speedometer2', title: dashboardName, badge: openLink,
+            removeOnclick: 'removeSharedEntityDashboard()', removeTitle: 'Remove dashboard', viewOnly,
+            body: mappingsHtml,
+        });
     } else {
-        container.innerHTML = '<small class="text-muted">No dashboard assigned</small>';
+        container.innerHTML = panelEmptyState('No dashboard linked yet.', 'Link a dashboard', 'openDashboardSelectorModal()', viewOnly);
     }
 }
 
@@ -1128,71 +1204,52 @@ function renderSharedEntityDataset(viewOnly = false) {
     if (!container) return;
 
     const ds = sharedPanelDataset;
-    if (ds && ds.asset) {
+    const hasDataset = Boolean(ds && ds.asset);
+    _updatePanelSection('sharedEntityDataset', { count: hasDataset ? 1 : 0, single: true });
+    if (hasDataset) {
         const isView = (ds.type || '').toUpperCase() === 'VIEW';
-        const badge = isView
-            ? '<span class="badge bg-info text-dark">View</span>'
-            : '<span class="badge bg-secondary">Table</span>';
+        const badge = `<span class="panel-kind-badge">${isView ? 'View' : 'Table'}</span>`;
         const fullName = ds.fullName || `${ds.catalog}.${ds.schema}.${ds.asset}`;
         const keyColHtml = !viewOnly
-            ? `<div class="mt-2">
-                 <label class="form-label form-label-sm mb-1" style="font-size:0.8rem;">
-                   Key column <small class="text-muted">(used to match node ID)</small>
-                 </label>
-                 <div class="d-flex gap-2">
-                   <select class="form-select form-select-sm"
-                           id="datasetKeyColumnSelect"
-                           onchange="onDatasetKeyColumnChange(this.value)"
-                           disabled>
-                     <option value="">Loading columns…</option>
-                   </select>
-                   <button type="button"
-                           class="btn btn-sm btn-outline-secondary d-none"
-                           id="datasetKeyColumnRetry"
-                           onclick="retryDatasetKeyColumns()">Retry</button>
-                 </div>
+            ? `<div class="panel-key-row">
+                 <label class="panel-item-sub-label mb-0" for="datasetKeyColumnSelect" title="Column matched against the entity ID">Key column</label>
+                 <select class="form-select form-select-sm"
+                         id="datasetKeyColumnSelect"
+                         onchange="onDatasetKeyColumnChange(this.value)"
+                         disabled>
+                   <option value="">Loading columns…</option>
+                 </select>
+                 <button type="button"
+                         class="btn btn-sm btn-outline-secondary d-none"
+                         id="datasetKeyColumnRetry"
+                         onclick="retryDatasetKeyColumns()">Retry</button>
                </div>`
             : (ds.key_column
-                ? `<div class="mt-1"><small class="text-muted">Key: <code>${escapeHtml(ds.key_column)}</code></small></div>`
+                ? `<div class="panel-key-row"><span class="panel-item-sub-label">Key column</span><code>${escapeHtml(ds.key_column)}</code></div>`
                 : '');
         const descHtml = !viewOnly
-            ? `<div class="mt-2">
-                 <div class="d-flex align-items-center justify-content-between mb-1">
-                   <label class="form-label form-label-sm mb-0" style="font-size:0.8rem;" for="datasetDescriptionInput">
-                     Description <small class="text-muted">(purpose of this dataset)</small>
-                   </label>
-                   <button type="button"
-                           class="btn btn-sm btn-outline-secondary py-0 px-1"
-                           id="datasetDescriptionFromUcBtn"
-                           title="Fill from Data Assets table description"
-                           onclick="loadDatasetDescriptionFromDataSource()">
-                     <i class="bi bi-database-down"></i>
-                   </button>
-                 </div>
-                 <textarea class="form-control form-control-sm" rows="2"
-                           id="datasetDescriptionInput"
-                           oninput="onDatasetDescriptionChange(this.value)">${escapeHtml(ds.description || '')}</textarea>
+            ? `<div class="panel-desc-row">
+                 ${panelInlineField({ value: ds.description || '', placeholder: 'Purpose of this dataset', oninput: 'onDatasetDescriptionChange(this.value)', id: 'datasetDescriptionInput' })}
+                 <button type="button"
+                         class="btn btn-sm btn-link p-0"
+                         id="datasetDescriptionFromUcBtn"
+                         title="Fill from the Data Assets table description"
+                         aria-label="Fill from the Data Assets table description"
+                         onclick="loadDatasetDescriptionFromDataSource()">
+                   <i class="bi bi-database-down"></i>
+                 </button>
                </div>`
-            : (ds.description
-                ? `<div class="mt-1"><small class="text-muted">${escapeHtml(ds.description)}</small></div>`
-                : '');
-        container.innerHTML = `
-            <div class="d-flex align-items-center gap-2">
-                <i class="bi bi-table text-primary"></i>
-                <div class="flex-grow-1">
-                    <div class="fw-semibold">${escapeHtml(ds.asset)} ${badge}</div>
-                    <small class="text-muted">${escapeHtml(fullName)}</small>
-                </div>
-                ${!viewOnly ? `<button type="button" class="btn btn-sm btn-outline-danger py-0 px-1" onclick="removeSharedEntityDataset()" title="Remove dataset"><i class="bi bi-x"></i></button>` : ''}
-            </div>
-            ${keyColHtml}
-            ${descHtml}
-        `;
+            : panelInlineField({ value: ds.description || '', viewOnly: true });
+        container.innerHTML = panelItemRow({
+            icon: 'bi-table', title: ds.asset, badge, meta: fullName,
+            removeOnclick: 'removeSharedEntityDataset()', removeTitle: 'Remove dataset', viewOnly,
+            body: keyColHtml + descHtml,
+        });
         if (!viewOnly) {
             void _loadDatasetKeyColumns(ds);
         }
     } else {
-        container.innerHTML = '<small class="text-muted">No dataset assigned</small>';
+        container.innerHTML = panelEmptyState('No dataset linked yet.', 'Link a dataset', 'openDatasetSelectorModal()', viewOnly);
     }
 }
 
@@ -1708,38 +1765,25 @@ function renderSharedEntityActions(viewOnly = false) {
     const container = panelGetById('sharedEntityActionsContent');
     if (!container) return;
 
+    _updatePanelSection('sharedEntityActions', { count: sharedPanelActions.length });
     if (!sharedPanelActions.length) {
-        container.innerHTML = '<small class="text-muted">No actions assigned</small>';
+        container.innerHTML = panelEmptyState('No functions yet.', 'Add a function', 'openActionSelectorModal()', viewOnly);
         return;
     }
 
     container.innerHTML = sharedPanelActions.map((action, idx) => {
         const fullName = action.fullName
             || `${action.catalog || ''}.${action.schema || ''}.${action.function || ''}`;
-        const badge = action.returns_table
-            ? '<span class="badge bg-info text-dark">Table</span>'
-            : '<span class="badge bg-secondary">Scalar</span>';
-        const descHtml = !viewOnly
-            ? `<textarea class="form-control form-control-sm mt-1" rows="2"
-                         id="actionDescriptionInput-${idx}"
-                         placeholder="What does this action do?"
-                         oninput="onActionDescriptionChange(${idx}, this.value)">${escapeHtml(action.description || '')}</textarea>`
-            : (action.description
-                ? `<small class="text-muted d-block ms-3">${escapeHtml(action.description)}</small>`
-                : '');
-        return `
-            <div class="${idx > 0 ? 'mt-2 pt-2 border-top' : ''}">
-                <div class="d-flex align-items-center gap-2">
-                    <i class="bi bi-lightning-charge text-warning"></i>
-                    <div class="flex-grow-1">
-                        <div class="fw-semibold">${escapeHtml(action.function || '')} ${badge}</div>
-                        <small class="text-muted">${escapeHtml(fullName)}</small>
-                    </div>
-                    ${!viewOnly ? `<button type="button" class="btn btn-sm btn-outline-danger py-0 px-1" onclick="removeSharedEntityAction(${idx})" title="Remove action"><i class="bi bi-x"></i></button>` : ''}
-                </div>
-                ${descHtml}
-            </div>
-        `;
+        return panelItemRow({
+            icon: 'bi-lightning-charge', title: action.function || '',
+            badge: `<span class="panel-kind-badge">${action.returns_table ? 'Table' : 'Scalar'}</span>`,
+            meta: fullName,
+            removeOnclick: `removeSharedEntityAction(${idx})`, removeTitle: 'Remove function', viewOnly,
+            body: panelInlineField({
+                value: action.description || '', placeholder: 'What does this function do?', viewOnly,
+                oninput: `onActionDescriptionChange(${idx}, this.value)`, id: `actionDescriptionInput-${idx}`,
+            }),
+        });
     }).join('');
 }
 
@@ -1762,33 +1806,20 @@ function removeSharedEntityAction(index) {
 function renderSharedEntityJobs(viewOnly = false) {
     const container = panelGetById('sharedEntityJobsContent');
     if (!container) return;
+    _updatePanelSection('sharedEntityJobs', { count: sharedPanelJobs.length });
     if (!sharedPanelJobs.length) {
-        container.innerHTML = '<small class="text-muted">No jobs assigned</small>';
+        container.innerHTML = panelEmptyState('No jobs yet.', 'Add a job', 'openJobSelectorModal()', viewOnly);
         return;
     }
-    container.innerHTML = sharedPanelJobs.map((job, idx) => {
-        const label = job.job_name || job.function || job.job_id;
-        const descHtml = !viewOnly
-            ? `<textarea class="form-control form-control-sm mt-1" rows="2"
-                         placeholder="What does this job do?"
-                         oninput="onJobDescriptionChange(${idx}, this.value)">${escapeHtml(job.description || '')}</textarea>`
-            : (job.description
-                ? `<small class="text-muted d-block ms-3">${escapeHtml(job.description)}</small>`
-                : '');
-        return `
-            <div class="${idx > 0 ? 'mt-2 pt-2 border-top' : ''}">
-                <div class="d-flex align-items-center gap-2">
-                    <i class="bi bi-play-circle text-primary"></i>
-                    <div class="flex-grow-1">
-                        <div class="fw-semibold">${escapeHtml(String(label))}</div>
-                        <small class="text-muted">job:${escapeHtml(String(job.job_id))}</small>
-                    </div>
-                    ${!viewOnly ? `<button type="button" class="btn btn-sm btn-outline-danger py-0 px-1" onclick="removeSharedEntityJob(${idx})" title="Remove job"><i class="bi bi-x"></i></button>` : ''}
-                </div>
-                ${descHtml}
-            </div>
-        `;
-    }).join('');
+    container.innerHTML = sharedPanelJobs.map((job, idx) => panelItemRow({
+        icon: 'bi-play-circle', title: String(job.job_name || job.function || job.job_id),
+        meta: `job:${job.job_id}`,
+        removeOnclick: `removeSharedEntityJob(${idx})`, removeTitle: 'Remove job', viewOnly,
+        body: panelInlineField({
+            value: job.description || '', placeholder: 'What does this job do?', viewOnly,
+            oninput: `onJobDescriptionChange(${idx}, this.value)`,
+        }),
+    })).join('');
 }
 
 function onJobDescriptionChange(index, value) {
@@ -2032,7 +2063,7 @@ function _filterActionFunctions() {
 function _actionSelectFunction(fn) {
     const fullName = fn.full_name || `${_actionSelCatalog}.${_actionSelSchema}.${fn.name}`;
     if (sharedPanelActions.some(a => a.fullName === fullName)) {
-        showNotification(`Action already assigned: ${fullName}`, 'warning', 3000);
+        showNotification(`Function already assigned: ${fullName}`, 'warning', 3000);
         return;
     }
     sharedPanelActions.push({
@@ -2046,7 +2077,7 @@ function _actionSelectFunction(fn) {
     markPanelDirty();
     renderSharedEntityActions(false);
     closeActionSelectorModal();
-    showNotification(`Action added: ${fullName} — add a description`, 'success', 3000);
+    showNotification(`Function added: ${fullName} — add a description`, 'success', 3000);
 }
 
 function closeActionSelectorModal() {
@@ -2088,17 +2119,15 @@ function rulesUsingClass(rules, classes, className, parentName) {
 function renderSharedEntityBusinessRules(viewOnly = false) {
     const container = panelGetById('sharedEntityBusinessRulesContent');
     if (!container) return;
+    _updatePanelSection('sharedEntityBusinessRules', { count: sharedPanelBusinessRules.length });
     if (!sharedPanelBusinessRules.length) {
-        container.innerHTML = '<small class="text-muted">No business rules assigned</small>';
+        container.innerHTML = panelEmptyState('No inference rules yet.', 'Add an inference rule', 'openBusinessRuleSelectorModal()', viewOnly);
         return;
     }
-    container.innerHTML = sharedPanelBusinessRules.map((ref, idx) => `
-        <div class="${idx > 0 ? 'mt-2 pt-2 border-top' : ''} d-flex align-items-center gap-2">
-            <i class="bi bi-diagram-3 text-primary"></i>
-            <div class="flex-grow-1 fw-semibold">${escapeHtml(ref.name || '')}</div>
-            ${!viewOnly ? `<button type="button" class="btn btn-sm btn-outline-danger py-0 px-1" onclick="removeSharedEntityBusinessRule(${idx})" title="Remove business rule"><i class="bi bi-x"></i></button>` : ''}
-        </div>
-    `).join('');
+    container.innerHTML = sharedPanelBusinessRules.map((ref, idx) => panelItemRow({
+        icon: 'bi-diagram-3', title: ref.name || '',
+        removeOnclick: `removeSharedEntityBusinessRule(${idx})`, removeTitle: 'Remove inference rule', viewOnly,
+    })).join('');
 }
 
 function removeSharedEntityBusinessRule(index) {
@@ -2123,7 +2152,7 @@ async function openBusinessRuleSelectorModal() {
             <div class="modal-dialog modal-lg modal-dialog-centered">
                 <div class="modal-content">
                     <div class="modal-header">
-                        <h5 class="modal-title"><i class="bi bi-diagram-3 me-2"></i>Select business rules</h5>
+                        <h5 class="modal-title"><i class="bi bi-diagram-3 me-2"></i>Select inference rules (SWRL)</h5>
                         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                     </div>
                     <div class="modal-body">
@@ -2208,7 +2237,7 @@ function _addSelectedBusinessRules() {
     markPanelDirty();
     renderSharedEntityBusinessRules(false);
     _ucClosePickerModal('businessRuleSelectorModal');
-    showNotification(`${names.length} business rule(s) added`, 'success', 2000);
+    showNotification(`${names.length} inference rule(s) added`, 'success', 2000);
 }
 
 // =====================================================
@@ -2232,56 +2261,40 @@ function renderSharedEntityVirtualAttributes(viewOnly = false) {
     const container = panelGetById('sharedEntityVirtualAttributesContent');
     if (!container) return;
 
+    const attrCount = sharedPanelVirtualAttributes.reduce((n, g) => n + (g.attributes || []).length, 0);
+    _updatePanelSection('sharedEntityVirtualAttributes', { count: attrCount });
     if (!sharedPanelVirtualAttributes.length) {
-        container.innerHTML = '<small class="text-muted">No virtual attributes</small>';
+        container.innerHTML = panelEmptyState('No virtual attributes yet.', 'Add a virtual attribute', 'openVirtualAttributeSelectorModal()', viewOnly);
         return;
     }
 
     container.innerHTML = sharedPanelVirtualAttributes.map((group, idx) => {
         const fullName = group.fullName
             || `${group.catalog || ''}.${group.schema || ''}.${group.function || ''}`;
-        const badge = group.returns_table
-            ? '<span class="badge bg-info text-dark">Table</span>'
-            : '<span class="badge bg-secondary">Scalar</span>';
-        const descHtml = !viewOnly
-            ? `<textarea class="form-control form-control-sm mt-1" rows="2"
-                         id="vaDescriptionInput-${idx}"
-                         placeholder="What does this function compute?"
-                         oninput="onVirtualAttributeDescriptionChange(${idx}, this.value)">${escapeHtml(group.description || '')}</textarea>`
-            : (group.description
-                ? `<small class="text-muted d-block ms-3">${escapeHtml(group.description)}</small>`
-                : '');
         const attrsHtml = (group.attributes || []).map((attr, aIdx) => {
-            const type = attr.dataType
-                ? `<span class="badge bg-light text-muted border ms-1">${escapeHtml(attr.dataType)}</span>`
-                : '';
-            const labelHtml = !viewOnly
-                ? `<input type="text" class="form-control form-control-sm mt-1"
+            const type = attr.dataType ? `<span class="panel-kind-badge">${escapeHtml(attr.dataType)}</span>` : '';
+            const label = viewOnly
+                ? `<span>${escapeHtml(attr.label || attr.name || '')}</span>`
+                : `<input type="text" class="form-control form-control-sm panel-inline-field"
                           value="${escapeHtml(attr.label || attr.name || '')}"
-                          placeholder="Display label"
-                          oninput="onVirtualAttributeLabelChange(${idx}, ${aIdx}, this.value)">`
-                : '';
+                          placeholder="Display label" aria-label="Display label for ${escapeHtml(attr.name || '')}"
+                          oninput="onVirtualAttributeLabelChange(${idx}, ${aIdx}, this.value)">`;
             return `
-                <div class="${aIdx > 0 ? 'mt-2' : ''}">
-                    <div class="small"><code>${escapeHtml(attr.name || '')}</code>${type}</div>
-                    ${labelHtml}
-                </div>
-            `;
+                <div class="panel-attr-row">
+                    <code class="panel-attr-name">${escapeHtml(attr.name || '')}</code>${type}
+                    ${label}
+                </div>`;
         }).join('');
-        return `
-            <div class="va-group">
-                <div class="d-flex align-items-center gap-2">
-                    <i class="bi bi-magic text-primary"></i>
-                    <div class="flex-grow-1">
-                        <div class="fw-semibold">${escapeHtml(group.function || '')} ${badge}</div>
-                        <small class="text-muted">${escapeHtml(fullName)}</small>
-                    </div>
-                    ${!viewOnly ? `<button type="button" class="btn btn-sm btn-outline-danger py-0 px-1" onclick="removeSharedEntityVirtualAttribute(${idx})" title="Remove this function and its attributes"><i class="bi bi-x"></i></button>` : ''}
-                </div>
-                ${descHtml}
-                <div class="va-group-attrs">${attrsHtml}</div>
-            </div>
-        `;
+        return panelItemRow({
+            icon: 'bi-magic', title: group.function || '',
+            badge: `<span class="panel-kind-badge">${group.returns_table ? 'Table' : 'Scalar'}</span>`,
+            meta: fullName,
+            removeOnclick: `removeSharedEntityVirtualAttribute(${idx})`, removeTitle: 'Remove this function and its attributes', viewOnly,
+            body: panelInlineField({
+                value: group.description || '', placeholder: 'What does this function compute?', viewOnly,
+                oninput: `onVirtualAttributeDescriptionChange(${idx}, this.value)`, id: `vaDescriptionInput-${idx}`,
+            }) + `<div class="va-group-attrs">${attrsHtml}</div>`,
+        });
     }).join('');
 }
 
@@ -2588,24 +2601,18 @@ function renderSharedEntityBridges(viewOnly = false) {
     const container = panelGetById('sharedEntityBridgesContent');
     if (!container) return;
 
+    _updatePanelSection('sharedEntityBridges', { count: sharedPanelBridges.length });
     if (sharedPanelBridges.length > 0) {
-        container.innerHTML = sharedPanelBridges.map((bridge, idx) => `
-            <div class="d-flex align-items-center gap-2 ${idx > 0 ? 'mt-1 pt-1 border-top' : ''}">
-                <div class="flex-grow-1">
-                    <small class="d-block">
-                        <i class="bi bi-signpost-2 text-info"></i>
-                        <span class="fw-semibold ms-1">${escapeHtml(bridge.target_class_name || '')}</span>
-                    </small>
-                    <small class="text-muted d-block ms-3">
-                        <i class="bi bi-box me-1"></i>${escapeHtml(bridge.target_domain || bridge.target_project || '')}
-                        ${bridge.label ? ` &mdash; ${escapeHtml(bridge.label)}` : ''}
-                    </small>
-                </div>
-                ${!viewOnly ? `<button type="button" class="btn btn-sm btn-outline-danger py-0 px-1" onclick="removeSharedEntityBridge(${idx})" title="Remove bridge"><i class="bi bi-x"></i></button>` : ''}
-            </div>
-        `).join('');
+        container.innerHTML = sharedPanelBridges.map((bridge, idx) => {
+            const domain = bridge.target_domain || bridge.target_project || '';
+            return panelItemRow({
+                icon: 'bi-signpost-2', title: bridge.target_class_name || '',
+                meta: bridge.label ? `${domain} — ${bridge.label}` : domain,
+                removeOnclick: `removeSharedEntityBridge(${idx})`, removeTitle: 'Remove bridge', viewOnly,
+            });
+        }).join('');
     } else {
-        container.innerHTML = '<small class="text-muted">No bridges to other domains</small>';
+        container.innerHTML = panelEmptyState('No bridges to other domains yet.', 'Add a bridge', 'openBridgeSelectorModal()', viewOnly);
     }
 }
 
@@ -3580,7 +3587,7 @@ async function renderRelationshipForm(panel, prop, viewOnly = false) {
         <div id="sharedRelAssignmentLink"></div>
         <form id="sharedRelationshipForm">
             ${renderFormTabsNav([
-                { id: 'details', icon: 'bi-info-circle', label: 'Details' },
+                { id: 'details', icon: 'bi-info-circle', label: 'General' },
                 { id: 'constraints', icon: 'bi-sliders', label: 'Constraints' },
             ], _rTab)}
 

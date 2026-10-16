@@ -111,7 +111,7 @@ Designer is **Studio**. OWL and R2RML export live on the canvas.
 - **Import entity** from another domain.
 - Subclasses show inherited outgoing relations.
 - Metadata saves (label, icon, reference, relationship direction) update visible D3 elements in place; topology changes still rebuild the map.
-- Entity right pane tabs: **Details / Attributes / Refs. / Actions / Constraints**. Refs. holds dashboard, dataset, and bridges. Actions holds UC functions, Jobs, and business rules.
+- Entity right pane tabs: **General / Attrs. / Model / Behaviour / Links**. Attrs. holds mapped attributes, then virtual attributes (computed when viewed). Model holds inheritance, equivalent/disjoint axioms, and bridges. Behaviour holds what the Knowledge Graph can run on one entity, each tagged with its effect: functions (return a result), jobs (run in background), and inference rules (SWRL, write to the graph). Links holds dashboard and dataset. Entity SWRL triggers are called **Inference rules** in the Studio and the Graph Explorer.
 - OWL import and save preserve labels, language tags, resource IRIs, leftover RDF annotations, non-OWL triples, and session extras. Invalid IRIs are percent-encoded instead of failing generation. Renames stay graph-consistent.
 - Mapping Diagnostics lists issues only and skips excluded relationship columns.
 

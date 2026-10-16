@@ -903,7 +903,7 @@ with `success: false` and nothing is executed. Table-valued UC functions run as
 #### `POST /api/v1/digitaltwin/nodes/business-rule`
 
 Run one of the SWRL business rules attached to the node's class (Ontology →
-Studio → Actions → **Business rules**), **scoped to that entity**, and
+Studio → Behaviour → **Inference rules (SWRL)**), **scoped to that entity**, and
 materialise the inferred triples into the graph.
 
 **Body:**

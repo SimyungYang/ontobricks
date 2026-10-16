@@ -15,7 +15,7 @@ def _source() -> str:
 
 def test_dataset_description_textarea_and_handler_exist():
     source = _source()
-    assert 'id="datasetDescriptionInput"' in source
+    assert "id: 'datasetDescriptionInput'" in source
     assert "function onDatasetDescriptionChange" in source
     assert "sharedPanelDataset.description" in source
     assert "Purpose of this dataset" in source or "purpose of this dataset" in source

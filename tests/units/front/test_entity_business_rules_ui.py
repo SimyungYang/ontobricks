@@ -1,4 +1,4 @@
-"""Contracts for the entity Business rules UI (Studio Actions + Graph Explorer)."""
+"""Contracts for entity inference rules (SWRL) in the Studio Behaviour tab + Graph Explorer."""
 
 from pathlib import Path
 
@@ -15,16 +15,16 @@ DESIGN_JS = STATIC / "global/js/ontology-design.js"
 INFO_JS = STATIC / "ontology/js/ontology-information.js"
 
 
-def test_actions_tab_has_business_rules_box():
+def test_behaviour_tab_has_inference_rules_box():
     js = PANELS_JS.read_text(encoding="utf-8")
     assert 'id="sharedEntityBusinessRulesContent"' in js
     assert "openBusinessRuleSelectorModal()" in js
     assert "renderSharedEntityBusinessRules(viewOnly)" in js
-    actions_start = js.index('data-form-tab-content="actions"')
-    constraints_start = js.index('data-form-tab-content="constraints"')
-    actions_pane = js[actions_start:constraints_start]
-    assert 'id="sharedEntityBusinessRules"' in actions_pane
-    assert 'id="sharedEntityActions"' in actions_pane
+    start = js.index('data-form-tab-content="behaviour"')
+    end = js.index('data-form-tab-content="links"')
+    pane = js[start:end]
+    assert 'id="sharedEntityBusinessRules"' in pane
+    assert 'id="sharedEntityActions"' in pane
 
 
 def test_picker_lists_rules_for_class_and_parents_and_saves_refs():

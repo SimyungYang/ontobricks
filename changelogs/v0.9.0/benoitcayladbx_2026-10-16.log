@@ -129,3 +129,207 @@ Modified files:
 - changelogs/v0.9.0/benoitcayladbx_2026-10-16.log
 
 Tests: `uv run --frozen pytest -q -m "not scenario"` → 9436 passed, 326 skipped, 7 deselected, 1 xfailed, 40 warnings in 48.67s.
+
+================================================================================
+## Ontology Studio entity panel: tabs grouped by what each section does
+================================================================================
+
+Context:
+The entity panel's Actions tab mixed three features with different effects
+(UC functions return a result, Jobs start a background run, business rules
+write inferred triples to the graph) with nothing telling them apart. The
+same one-parameter UC function picker was split across two tabs (virtual
+attributes under Attrs., actions under Actions), "Business rules" clashed
+with the Ontology → Business Rules page that hosts several rule types, and
+Refs. mixed presentation links (dashboard, dataset) with a semantic link
+(bridges). Tabs are now grouped by purpose. Labels were measured in the
+browser: the full-word set needed ~428px of the 382px rail at the default
+420px panel width, so "Attrs." stays abbreviated and the axioms tab is
+"Model" (rail now 382/382px).
+
+Changes:
+
+1. src/front/static/ontology/js/ontology-shared-panels.js
+   Entity rail is General / Attrs. / Model / Behaviour / Links
+   (ids details / attributes / model / behaviour / links; unknown remembered
+   ids fall back to General via ``ENTITY_PANEL_TABS``). General: name, label,
+   icon, description, group. Attrs.: mapped attributes only. Model: inherits
+   from, inherited relationships, equivalent to, disjoint with, bridges.
+   Behaviour: virtual attributes, functions, jobs, inference rules (SWRL),
+   each heading tagged with an icon + text effect chip (Computed when viewed /
+   Returns a result / Runs in background / Writes to the graph, the last in
+   the warning tone); headings wrap so the Add button stays visible on narrow
+   panels. Links: dashboard, dataset. "UC functions" → "Functions",
+   "Business rules" → "Inference rules (SWRL)" with matching empty states,
+   remove titles, picker title and toasts. Relationship rail Details → General.
+2. src/front/static/ontology/js/ontology-map.js
+   Entity right-click shortcuts mirror the new tabs (General, Attributes,
+   Model, Behaviour, Links); relationship shortcut Details → General.
+3. src/front/static/ontology/css/ontology-shared-panels.css
+   ``.entity-effect-chip`` size rule for the Behaviour chips.
+4. src/front/static/query/js/query-sigmagraph.js,
+   src/front/static/query/js/query-entity-details.js,
+   src/front/static/query/js/query-business-rules.js
+   Graph Explorer details section and node right-click header say
+   "Inference rules". Stored class fields (``actions``, ``virtualAttributes``,
+   ``business_rules``), endpoints and MCP policy keys are unchanged.
+5. tests/units/front/test_entity_panel_tabs.py (new)
+   Pins rail order/labels, the fallback, each pane's contents, the four
+   effect chips and the warning tone, the relationship rail, the Designer
+   shortcuts and the Explorer wording (red before the change).
+6. tests/units/front/test_map_context_menu_tabs.py,
+   tests/units/front/test_class_actions_ui.py,
+   tests/units/front/test_entity_business_rules_ui.py,
+   tests/units/front/test_ontology_split_panel_layout.py,
+   tests/units/front/test_ontology_map_external_badge.py
+   Updated to the new tab ids and pane boundaries; the superseded
+   Infos/Attrs. label test is removed.
+7. docs/user-guide.md, docs/api.md, releases/ReleaseNotes_V0.9.0.md
+   Steps point at Behaviour → Functions / Virtual attributes; new
+   "Inference Rules on an Entity (SWRL)" and "Entity Panel Tabs" sections;
+   release note describes the new tabs.
+
+Browser check (local dev server, TestZeroCopy domain, Playwright): rail
+382/382px at 1440px, all five tabs rendered and screenshotted, keyboard Tab
+moves focus along the rail, Behaviour headings wrap at a 390px viewport,
+no console or page errors.
+
+Modified files:
+- src/front/static/ontology/js/ontology-shared-panels.js
+- src/front/static/ontology/js/ontology-map.js
+- src/front/static/ontology/css/ontology-shared-panels.css
+- src/front/static/query/js/query-sigmagraph.js
+- src/front/static/query/js/query-entity-details.js
+- src/front/static/query/js/query-business-rules.js
+- tests/units/front/test_entity_panel_tabs.py (new)
+- tests/units/front/test_map_context_menu_tabs.py
+- tests/units/front/test_class_actions_ui.py
+- tests/units/front/test_entity_business_rules_ui.py
+- tests/units/front/test_ontology_split_panel_layout.py
+- tests/units/front/test_ontology_map_external_badge.py
+- docs/user-guide.md
+- docs/api.md
+- releases/ReleaseNotes_V0.9.0.md
+- changelogs/v0.9.0/benoitcayladbx_2026-10-16.log
+
+Tests: `uv run --frozen pytest -q -m "not scenario"` → 9445 passed, 326 skipped, 7 deselected, 1 xfailed, 40 warnings in 57.41s.
+
+================================================================================
+## Entity panel: virtual attributes move back to the Attrs. tab
+================================================================================
+
+Context:
+Virtual attributes read like attributes to users (they are shown with the
+entity's other values in the Knowledge Graph), so having them under
+Behaviour next to functions and jobs was confusing. They now sit under the
+mapped attributes in Attrs., keeping their "Computed when viewed" chip.
+
+Changes:
+
+1. src/front/static/ontology/js/ontology-shared-panels.js
+   Virtual attributes section (``#sharedEntityVirtualAttributes``) moved
+   from the Behaviour pane to the Attrs. pane, below the mapped attributes.
+   Behaviour now holds Functions, Jobs and Inference rules (SWRL) only.
+2. tests/units/front/test_entity_panel_tabs.py
+   Attrs. holds mapped then virtual attributes with one effect chip;
+   Behaviour lists its three sections and no virtual attributes.
+3. docs/user-guide.md
+   Virtual attribute step points at Attrs.; the Entity Panel Tabs table
+   lists Attrs. = mapped then virtual attributes.
+
+Modified files:
+- src/front/static/ontology/js/ontology-shared-panels.js
+- tests/units/front/test_entity_panel_tabs.py
+- docs/user-guide.md
+- changelogs/v0.9.0/benoitcayladbx_2026-10-16.log
+
+Tests: covered by the run in the next section.
+
+================================================================================
+## Entity panel: one shared section layout inside every tab
+================================================================================
+
+Context:
+Sections inside the entity panel tabs each had their own markup: grey
+framed boxes on some, white bordered boxes on others, help text under the
+box, "Assign" / "Select" / icon-only add buttons, plain grey "No ..."
+empty texts, always-bordered two-row description textareas, and native
+multi-selects (Ctrl/Cmd-click) for Equivalent To / Disjoint With. All five
+tabs now render their sections with one set of helpers.
+
+Changes:
+
+1. src/front/static/ontology/js/ontology-shared-panels.js
+   - New helper block (``// ---- Panel section helpers ----``):
+     ``EFFECT_CHIPS`` (single source for the four effect chips),
+     ``panelSectionHeader`` (icon + title, item count, effect chip, "+ Add"
+     button or a dropdown menu, one-line subtitle, info button carrying the
+     long help in title/aria-label, optional ``<label for>`` title),
+     ``panelEmptyState`` (dashed box with a direct "Add ..." link),
+     ``panelItemRow`` (icon, title + kind badge, muted full name, remove
+     button, body underneath; escapes its own text) and
+     ``panelInlineField`` (borderless always-editable textarea, plain text
+     when view-only). ``_updatePanelSection`` refreshes the header count and
+     flips Add/Change on single-item sections (Dashboard, Dataset).
+   - Pane markup: every section is ``<section class="panel-section">`` with
+     the shared header; grey ``bg-light rounded border`` boxes removed;
+     General puts the icon picker and the name on one row (the duplicate
+     emoji preview is gone) and moves Group last; Attrs. Add is a menu
+     (From data assets / Manually); all ids the rest of the code reads are
+     unchanged.
+   - Equivalent to / Disjoint with: chip pickers (``renderSharedAxiomChips``,
+     ``addSharedAxiomChip``, ``removeSharedAxiomChip``) drive the original
+     multi-selects, now hidden, so save and constraints code are unchanged;
+     focus returns to the add list after each add/remove.
+   - Render functions for mapped attributes, inherited relationships,
+     virtual attributes, functions, jobs, inference rules, bridges,
+     dashboard and dataset use the shared rows and empty states
+     ("No functions yet." + "Add a function", ...). Attribute names and
+     inherited relationship labels are now HTML-escaped (they were
+     interpolated raw), and the inherited-relationship onclick is
+     attribute-escaped.
+   - Dirty tracking ignores buttons marked ``data-panel-passive`` (info
+     buttons, the Add dropdown toggle, inherited-relationship links), so
+     reading help no longer flags unsaved changes.
+2. src/front/static/ontology/css/ontology-shared-panels.css
+   Section, header, count, subtitle, help, empty state, item row, kind
+   badge, inline field (transparent border at rest, border on hover, shared
+   focus ring on focus), attribute row, chip picker and identity row rules,
+   all on shared tokens; header actions never wrap. Removed the unused
+   ``.panel-box``, ``#sharedEntityAttributes`` sizing and ``.va-group``
+   rules.
+3. tests/units/front/test_entity_panel_sections.py (new)
+   Runs the helpers under node (header, warning chip, view-only, menu,
+   label-for, empty state, item escaping, inline field) and pins the pane
+   markup, chip pickers, empty states, borderless descriptions, passive
+   buttons and CSS contracts (red before the change: 33 failed).
+4. tests/units/front/test_entity_panel_tabs.py,
+   tests/units/front/test_class_actions_ui.py,
+   tests/units/front/test_inherited_relations_ui.py,
+   tests/units/front/test_ontology_dataset_description.py
+   Assert the helper arguments (``title:`` / ``chip:`` / ``id:``) instead of
+   the old literal markup; effect chip labels defined once.
+5. docs/user-guide.md
+   Entity Panel Tabs section describes the section layout, in-place
+   descriptions and the chip pickers; Dashboard steps use Links → + Add /
+   Change.
+
+Browser check (local dev server, testzerocopy domain, Playwright, 1440px
+and 390px): all five tabs screenshotted, no horizontal overflow, header
+counts filled (Attrs. 1 / 2, Functions 1, Inference rules 1), info-button
+click leaves the panel clean, Equivalent-to chip add/remove updates the
+hidden select and keeps focus on the add list, Attrs. menu lists both
+choices, no console or page errors.
+
+Modified files:
+- src/front/static/ontology/js/ontology-shared-panels.js
+- src/front/static/ontology/css/ontology-shared-panels.css
+- tests/units/front/test_entity_panel_sections.py (new)
+- tests/units/front/test_entity_panel_tabs.py
+- tests/units/front/test_class_actions_ui.py
+- tests/units/front/test_inherited_relations_ui.py
+- tests/units/front/test_ontology_dataset_description.py
+- docs/user-guide.md
+- changelogs/v0.9.0/benoitcayladbx_2026-10-16.log
+
+Tests: `uv run --frozen pytest -q -m "not scenario"` → 9474 passed, 326 skipped, 7 deselected, 1 xfailed, 40 warnings in 56.43s.

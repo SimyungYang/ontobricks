@@ -1729,7 +1729,7 @@ var SigmaGraph = (function () {
         if (nodeRules.length > 0 && typeof renderBusinessRuleSection === 'function') {
             var ruleBody = renderBusinessRuleSection(entity.id, nodeRules);
             if (ruleBody) {
-                html += _sec('bi bi-diagram-3', 'Business rules (' + nodeRules.length + ')', ruleBody);
+                html += _sec('bi bi-diagram-3', 'Inference rules (' + nodeRules.length + ')', ruleBody);
             }
         }
 
@@ -2586,7 +2586,7 @@ var SigmaGraph = (function () {
         if (ctxRules.length > 0 && meta.entity && meta.entity.id
             && (typeof canRunBusinessRules !== 'function' || canRunBusinessRules())) {
             if (items) items += '<div class="ctx-divider"></div>';
-            items += '<div class="ctx-header">Business rules</div>';
+            items += '<div class="ctx-header">Inference rules</div>';
             ctxRules.forEach(function (rule) {
                 if (!rule || !rule.name) return;
                 items += '<div class="ctx-item" data-sg-node-action="business-rule" data-uri="' + esc(meta.entity.id) +
