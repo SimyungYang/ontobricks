@@ -17,6 +17,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from back.core.errors import InfrastructureError, OntoBricksError
 from back.core.helpers import validate_table_name
 from back.core.logging import get_logger
 
@@ -161,3 +162,23 @@ def optimize_table(client: Any, table_fqn: str) -> None:
     validate_table_name(table_fqn)
     logger.info("Optimizing Delta table: %s", table_fqn)
     client.execute_statement(f"OPTIMIZE {table_fqn}")
+
+
+def count_triples(client: Any, relation_fqn: str) -> int:
+    """Return ``COUNT(*)`` of *relation_fqn*.
+
+    Raises :class:`InfrastructureError` when the count cannot run. A failed
+    count must never read as an empty graph: builds that lost the warehouse
+    connection mid-count were reported as "no triples generated (check your
+    mappings)", which sent users debugging mappings that were fine.
+    """
+    validate_table_name(relation_fqn)
+    try:
+        rows = client.execute_query(f"SELECT COUNT(*) AS cnt FROM {relation_fqn}")
+    except OntoBricksError:
+        raise
+    except Exception as exc:  # noqa: BLE001 — re-raised with the relation named
+        raise InfrastructureError(
+            f"Could not count the triples in {relation_fqn}: {exc}"
+        ) from exc
+    return int(rows[0].get("cnt", 0)) if rows else 0
