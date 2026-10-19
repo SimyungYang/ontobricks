@@ -52,6 +52,8 @@ full SWRL → Cypher translation lands in a follow-up PR.
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 
 from back.core.graphdb.GraphDBBackend import GraphDBBackend
+from back.core.graphdb.constants import REVERSE_LOOKUP_MAX_ROWS
+from back.core.graphdb.SubjectFilter import SubjectFilter
 from back.core.graphdb.neo4j.Neo4jConnection import (
     DEFAULT_AUTH_METHOD,
     DEFAULT_DATABASE,
@@ -356,9 +358,43 @@ class Neo4jStore(GraphDBBackend):
         limit: int = 50,
         offset: int = 0,
         search: Optional[str] = None,
+        filters: Optional[List[SubjectFilter]] = None,
     ) -> List[str]:
         return self._reads.find_subjects_by_type(
-            table_name, type_uri, limit=limit, offset=offset, search=search
+            table_name,
+            type_uri,
+            limit=limit,
+            offset=offset,
+            search=search,
+            filters=filters,
+        )
+
+    def count_subjects_by_type(
+        self,
+        table_name: str,
+        type_uri: str,
+        search: Optional[str] = None,
+        filters: Optional[List[SubjectFilter]] = None,
+        distinct_predicate: Optional[str] = None,
+    ) -> int:
+        return self._reads.count_subjects_by_type(
+            table_name,
+            type_uri,
+            search=search,
+            filters=filters,
+            distinct_predicate=distinct_predicate,
+        )
+
+    def find_subjects_by_predicate_objects(
+        self,
+        table_name: str,
+        predicate: str,
+        objects: List[str],
+        type_uri: Optional[str] = None,
+        limit: int = REVERSE_LOOKUP_MAX_ROWS,
+    ) -> List[Dict[str, str]]:
+        return self._reads.find_subjects_by_predicate_objects(
+            table_name, predicate, objects, type_uri=type_uri, limit=limit
         )
 
     def resolve_subject_by_id(

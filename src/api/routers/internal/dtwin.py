@@ -40,6 +40,7 @@ from back.objects.digitaltwin import (
     NodeContextService,
     NodeShaclService,
     TwinAssistantCache,
+    TwinChatDigest,
     TwinDataQualityRun,
     TwinGraphAccess,
     TwinGraphBuild,
@@ -1988,6 +1989,32 @@ def _chat_domain_key(domain) -> str:
     return TwinAssistantCache.domain_key(domain)
 
 
+# Databricks-Apps identity + CSRF headers forwarded on the agent's loopback
+# calls so they pass PermissionMiddleware (which otherwise 302-redirects the
+# anonymous internal request to ``/access-denied``).
+_FORWARDED_HEADER_PREFIXES = ("x-forwarded-", "x-real-")
+_FORWARDED_EXTRA_HEADERS = {"x-csrf-token", "referer"}
+
+
+def _chat_forwarded_headers(request: Request) -> dict:
+    """Headers the Graph Chat agent forwards on its loopback calls."""
+    return {
+        k: v
+        for k, v in request.headers.items()
+        if k.lower().startswith(_FORWARDED_HEADER_PREFIXES)
+        or k.lower() in _FORWARDED_EXTRA_HEADERS
+    }
+
+
+def _chat_schema_digest(domain) -> str:
+    """Schema digest for the chat prompt, keyed by the session display name.
+
+    Uses the same display name ``/dtwin/graphql/*`` uses, so both share
+    the cached schema.
+    """
+    return TwinChatDigest.build(domain, _chat_resolve_domain_name(domain))
+
+
 def _chat_clamp_limit(limit) -> int:
     return TwinAssistantCache.clamp_limit(limit)
 
@@ -2070,17 +2097,7 @@ async def dtwin_assistant_chat(
     # resolve the same user session and active domain.
     session_cookies = dict(request.cookies or {})
 
-    # Forward the Databricks-Apps identity + CSRF headers so the loopback
-    # call passes PermissionMiddleware (which otherwise 302-redirects the
-    # anonymous internal request to ``/access-denied``).
-    _FORWARDED_HEADER_PREFIXES = ("x-forwarded-", "x-real-")
-    _FORWARDED_EXTRA_HEADERS = {"x-csrf-token", "referer"}
-    session_headers = {
-        k: v
-        for k, v in request.headers.items()
-        if k.lower().startswith(_FORWARDED_HEADER_PREFIXES)
-        or k.lower() in _FORWARDED_EXTRA_HEADERS
-    }
+    session_headers = _chat_forwarded_headers(request)
 
     domain_name = _chat_resolve_domain_name(domain)
 
@@ -2090,6 +2107,8 @@ async def dtwin_assistant_chat(
         domain_name,
         llm_endpoint,
     )
+
+    schema_digest = _chat_schema_digest(domain)
 
     with map_route_errors("Graph Chat agent request failed", logger):
         agent_result = await asyncio.to_thread(
@@ -2105,6 +2124,7 @@ async def dtwin_assistant_chat(
             user_message=user_message,
             conversation_history=history,
             describe_depth=describe_depth,
+            schema_digest=schema_digest,
         )
 
     if not agent_result.success:
@@ -2199,14 +2219,7 @@ async def dtwin_assistant_chat_stream(
     base_url = f"http://localhost:{app_port}"
     session_cookies = dict(request.cookies or {})
 
-    _FORWARDED_HEADER_PREFIXES = ("x-forwarded-", "x-real-")
-    _FORWARDED_EXTRA_HEADERS = {"x-csrf-token", "referer"}
-    session_headers = {
-        k: v
-        for k, v in request.headers.items()
-        if k.lower().startswith(_FORWARDED_HEADER_PREFIXES)
-        or k.lower() in _FORWARDED_EXTRA_HEADERS
-    }
+    session_headers = _chat_forwarded_headers(request)
 
     domain_name = _chat_resolve_domain_name(domain)
 
@@ -2216,6 +2229,8 @@ async def dtwin_assistant_chat_stream(
         domain_name,
         llm_endpoint,
     )
+
+    schema_digest = _chat_schema_digest(domain)
 
     loop = asyncio.get_event_loop()
     event_queue: asyncio.Queue = asyncio.Queue()
@@ -2240,6 +2255,7 @@ async def dtwin_assistant_chat_stream(
                     user_message=user_message,
                     conversation_history=history,
                     describe_depth=describe_depth,
+                    schema_digest=schema_digest,
                     on_event=_on_event,
                 )
             await event_queue.put(("done", result))
@@ -2406,12 +2422,13 @@ async def dtwin_graphql_schema(
         raise ValidationError(
             "Could not generate GraphQL schema from the current ontology."
         )
-    schema, _metadata = result
+    schema, metadata = result
     return {
         "success": True,
         "ready": True,
         "domain": display_name,
         "sdl": print_schema(schema),
+        "digest": metadata.digest(),
     }
 
 

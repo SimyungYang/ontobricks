@@ -558,11 +558,12 @@ class TestManagedSyncedRouting:
             synced_store.ensure_synced_union_view("G_V1")
         executed = [str(c[0][0]) for c in cur.execute.call_args_list]
         index_ddls = [s for s in executed if "CREATE INDEX IF NOT EXISTS" in s]
-        assert len(index_ddls) == 3
+        assert len(index_ddls) == 4
         assert all("ON g_v1_sync" in s for s in index_ddls)
         assert any("subject, predicate" in s for s in index_ddls)
         assert any("predicate, object_hash" in s for s in index_ddls)
         assert any("object_hash, predicate" in s for s in index_ddls)
+        assert any("USING hash (object)" in s for s in index_ddls)
         view_idx = next(i for i, s in enumerate(executed) if "CREATE OR REPLACE VIEW" in s)
         first_index_idx = next(i for i, s in enumerate(executed) if "CREATE INDEX IF NOT EXISTS" in s)
         assert first_index_idx < view_idx
@@ -920,3 +921,16 @@ def test_get_triples_page_for_subjects_empty_subjects_skips_query(auth):
         )
     assert got == {"rows": [], "total": 0}
     execute.assert_not_called()
+
+
+def test_ensure_graph_indexes_adds_hash_index_on_object():
+    """Reverse-edge BFS filters on raw ``object``; a hash index avoids seq scans."""
+    from back.core.graphdb.lakebase import _companion_ddl
+
+    cur = MagicMock()
+    _companion_ddl.ensure_graph_indexes(cur, '"ontobricks_graph".g_x_v1_sync')
+    executed = [str(c[0][0]) for c in cur.execute.call_args_list]
+    hash_idx = [s for s in executed if "USING hash (object)" in s]
+    assert len(hash_idx) == 1
+    assert "IF NOT EXISTS" in hash_idx[0]
+    assert '"ontobricks_graph".g_x_v1_sync' in hash_idx[0]

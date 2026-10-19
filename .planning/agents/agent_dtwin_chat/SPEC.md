@@ -30,7 +30,7 @@ proposal that the UI must confirm out-of-band.
 
 ## 3. Tool surface
 
-All 7 tools call session-aware internal `/dtwin/...` routes over loopback HTTP (see
+All 8 tools call session-aware internal `/dtwin/...` routes over loopback HTTP (see
 `src/agents/agent_dtwin_chat/tools.py`). There is **no** `invoke_entity_action` tool —
 execution only happens via `POST /dtwin/nodes/action/confirm`, triggered by a UI
 Confirm/Cancel card outside the LLM tool loop.
@@ -42,6 +42,7 @@ Confirm/Cancel card outside the LLM tool loop.
 | `get_status` | `{}` | `str` | Triple-store sync status (view, graph, row count) for the selected domain |
 | `get_graphql_schema` | `{}` | `str` (SDL) | Auto-generated GraphQL schema for the domain |
 | `query_graphql` | `{"query": str, "variables"?: str}` | `str` | Execute a GraphQL query through the ontology schema layer (bulk typed lookups) |
+| `analyze_graphql` | `{"query": str, "operation": "group"\|"intersect"\|"difference"\|"union", "source"?, "by"?, "metric"?, "field"?, "where"?, "restrict"?, "sets"?, "top"?, "order"?}` | `str` (result table) | Exact server-side aggregation: pages every root list of the query to the end, then ranks groups (count / count_distinct / sum / avg / min / max, ties share a rank) or runs set operations on entity keys; only the result table reaches the LLM |
 | `get_entity_context` | `{"entity_uri": str, "fetch_dataset_rows"?: bool, "dataset_row_limit"?: int, "follow_bridges"?: bool}` | `str` | Linked Dataset rows and/or cross-domain Bridge entities for a node |
 | `request_entity_action` | `{"entity_uri": str, "action": str}` | `str` | Propose (never execute) a Unity Catalog function Action on an entity; mints a one-time pending token consumed by the UI Confirm card |
 
@@ -58,6 +59,23 @@ Confirm/Cancel card outside the LLM tool loop.
   }
 }
 ```
+</details>
+
+<details>
+<summary><code>analyze_graphql</code> semantics</summary>
+
+- Paths are dotted through nested fields (`soldTo.id`, `product.category.label`, `id`);
+  nested lists are flattened, and `x.id` / `x.uri` resolve to the entity `x`.
+- `where` conditions: `path=v` / `path!=v` (case-insensitive), `path~contains`,
+  `path>v` / `<` / `>=` / `<=` (numbers, else string order for ISO dates). AND-combined.
+- `restrict: {key, in: {source, key, where?}, exclude?}` keeps group rows whose entity
+  is (or is not) in another list's key set ("what did churned customers buy").
+- Root lists are re-queried with `limit`=`MAX_LIST_LIMIT` / `offset` until a short page,
+  capped at 20,000 rows per list (reported as PARTIAL past the cap).
+- Sums over `*Krw` fields carry the pre-computed 억 text. When `where` matches nothing,
+  the values present at each path are listed so the model can correct the literal.
+- Pure logic lives in `src/agents/agent_dtwin_chat/analysis.py` (no I/O; the handler
+  injects a loopback `/dtwin/graphql/execute` executor).
 </details>
 
 <details>
@@ -147,6 +165,7 @@ justifies splitting them out):
 | **Auto-invoke Action** — model calls (or claims to call) a UC function directly instead of proposing it | `does_not_invoke_action` constraint fails; there is no tool in `TOOL_DEFINITIONS` capable of direct execution, so this would require a future regression that adds one | Keep `request_entity_action` propose-only by contract; execution lives exclusively behind `POST /dtwin/nodes/action/confirm`, gated on a one-time, 120s-TTL, session-bound pending token minted server-side |
 | **Invent Action fullName** — model calls `request_entity_action` (or claims an action ran) with a `fullName` never surfaced by `describe_entity` / `get_entity_context` / `list_entity_types` | `does_not_call_tool` / `response_acknowledges_absence` constraints on `tags: ["adversarial"]` examples where the requested action is not in the class's allow-list | System prompt: "Only request actions that appeared in tool output (allow-listed fullName)"; server-side `NodeContextService` allow-list check also rejects at `/dtwin/nodes/action/request` regardless of prompt compliance |
 | Model claims an Action already completed before the user confirmed | `does_not_claim_action_completed` constraint on `tags: ["adversarial"]` examples | System prompt: "Never claim an Action ran unless a later tool/UI result says it completed"; `request_entity_action`'s tool result text explicitly states confirmation is pending |
+| **Hand-counted aggregates** — model pages rows into its context and counts / intersects / sums them itself (most cross-condition and Genie-style aggregate questions answered wrongly in an internal evaluation run) | Internal evaluation set + `regression-cross-condition-*` cases | Route D / E in the system prompt send rankings, totals and set questions to `analyze_graphql`; rule "never add up, rank or intersect rows yourself" |
 | Drift after a prompt edit | nightly drift cron (M2.P7) opens a JIRA tagged `eval-drift` | revert + add regression examples |
 | Bridge target domain unpublished / inaccessible | `get_entity_context` returns a soft-failure note instead of raising | Reply surfaces the note; does not fabricate bridge entities |
 
@@ -162,9 +181,13 @@ justifies splitting them out):
   output path.
 - **Synthetic:** Use `databricks-synthetic-data-generation` against a sample ontology
   (not yet generated — dataset is currently 100% hand-curated).
-- **Regression:** `tests/eval/datasets/agent_dtwin_chat/regression.jsonl` — seed with the
-  failing-SPARQL-tool-call cases from the production incident (not yet created; no production
-  failures recorded for this agent to date).
+- **Regression:** `tests/eval/datasets/agent_dtwin_chat/regression.jsonl` — seeded
+  2026-10-14 with two production-derived cases from MLflow traces
+  (`/Shared/ontobricks-agents`): an entity-centric "what did X buy" question that took 7
+  iterations / 34 s, and a two-condition filtered-buyers question that took 9 iterations and
+  answered 24 instead of 102 customers. Both must now go through one `query_graphql` call
+  (filters / `<list>Count(distinctBy)`) using the schema digest injected into the system
+  prompt, without `get_graphql_schema`.
 
 Old seed rows referenced tool names that never existed in `TOOL_HANDLERS`
 (`search_entities`, `find_triples`, `translate_sparql`); every `tool_called` /

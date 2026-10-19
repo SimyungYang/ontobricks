@@ -10,8 +10,10 @@ import time
 from typing import Any, Dict, List, Optional, Set
 
 from back.core.errors import InfrastructureError, NotFoundError, ValidationError
+from back.core.helpers import URIHelpers
 from back.core.logging import get_logger
 from back.core.w3c.rdf_utils import uri_local_name
+from back.objects.digitaltwin.constants import RDF_TYPE
 
 logger = get_logger(__name__)
 
@@ -112,6 +114,41 @@ class GraphFilter:
             "total": total,
             "capped": capped,
         }
+
+    @staticmethod
+    def bounded_expand(store: Any, graph_name: str, selected_uris: List[str], **kwargs: Any) -> Dict[str, Any]:
+        """:meth:`expand`, then drop edges that point outside the expanded set.
+
+        Both expand paths fetch every triple of the in-set subjects, so a
+        frontier entity's edges still reach neighbours past ``max_entities``.
+        The in-set entities are the seeds plus every subject returned.
+        """
+        out = GraphFilter.expand(store, graph_name, selected_uris, **kwargs)
+        rows = out.get("results")
+        if isinstance(rows, list):
+            in_set = set(selected_uris) | {r.get("subject") for r in rows}
+            out["results"] = GraphFilter.drop_out_of_set_edges(rows, in_set)
+            out["count"] = len(out["results"])
+        return out
+
+    @staticmethod
+    def drop_out_of_set_edges(
+        rows: List[Dict[str, Any]], entity_set: Set[str]
+    ) -> List[Dict[str, Any]]:
+        """Keep only relationship triples whose both ends are in *entity_set*.
+
+        Triples fetched for the frontier entities still point at neighbours
+        beyond the BFS cap; the viewer would draw those targets as extra
+        nodes, so ``max_entities`` would not bound what is shown. Literal
+        objects and ``rdf:type`` assertions are always kept.
+        """
+        return [
+            row
+            for row in rows
+            if row.get("predicate") == RDF_TYPE
+            or not URIHelpers.is_uri(row.get("object") or "")
+            or (row.get("object") or "") in entity_set
+        ]
 
     @staticmethod
     def expand(

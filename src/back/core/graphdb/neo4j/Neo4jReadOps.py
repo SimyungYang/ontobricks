@@ -20,7 +20,10 @@ triple nodes.
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 from back.core.graphdb.constants import RDF_TYPE, RDFS_LABEL
+from back.core.graphdb.SubjectFilter import SubjectFilter
 from back.core.graphdb.neo4j.Neo4jConnection import Neo4jConnection
+from back.core.graphdb.neo4j.Neo4jSubjectQueryMixin import Neo4jSubjectQueryMixin
+
 from back.core.graphdb.neo4j.Neo4jSchemaMap import Neo4jSchemaMap
 from back.core.graphdb.neo4j.Neo4jWriteOps import sanitise_label
 from back.core.logging import get_logger
@@ -32,7 +35,7 @@ _MARKER_INTERNAL_PROPS = {"uri"}
 _SCHEMA_LABEL = "__GraphSchema"
 
 
-class Neo4jReadOps:
+class Neo4jReadOps(Neo4jSubjectQueryMixin):
     """Read queries against the typed property-graph Neo4j backend."""
 
     def __init__(self, connection: Neo4jConnection) -> None:
@@ -285,26 +288,25 @@ class Neo4jReadOps:
         limit: int = 50,
         offset: int = 0,
         search: Optional[str] = None,
+        filters: Optional[List[SubjectFilter]] = None,
     ) -> List[str]:
         label = sanitise_label(table_name)
         class_label = self._class_label_for_uri(label, type_uri)
         if class_label is None:
             return []
-        if search:
-            cypher = (
-                f"MATCH (n:`{label}`:`{class_label}`) "
-                f"WHERE any(k IN keys(n) WHERE k <> 'uri' AND toLower(toString(n[k])) CONTAINS toLower($search)) "
-                f"RETURN n.uri AS subject ORDER BY subject SKIP $offset LIMIT $limit"
-            )
-            rows = self._conn.run(
-                cypher, search=search, offset=int(offset), limit=int(limit)
-            )
-        else:
-            cypher = (
-                f"MATCH (n:`{label}`:`{class_label}`) "
-                f"RETURN n.uri AS subject ORDER BY subject SKIP $offset LIMIT $limit"
-            )
-            rows = self._conn.run(cypher, offset=int(offset), limit=int(limit))
+        where = self._typed_node_where(label, search, filters)
+        if where is None:
+            return []
+        params: Dict[str, Any] = {
+            "offset": int(offset),
+            "limit": int(limit),
+            **where.params,
+        }
+        cypher = (
+            self._match_where(f"MATCH (n:`{label}`:`{class_label}`)", where.clauses)
+            + "RETURN n.uri AS subject ORDER BY subject SKIP $offset LIMIT $limit"
+        )
+        rows = self._conn.run(cypher, **params)
         return [r["subject"] for r in (rows or [])]
 
     def resolve_subject_by_id(
@@ -316,7 +318,7 @@ class Neo4jReadOps:
             return None
         rows = self._conn.run(
             f"MATCH (n:`{label}`:`{class_label}`) "
-            f"WHERE n.uri ENDS WITH ('/' + $idf) OR n.uri ENDS WITH ('#' + $idf) "
+            f"WHERE {self._local_id_match_cypher('n.uri', '$idf', include_exact=False)} "
             f"RETURN n.uri AS subject LIMIT 1",
             idf=id_fragment,
         )
@@ -748,11 +750,19 @@ class Neo4jReadOps:
 
         return label_from_class_uri(class_uri)
 
-    def _reltype_for_uri(self, graph_label: str, predicate_uri: str) -> Optional[str]:
+    def _known_reltype(self, graph_label: str, predicate_uri: str) -> Optional[str]:
+        """Stored relationship type for *predicate_uri*, or ``None`` if unseen."""
         reltype_map = self._schema.load(graph_label)["reltype_map"]
         for sanitised, uri in reltype_map.items():
             if uri == predicate_uri:
                 return sanitised
+        return None
+
+    def _reltype_for_uri(self, graph_label: str, predicate_uri: str) -> Optional[str]:
+        """Relationship type for *predicate_uri* (schema map, else derived)."""
+        known = self._known_reltype(graph_label, predicate_uri)
+        if known is not None:
+            return known
         from back.core.graphdb.neo4j.graph_model import reltype_from_predicate
 
         return reltype_from_predicate(predicate_uri)

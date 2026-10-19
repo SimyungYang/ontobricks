@@ -30,6 +30,17 @@ document.addEventListener('DOMContentLoaded', function () {
 });
 
 var SigmaGraph = (function () {
+    // Side length of the square the initial random layout spreads nodes
+    // over; a pinned focus node sits at its centre.
+    var LAYOUT_EXTENT = 1000;
+    // Polling cadence / budget while waiting for a deferred render to
+    // place a node (see _waitForNode).
+    var NODE_WAIT_POLL_MS = 150;
+    var NODE_WAIT_TIMEOUT_MS = 5000;
+    // Default for the graph-search entity cap; matches the selected
+    // #sgMaxEntities option and GraphFilter.EXPLORER_MAX_ENTITIES_DEFAULT.
+    var DEFAULT_MAX_ENTITIES = 5000;
+
     var _renderer = null;
     var _graph = null;
     var _hoveredNode = null;
@@ -105,7 +116,12 @@ var SigmaGraph = (function () {
     var _collapsedGroups = new Set(); // group names currently collapsed
     var _groupMemberMap = {};      // entityType → group name (for quick lookup)
     var _groupsLoaded = false;
-    var _expandedInstanceMembers = new Set(); // node IDs individually expanded from a super-node
+    // Node IDs drawn individually instead of folded into their group's
+    // super-node: members expanded from a super-node (expandInstance) and
+    // the seed entities of a graph search (_expandAndRenderGraph). Sharing
+    // one set keeps seeds collapsible/clearable like expanded members.
+    var _expandedInstanceMembers = new Set();
+    var _pinnedFocusNode = null; // node ID kept at the layout centre (focus-by-URI target)
 
     // --- Data cluster state ---
     var _clusterAssignments = null;  // node ID → cluster integer, or null
@@ -524,6 +540,12 @@ var SigmaGraph = (function () {
             var multiComponent = compKeys.length > 1;
             compKeys.forEach(function (root) {
                 var memberIds = components[root];
+                // A one-member super-node hides the real label without
+                // reducing clutter, so render that instance directly.
+                if (memberIds.length === 1) {
+                    delete _instanceGroup[memberIds[0]];
+                    return;
+                }
                 var superNodeId = '__group__' + gName + '__' + compIdx;
                 compIdx++;
                 _superNodeIds.add(superNodeId);
@@ -770,8 +792,8 @@ var SigmaGraph = (function () {
                         graph.setNodeAttribute(node, 'x', refX / refCount + (Math.random() - 0.5) * jitter);
                         graph.setNodeAttribute(node, 'y', refY / refCount + (Math.random() - 0.5) * jitter);
                     } else {
-                        graph.setNodeAttribute(node, 'x', Math.random() * 1000);
-                        graph.setNodeAttribute(node, 'y', Math.random() * 1000);
+                        graph.setNodeAttribute(node, 'x', Math.random() * LAYOUT_EXTENT);
+                        graph.setNodeAttribute(node, 'y', Math.random() * LAYOUT_EXTENT);
                     }
                 });
 
@@ -793,9 +815,15 @@ var SigmaGraph = (function () {
         }
 
         graph.forEachNode(function (node) {
-            graph.setNodeAttribute(node, 'x', Math.random() * 1000);
-            graph.setNodeAttribute(node, 'y', Math.random() * 1000);
+            graph.setNodeAttribute(node, 'x', Math.random() * LAYOUT_EXTENT);
+            graph.setNodeAttribute(node, 'y', Math.random() * LAYOUT_EXTENT);
+            graph.removeNodeAttribute(node, 'fixed');
         });
+        if (_pinnedFocusNode && graph.hasNode(_pinnedFocusNode)) {
+            graph.setNodeAttribute(_pinnedFocusNode, 'x', LAYOUT_EXTENT / 2);
+            graph.setNodeAttribute(_pinnedFocusNode, 'y', LAYOUT_EXTENT / 2);
+            graph.setNodeAttribute(_pinnedFocusNode, 'fixed', true);
+        }
 
         if (fa2 && fa2.assign) {
             fa2.assign(graph, {
@@ -2303,8 +2331,11 @@ var SigmaGraph = (function () {
     async function _expandAndRenderGraph(uris, opts) {
         opts = opts || {};
         _lastExpandedSeedUris = uris && uris.length ? uris.slice() : null;
+        // Keep the searched seeds visible as individual nodes: grouping
+        // would otherwise fold them into their super-node and hide them.
+        (uris || []).forEach(function (u) { _expandedInstanceMembers.add(u); });
         var maxDepth = parseInt(document.getElementById('sgFilterDepth')?.value || '3');
-        var maxEntities = parseInt(document.getElementById('sgMaxEntities')?.value || '5000');
+        var maxEntities = parseInt(document.getElementById('sgMaxEntities')?.value || String(DEFAULT_MAX_ENTITIES));
         var highlightTerm = opts.highlightTerm || (document.getElementById('sgFilterValue')?.value || '').trim();
 
         _showGraphLoading('Expanding ' + uris.length + ' entities…');
@@ -2424,6 +2455,7 @@ var SigmaGraph = (function () {
 
     function _clearGraphFilter() {
         _graphFilterActive = false;
+        _pinnedFocusNode = null;
         _searchMatched = null;
         _searchNeighbors = null;
         _pathHighlightNodes = null;
@@ -2905,6 +2937,30 @@ var SigmaGraph = (function () {
         }
     }
 
+    /**
+     * Poll until ``nodeId`` is rendered or ``maxMs`` elapses.
+     * Resolves ``true`` when the node is in the rendered graph, ``false`` on
+     * timeout (defaults to NODE_WAIT_TIMEOUT_MS).
+     */
+    function _waitForNode(nodeId, maxMs) {
+        var budget = maxMs || NODE_WAIT_TIMEOUT_MS;
+        return new Promise(function (resolve) {
+            var waited = 0;
+            (function poll() {
+                if (_graph && _renderer && _graph.hasNode(nodeId)) {
+                    resolve(true);
+                    return;
+                }
+                if (waited >= budget) {
+                    resolve(false);
+                    return;
+                }
+                waited += NODE_WAIT_POLL_MS;
+                setTimeout(poll, NODE_WAIT_POLL_MS);
+            })();
+        });
+    }
+
     function _hideEmptyState() {
         var el = document.getElementById('sgEmptyState');
         if (el) el.style.display = 'none';
@@ -3068,8 +3124,18 @@ var SigmaGraph = (function () {
                 }
 
                 var seedUris = previewData.seeds.map(function (s) { return s.uri; });
+                // Prefer the exact URI as the seed: a 'contains' match on the
+                // local name can also hit look-alike ids (SAL0067 -> SAL00670..).
+                if (seedUris.indexOf(uri) !== -1) seedUris = [uri];
+                _pinnedFocusNode = uri;
                 var data = await _expandAndRenderGraph(seedUris, { highlightTerm: localName });
                 if (!data) return false;
+                // _render can defer itself (groups not loaded yet, container not sized).
+                // On timeout, still try to match the node by URI/label below.
+                var nodeRendered = await _waitForNode(uri, NODE_WAIT_TIMEOUT_MS);
+                if (!nodeRendered) {
+                    console.warn('[SigmaGraph] focusEntityByUri: node not rendered after %d ms: %s', NODE_WAIT_TIMEOUT_MS, uri);
+                }
 
                 if (_graph) {
                     var found = null;
