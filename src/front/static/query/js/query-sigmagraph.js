@@ -2873,7 +2873,9 @@ var SigmaGraph = (function () {
                     '<p class="mt-2 mb-1 fw-semibold">Graph Viewer</p>' +
                     '<p class="small">Use the Search tab to search and explore entities.</p>' +
                     '</div>';
-                container.appendChild(placeholder);
+                // Sibling, not child: #sgContainer is a data-i18n-skip region
+                // (graph labels), and this hint is UI text that must translate.
+                container.insertAdjacentElement('afterend', placeholder);
             }
             placeholder.style.display = '';
         }

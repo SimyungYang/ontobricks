@@ -95,3 +95,28 @@ Tests: tests/units 9031 passed, 12 skipped, 1 xfailed, 0 failed (tests/units/fro
 Deselected tests/units/api/test_routes.py::TestHealthRoutes::test_readiness_route_returns_checks:
 it opens a live SQL warehouse session from the local environment and hangs on
 the plain 0.9.0 code too (environmental, unrelated to this change).
+
+================================================================================
+## Explorer empty-state hint translates
+================================================================================
+
+Context:
+The Explorer's "Graph Viewer — Use the Search tab to search and explore
+entities." hint stayed in English in Korean UI: it was appended inside
+#sgContainer, which is a data-i18n-skip region for graph labels.
+
+Changes:
+
+1. src/front/static/query/js/query-sigmagraph.js
+   The empty-state placeholder is inserted right after #sgContainer instead
+   of inside it. The card body is the positioned parent, so it renders in
+   the same place; _showEmptyState / _hideEmptyState are unchanged.
+2. tests/units/front/test_i18n.py
+   Checks the placeholder is a sibling of the skip region.
+
+Modified files:
+- src/front/static/query/js/query-sigmagraph.js
+- tests/units/front/test_i18n.py
+- changelogs/v0.9.0/simyung-yang_i18n_2026-10-20.log
+
+Tests: tests/units/front 1774 passed, 0 failed.
