@@ -43,3 +43,40 @@ Modified files:
 
 Tests: tests/units 9091 passed, 12 skipped, 1 xfailed, 0 failed (deselected the
 live-warehouse readiness test, which hangs locally on plain 0.9.0 too).
+
+================================================================================
+## Explorer expand keeps the searched entities when the cap is hit
+================================================================================
+
+Context:
+Searching one customer at depth 2 with a 50-entity cap returned a hub
+(the customer's country) and other customers of that country, but not the
+searched customer: the single-statement expand capped the union of all BFS
+levels with a bare LIMIT, so Postgres kept an arbitrary subset and could
+drop the seeds and their direct neighbours. Present in plain 0.9.0.
+
+Changes:
+
+1. src/back/core/graphdb/adjacency.py
+   New ranked_entity_ctes(): the capped entity set is ordered by the
+   nearest BFS level (then entity), so seeds come first, then level 1, and
+   so on. expand_and_fetch_sql uses it.
+2. src/back/core/graphdb/delta/DeltaFlatStore.py
+   The Delta expand path uses the same helper instead of its own copy of
+   the unordered CTEs.
+3. tests/units/graphdb/test_adjacency_sql.py
+   SQL-shape test for the hop ordering, plus a SQLite run of a seed -> hub
+   -> 100 leaves graph capped at 5 that must keep seed and hub.
+4. tests/units/architecture/baseline.json
+   Ratcheted: DeltaFlatStore.expand_and_fetch_subgraph is back under the
+   function budget; other entries shrank.
+
+Modified files:
+- src/back/core/graphdb/adjacency.py
+- src/back/core/graphdb/delta/DeltaFlatStore.py
+- tests/units/graphdb/test_adjacency_sql.py
+- tests/units/architecture/baseline.json
+- changelogs/v0.9.0/simyung-yang_2026-10-20.log
+
+Tests: tests/units 9093 passed, 12 skipped, 1 xfailed, 0 failed (live-warehouse
+readiness test deselected, as above).
