@@ -705,3 +705,10 @@ def test_settings_ui_cards_do_not_scroll_internally():
     block = css[start : css.index("}", start)]
     assert "flex: 0 0 auto;" in block
     assert "overflow: visible;" in block
+
+
+def test_explorer_empty_state_sits_outside_the_graph_skip_region():
+    # #sgContainer is skipped (graph labels); its empty-state hint is UI text.
+    script = (STATIC / "query/js/query-sigmagraph.js").read_text(encoding="utf-8")
+    assert "container.insertAdjacentElement('afterend', placeholder);" in script
+    assert "container.appendChild(placeholder);" not in script
