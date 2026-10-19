@@ -236,3 +236,57 @@ def test_props_page_sql_builds_ordered_page_with_total() -> None:
     assert "ORDER BY page.subject, page.predicate, page.object" in sql
     assert "LIMIT 2 OFFSET 3" in sql
     assert "O''Brien" in sql
+
+
+def _hub_graph(conn):
+    """seed -> hub -> 100 leaves, as adjacency (src, dst) and spo tables.
+
+    Seed and hub sort after the leaves, so an unordered cap that happens to
+    return entities by name would drop them.
+    """
+    conn.execute("CREATE TABLE adj_out (src TEXT, dst TEXT)")
+    conn.execute("CREATE TABLE adj_in (src TEXT, dst TEXT)")
+    conn.execute("CREATE TABLE g (subject TEXT, predicate TEXT, object TEXT)")
+    edges = [("z_seed", "y_hub")] + [(f"leaf{i:03d}", "y_hub") for i in range(100)]
+    for src, dst in edges:
+        conn.execute("INSERT INTO adj_out VALUES (?, ?)", (src, dst))
+        conn.execute("INSERT INTO adj_in VALUES (?, ?)", (src, dst))
+        conn.execute("INSERT INTO g VALUES (?, 'rel', ?)", (src, dst))
+    conn.execute("INSERT INTO g VALUES ('y_hub', 'label', 'Hub')")
+
+
+def test_capped_expansion_keeps_seeds_and_nearest_levels_first():
+    import sqlite3
+
+    conn = sqlite3.connect(":memory:")
+    _hub_graph(conn)
+    sql = expand_and_fetch_sql(
+        flavor="postgres",
+        adj_out="adj_out",
+        adj_in="adj_in",
+        spo="g",
+        selected_uris=["z_seed"],
+        depth=2,
+        max_entities=5,
+        max_triples=1000,
+        escape=lambda s: s.replace("'", "''"),
+    )
+    subjects = {row[0] for row in conn.execute(sql)}
+    assert {"z_seed", "y_hub"} <= subjects
+    assert len(subjects) == 5
+
+
+def test_capped_expansion_orders_entities_by_hop():
+    sql = expand_and_fetch_sql(
+        flavor="spark",
+        adj_out="o",
+        adj_in="i",
+        spo="g",
+        selected_uris=["http://ex/a"],
+        depth=2,
+        max_entities=10,
+        max_triples=100,
+        escape=lambda s: s,
+    )
+    assert "SELECT entity, 0 AS hop FROM level_0" in sql
+    assert "ORDER BY MIN(hop), entity LIMIT 11" in sql

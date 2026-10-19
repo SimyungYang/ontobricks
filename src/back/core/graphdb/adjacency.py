@@ -14,6 +14,7 @@ __all__ = [
     "SqlFlavor",
     "expand_and_fetch_sql",
     "expand_entity_neighbors_sql",
+    "ranked_entity_ctes",
     "seeded_bfs_sql",
     "typed_in_select",
     "typed_out_select",
@@ -135,6 +136,34 @@ def seeded_bfs_sql(
     )
 
 
+def ranked_entity_ctes(depth: int, max_entities: int) -> list[str]:
+    """CTEs that cap the BFS levels ``level_0..level_<depth>`` at *max_entities*.
+
+    Entities are kept nearest level first, so the seeds and their direct
+    neighbours always survive the cap instead of an arbitrary subset of the
+    union. ``entity_probe`` keeps one extra row so the caller can tell the
+    result was capped; ``entity_stats`` counts it.
+    """
+    levels = " UNION ALL ".join(
+        f"SELECT entity, {level} AS hop FROM level_{level}" for level in range(depth + 1)
+    )
+    return [
+        (
+            "entity_probe AS ("
+            f"SELECT entity, MIN(hop) AS hop FROM ({levels}) discovered "
+            f"GROUP BY entity ORDER BY MIN(hop), entity LIMIT {max_entities + 1})"
+        ),
+        (
+            "entities AS ("
+            f"SELECT entity FROM entity_probe ORDER BY hop, entity LIMIT {max_entities})"
+        ),
+        (
+            "entity_stats AS ("
+            "SELECT COUNT(*) AS _ob_expanded_count FROM entity_probe)"
+        ),
+    ]
+
+
 def expand_and_fetch_sql(
     *,
     flavor: SqlFlavor,
@@ -195,26 +224,7 @@ def expand_and_fetch_sql(
                 ),
             ]
         )
-    levels = " UNION ALL ".join(
-        f"SELECT entity FROM level_{level}" for level in range(depth + 1)
-    )
-    ctes.extend(
-        [
-            (
-                "entity_probe AS ("
-                f"SELECT DISTINCT entity FROM ({levels}) discovered "
-                f"LIMIT {max_entities + 1})"
-            ),
-            (
-                "entities AS ("
-                f"SELECT entity FROM entity_probe LIMIT {max_entities})"
-            ),
-            (
-                "entity_stats AS ("
-                "SELECT COUNT(*) AS _ob_expanded_count FROM entity_probe)"
-            ),
-        ]
-    )
+    ctes.extend(ranked_entity_ctes(depth, max_entities))
     hint = "/*+ BROADCAST(entities) */ " if flavor == "spark" else ""
     return (
         "WITH "
