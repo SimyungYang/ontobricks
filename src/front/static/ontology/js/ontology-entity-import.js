@@ -109,7 +109,11 @@
                 showError('No other domain in the registry.');
                 return;
             }
-            domains.forEach(d => select.add(new Option(d.name, d.name)));
+            domains.forEach(d => {
+                const option = new Option(d.name, d.name);
+                option.setAttribute('data-i18n-skip', '');
+                select.add(option);
+            });
         } catch (err) {
             showError(err.message);
         }
@@ -173,7 +177,7 @@
                 <div class="form-check mb-0">
                     <input class="form-check-input" type="checkbox" id="ei-${name}" data-entity="${name}" ${checked ? 'checked' : ''}>
                     <label class="form-check-label" for="ei-${name}">
-                        ${escapeHtml(e.emoji || '📦')} ${escapeHtml(e.label || e.name)}
+                        <span data-i18n-skip>${escapeHtml(e.emoji || '📦')} ${escapeHtml(e.label || e.name)}</span>
                         <span class="text-muted small">· ${e.attributes} attr.</span>${exists}
                     </label>
                 </div>${e.exists && checked ? conflictControls(e) : ''}
@@ -188,13 +192,13 @@
                     <input class="form-check-input" type="checkbox" id="${id}" data-entity="${escapeHtml(r.name)}"
                            ${state.selected.has(r.name) ? 'checked' : ''}>
                     <label class="form-check-label small" for="${id}">
-                        ${ARROWS[r.direction]} ${escapeHtml(r.relation)} <strong>${escapeHtml(r.name)}</strong>
+                        <span data-i18n-skip>${ARROWS[r.direction]} ${escapeHtml(r.relation)} <strong>${escapeHtml(r.name)}</strong></span>
                     </label>
                 </div>`;
         }).join('');
         return `
             <div class="mb-3">
-                <div class="fw-semibold small mb-1">${escapeHtml(name)}</div>
+                <div class="fw-semibold small mb-1" data-i18n-skip>${escapeHtml(name)}</div>
                 ${rows || '<p class="text-muted small mb-0">No related entities.</p>'}
             </div>`;
     }

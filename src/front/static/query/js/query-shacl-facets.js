@@ -193,7 +193,9 @@ function _shaclRenderModal(entityUri) {
         _shaclSetHtml('shaclFacetsGauges', '');
         body.innerHTML = '<div class="text-center text-muted py-4">' +
             '<i class="bi bi-shield fs-3 d-block mb-2" aria-hidden="true"></i>' +
-            'No SHACL shape applies to ' + _shaclEsc(classNames.join(', ') || 'this entity') + '.</div>';
+            (classNames.length
+                ? 'No SHACL shape applies to <span data-i18n-skip>' + _shaclEsc(classNames.join(', ')) + '</span>.'
+                : 'No SHACL shape applies to this entity.') + '</div>';
         return;
     }
 
@@ -290,7 +292,7 @@ function _shaclFacetRowHtml(f) {
         '<i class="bi ' + meta.icon + '" aria-hidden="true"></i>' +
         '<span class="visually-hidden">' + meta.label + '</span></span>' +
         '<div class="flex-grow-1 shacl-facet-main">' +
-        '<div class="fw-semibold">' + _shaclEsc(f.label || f.shape_id) +
+        '<div class="fw-semibold"><span data-i18n-skip>' + _shaclEsc(f.label || f.shape_id) + '</span>' +
         (f.status === 'fail' ? ' <span class="badge shacl-severity shacl-severity-' + severity.toLowerCase() + '">' + _shaclEsc(severity) + '</span>' : '') +
         '</div>';
 
@@ -298,7 +300,7 @@ function _shaclFacetRowHtml(f) {
     if (target) html += '<div class="small text-muted"><code>' + _shaclEsc(target) + '</code></div>';
     if (f.inherited_from) {
         html += '<div class="small text-muted"><i class="bi bi-diagram-2 me-1" aria-hidden="true"></i>inherited from ' +
-            _shaclEsc(f.inherited_from) + '</div>';
+            '<span data-i18n-skip>' + _shaclEsc(f.inherited_from) + '</span></div>';
     }
     if ((f.status === 'fail' || f.status === 'pass') && f.property_path) {
         const values = f.values || [];
@@ -309,7 +311,7 @@ function _shaclFacetRowHtml(f) {
             (f.values_truncated ? ' <span class="text-muted">+ more values not shown</span>' : '') + '</div>';
     }
     if (f.message && f.status !== 'pass') {
-        html += '<div class="small shacl-facet-message">' + _shaclEsc(f.message) + '</div>';
+        html += '<div class="small shacl-facet-message" data-i18n-skip>' + _shaclEsc(f.message) + '</div>';
     }
     return html + '</div></div></li>';
 }

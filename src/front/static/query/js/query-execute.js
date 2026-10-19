@@ -220,6 +220,8 @@ LIMIT ${limit}`,
         }
 
         const rows = result && Array.isArray(result.results) ? result.results : [];
+        // Result cells and SPARQL variable names are user data: keep them verbatim.
+        container.toggleAttribute('data-i18n-skip', rows.length > 0);
         if (!rows.length) {
             container.innerHTML = [
                 '<div class="results-empty-state">',
@@ -297,6 +299,7 @@ LIMIT ${limit}`,
         setStatus("danger", text);
         const container = el("sparqlResultsContainer");
         if (!container) return;
+        container.removeAttribute("data-i18n-skip");
         container.innerHTML = [
             '<div class="results-empty-state">',
             '  <i class="bi bi-exclamation-triangle text-warning"></i>',

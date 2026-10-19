@@ -74,7 +74,7 @@
             <div class="card">
                 <div class="card-body p-0">
                     <!-- Sigma Container -->
-                    <div data-i18n-skip id="sgContainer" aria-busy="false"></div>
+                    <div id="sgContainer" aria-busy="false" data-i18n-skip></div>
                     <div id="sgLoading" class="sg-loading-overlay">
                         <div class="ob-loading-spinner" role="status" aria-live="polite">
                             <svg class="ob-spinner-svg" viewBox="0 0 80 80" fill="none" aria-hidden="true">
@@ -402,14 +402,14 @@
                 <div class="sg-find-path-picker mb-3">
                     <input type="text" class="form-control" id="sgFindPathSource" placeholder="Search loaded entities…" autocomplete="off" aria-autocomplete="list" aria-controls="sgFindPathSourceList" aria-expanded="false">
                     <input type="hidden" id="sgFindPathSourceId">
-                    <div id="sgFindPathSourceList" class="sg-find-path-suggest d-none" role="listbox"></div>
+                    <div data-i18n-skip id="sgFindPathSourceList" class="sg-find-path-suggest d-none" role="listbox"></div>
                     <div id="sgFindPathSourcePicked" class="sg-find-path-picked d-none"></div>
                 </div>
                 <label class="form-label" for="sgFindPathTarget">Destination</label>
                 <div class="sg-find-path-picker mb-3">
                     <input type="text" class="form-control" id="sgFindPathTarget" placeholder="Search loaded entities…" autocomplete="off" aria-autocomplete="list" aria-controls="sgFindPathTargetList" aria-expanded="false">
                     <input type="hidden" id="sgFindPathTargetId">
-                    <div id="sgFindPathTargetList" class="sg-find-path-suggest d-none" role="listbox"></div>
+                    <div data-i18n-skip id="sgFindPathTargetList" class="sg-find-path-suggest d-none" role="listbox"></div>
                     <div id="sgFindPathTargetPicked" class="sg-find-path-picked d-none"></div>
                 </div>
             </div>

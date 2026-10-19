@@ -121,6 +121,7 @@ def _translate_tree(tree_js: str, ids: list, target: str = "root") -> dict:
 KEEP_IN_ENGLISH = {
     "API",
     "Databricks",
+    "GitHub",
     "Lakebase",
     "Lakehouse",
     "Neo4j",
@@ -178,13 +179,16 @@ USER_CONTENT_ROOTS = (
     "inferredTriplesBody",
     "pagerankDetailBody",
     "dqExecViolationsBody",
+    "shaclFacetsEntity",
+    "shaclFacetsSubtitle",
+    "sgFindPathSourceList",
+    "sgFindPathTargetList",
     # Registry
     "registryDomainsList",
     "bridgesContent",
     "exportObxTableBody",
     "importObxTableBody",
     # Domain
-    "versionsTableBody",
     "domainDiscussionsContainer",
     "docFileList",
     "docQueueList",
@@ -198,7 +202,6 @@ USER_CONTENT_ROOTS = (
     # Settings and shared dialogs
     "neo4jConnectionList",
     "lockReleaseName",
-    "ucBrowserFilesList",
     "ucFileDialogFilesList",
 )
 
@@ -568,6 +571,49 @@ def test_script_rendered_user_names_are_skip_regions():
     comments = (STATIC_JS / "comments-panel.js").read_text(encoding="utf-8")
     assert '"oc-text oc-md" data-i18n-skip' in comments
     assert '"oc-author" data-i18n-skip' in comments
+
+
+# Script-rendered user content introduced by 0.9.0 (entity panel rows, Generate
+# review cards, entity import, Find Path, SHACL facets, business-rule and Job
+# popups, LLM picker, audit diffs, version cards). (file, snippet) pairs.
+SCRIPT_SKIP_MARKERS = (
+    ("ontology/js/ontology-shared-panels.js", '<span data-i18n-skip>${escapeHtml(title)}</span>'),
+    ("ontology/js/ontology-shared-panels.js", '"panel-item-meta" data-i18n-skip'),
+    ("ontology/js/ontology-shared-panels.js", '"panel-item-desc" data-i18n-skip'),
+    ("ontology/js/ontology-shared-panels.js", '<span data-i18n-skip>${escapeHtml(o.textContent.trim())}</span>'),
+    ("ontology/js/ontology-wizard-review.js", '"wizard-entity-label" data-i18n-skip'),
+    ("ontology/js/ontology-wizard-review.js", '"wizard-chip" data-i18n-skip'),
+    ("ontology/js/ontology-entity-import.js", "option.setAttribute('data-i18n-skip', '');"),
+    ("ontology/js/ontology-entity-import.js", '"fw-semibold small mb-1" data-i18n-skip'),
+    ("query/js/query-find-path.js", '"sg-find-path-picked-label" data-i18n-skip'),
+    ("query/js/query-shacl-facets.js", '"small shacl-facet-message" data-i18n-skip'),
+    ("query/js/query-business-rules.js", "<tbody data-i18n-skip>${rows}</tbody>"),
+    ("query/js/query-dashboard.js", "<span data-i18n-skip>${escapeHtml(label)}</span>"),
+    ("global/js/llm-endpoint-picker.js", "button.setAttribute('data-i18n-skip', '');"),
+    ("domain/js/domain-audit.js", '"audit-diff-row" data-i18n-skip'),
+    ("domain/js/domain-audit.js", '"audit-meta" data-i18n-skip'),
+    ("domain/js/domain-versions.js", "description.setAttribute('data-i18n-skip', '');"),
+)
+
+
+@pytest.mark.parametrize("path,snippet", SCRIPT_SKIP_MARKERS)
+def test_script_rendered_090_user_content_is_skipped(path, snippet):
+    assert snippet in (STATIC / path).read_text(encoding="utf-8")
+
+
+def test_versions_card_list_translates_chrome_and_skips_user_fields():
+    # Status badges and action buttons are chrome; only description / author are skipped.
+    html = (TEMPLATES / "partials/domain/_domain_versions.html").read_text(encoding="utf-8")
+    assert "data-i18n-skip" not in _opening_tag(html, "versionsCardList")
+
+
+def test_slots_that_alternate_names_and_placeholders_toggle_the_skip_marker():
+    navbar = (STATIC_JS / "navbar.js").read_text(encoding="utf-8")
+    assert "currentDomainNameEl.toggleAttribute('data-i18n-skip', hasDomain);" in navbar
+    assert "mapLabel.toggleAttribute('data-i18n-skip', hasDomain);" in navbar
+    sparql = (STATIC / "query/js/query-execute.js").read_text(encoding="utf-8")
+    assert "container.toggleAttribute('data-i18n-skip', rows.length > 0);" in sparql
+    assert 'container.removeAttribute("data-i18n-skip");' in sparql
 
 
 def test_name_slots_with_static_placeholder_are_skipped_only_while_showing_a_name():
