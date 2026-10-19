@@ -412,7 +412,7 @@ def test_workflow_routes_are_lettered_in_order():
     from agents.agent_dtwin_chat.engine import SYSTEM_PROMPT
 
     letters = _workflow_route_letters(SYSTEM_PROMPT)
-    assert letters == [chr(ord("A") + i) for i in range(len(letters))] and len(letters) == 8
+    assert letters == [chr(ord("A") + i) for i in range(len(letters))] and len(letters) == 10
 
 
 def test_default_render_keeps_depth_one_wording():
@@ -468,3 +468,25 @@ def test_drop_unresolvable_links_leaves_other_links():
 
     text = "[docs](https://docs.databricks.com) [B](/resolve?uri=urn:x:1)"
     assert drop_unresolvable_links(text) == text
+
+
+def test_prompt_covers_hierarchy_scope_and_same_name_items():
+    from agents.agent_dtwin_chat.engine import SYSTEM_PROMPT
+
+    assert "everything under" in SYSTEM_PROMPT and "total* fields" in SYSTEM_PROMPT
+    assert "follow the parent link" in SYSTEM_PROMPT
+    assert 'group by the label (by:["ofProduct.label"])' in SYSTEM_PROMPT
+
+
+def test_prompt_requires_schema_check_before_claiming_absence():
+    from agents.agent_dtwin_chat.engine import SYSTEM_PROMPT
+
+    assert "Before saying a field, value or link does not exist" in SYSTEM_PROMPT
+    assert "per-entity breakdown" in SYSTEM_PROMPT
+
+
+def test_prompt_maps_state_words_to_categorical_filters():
+    from agents.agent_dtwin_chat.engine import SYSTEM_PROMPT
+
+    assert "names a state or kind" in SYSTEM_PROMPT
+    assert "group by that field first" in SYSTEM_PROMPT
