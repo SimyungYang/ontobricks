@@ -39,7 +39,7 @@ var SigmaGraph = (function () {
     var NODE_WAIT_TIMEOUT_MS = 5000;
     // Default for the graph-search entity cap; matches the selected
     // #sgMaxEntities option and GraphFilter.EXPLORER_MAX_ENTITIES_DEFAULT.
-    var DEFAULT_MAX_ENTITIES = 5000;
+    var DEFAULT_MAX_ENTITIES = 50;
 
     var _renderer = null;
     var _graph = null;

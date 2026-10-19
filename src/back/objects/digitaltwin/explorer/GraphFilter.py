@@ -18,8 +18,10 @@ from back.objects.digitaltwin.constants import RDF_TYPE
 logger = get_logger(__name__)
 
 # Must match ``#sgMaxEntities`` in ``_query_sigmagraph.html``.
-EXPLORER_MAX_ENTITIES_MIN = 100
-EXPLORER_MAX_ENTITIES_DEFAULT = 5000
+# Small default: a graph search is usually a lookup, and a few dozen
+# entities render quickly and stay readable.
+EXPLORER_MAX_ENTITIES_MIN = 50
+EXPLORER_MAX_ENTITIES_DEFAULT = EXPLORER_MAX_ENTITIES_MIN
 EXPLORER_MAX_ENTITIES_UI_MAX = 20_000
 
 
