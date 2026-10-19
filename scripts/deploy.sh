@@ -23,6 +23,8 @@ set -euo pipefail
 #      "what's already uploaded"): if a critical file (run.py, pyproject.toml)
 #      is missing remotely, it wipes the snapshot and re-deploys once, so the
 #      app can never boot with a missing entrypoint / dependencies file.
+#  6c. Restore the app SP self-permissions BEFORE the apps start —
+#      `bundle deploy` rewrites the app ACL and drops them (step 10 re-checks).
 #   7. (Optional, --bind) bind the existing Apps resource to this bundle.
 #   8. Start the app (unless `--no-run`).
 #   9. Verify the deployed app status + resource bindings.
@@ -136,7 +138,7 @@ while [[ $# -gt 0 ]]; do
         --skip-app-yaml)    RENDER_APP_YAML=false; shift ;;
         --dry-run|--check)  DRY_RUN=true; shift ;;
         -h|--help)
-            sed -n '4,48p' "$0" | sed 's/^# \{0,1\}//'
+            sed -n '4,50p' "$0" | sed 's/^# \{0,1\}//'
             exit 0
             ;;
         *) die "Unknown option: $1 (run with --help for usage)" ;;
@@ -683,6 +685,34 @@ else
     fi
 fi
 
+# Run the idempotent app self-permission bootstrap as its own step.
+#   $1  step label        $2  success message        $3  failure warning
+# A failure only warns: the grant is retried (step 10 / `make bootstrap-perms`).
+grant_app_self_permissions() {
+    begin_step "$1"
+    chmod +x scripts/bootstrap/app-permissions.sh
+    if scripts/bootstrap/app-permissions.sh "$APP_NAME" "$MCP_APP_NAME"; then
+        ok "$2"
+    else
+        warn "$3"
+    fi
+}
+
+# ── 6c. App self-permissions BEFORE start ───────────────────────────
+# `bundle deploy` (and the 6b re-deploy, if it ran) rewrites the app ACL
+# from databricks.yml `permissions:`, which drops the app SP's own
+# CAN_MANAGE and the MCP SP's CAN_USE on the main app. If the app restarts
+# before the grant is restored (step 10), every visitor hits
+# /access-denied?reason=bootstrap until it is. Both apps and their SPs
+# already exist after `bundle deploy` and the grant only needs `apps get`
+# + `update-permissions` (not a RUNNING app), so restore it here, before
+# step 8 starts the apps. Step 10 stays as an idempotent backstop.
+if $DO_BOOTSTRAP; then
+    grant_app_self_permissions "App self-permissions (pre-start)" \
+        "app self-permissions restored before start" \
+        "pre-start self-permission grant failed — step 10 retries after start."
+fi
+
 # ── 7. Bind resources (first-time only) ────────────────────────────
 if $DO_BIND; then
     begin_step "Bind existing app"
@@ -822,7 +852,9 @@ if ! $DO_BOOTSTRAP; then
     exit 0
 fi
 
-# ── 10. App self-permissions (first-deploy bootstrap) ──────────────
+# ── 10. App self-permissions (idempotent backstop) ─────────────────
+# Re-applies the grant step 6c already made before start, in case that
+# attempt failed or the ACL changed while the apps were starting.
 # The app's service principal needs CAN_MANAGE on its OWN app so the
 # middleware can read the ACL to resolve admin/app-user roles.
 # The MCP app service principal also needs CAN_USE on the main app so
@@ -832,13 +864,9 @@ fi
 # the UI reports a misleading "job not found").
 # Idempotent — safe to re-run. The bootstrap script reads APP_NAME /
 # MCP_APP_NAME from the env we exported via deploy.config.sh.
-begin_step "App self-permissions"
-chmod +x scripts/bootstrap/app-permissions.sh
-if scripts/bootstrap/app-permissions.sh "$APP_NAME" "$MCP_APP_NAME"; then
-    ok "app self-permissions applied"
-else
-    warn "app self-permission bootstrap returned non-zero — the app may not yet be reachable; re-run \`make bootstrap-perms\` once it is RUNNING."
-fi
+grant_app_self_permissions "App self-permissions (backstop)" \
+    "app self-permissions applied" \
+    "app self-permission bootstrap returned non-zero — the app may not yet be reachable; re-run \`make bootstrap-perms\` once it is RUNNING."
 
 # ── 10b. Initialize Lakebase registry schema (create-if-missing DDL) ─
 if $IS_LAKEBASE; then

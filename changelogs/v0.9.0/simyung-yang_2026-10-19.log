@@ -100,3 +100,39 @@ Architecture guardrails (tests/units/architecture): 9 passed.
 AI-feature gate (src/agents/**): the 0.8.1 line was evaluated on a 130-question
 domain set; the port is re-evaluated on an isolated 0.9.0 test app before any
 deploy. Not deployed.
+
+================================================================================
+## Restore app self-permissions before the apps start
+================================================================================
+
+Context:
+`databricks bundle deploy` rewrites the app ACL from databricks.yml
+`permissions:` and drops the app service principal's CAN_MANAGE on its own app
+(and the MCP SP's CAN_USE on the main app). deploy.sh only restored them after
+`bundle run`, so anyone opening the freshly restarted app hit
+/access-denied?reason=bootstrap until step 10 finished. Ported from the 0.8.1
+line (feat/graph-chat-performance 8387f8a3).
+
+Changes:
+
+1. scripts/deploy.sh
+   New step 6c "App self-permissions (pre-start)" runs
+   scripts/bootstrap/app-permissions.sh "$APP_NAME" "$MCP_APP_NAME" after
+   `bundle deploy` and the 6b synced-source re-deploy, before step 8 starts
+   the apps. Gated on --no-bootstrap like step 10; a failure only warns.
+   Step 10 is kept as an idempotent backstop; both share
+   grant_app_self_permissions(). --help range follows the longer header.
+2. tests/units/scripts/test_deploy_app_permissions_prestart.py
+   Wiring (after the last bundle deploy, before bundle run, honours
+   --no-bootstrap, backstop kept) and the real helper run against a fake
+   bootstrap script (passes both app names, failure warns and continues).
+
+Modified files:
+- scripts/deploy.sh
+- tests/units/scripts/test_deploy_app_permissions_prestart.py
+- changelogs/v0.9.0/simyung-yang_2026-10-19.log
+
+Tests: `bash -n scripts/deploy.sh` OK (shellcheck not installed).
+`.venv/bin/python -m pytest -q tests/units/scripts tests/units/settings tests/units/architecture`
+-> 1045 passed. The new test file fails 7/7 against origin/0.9.0's deploy.sh.
+Not deployed.
