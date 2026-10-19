@@ -317,13 +317,13 @@ function panelItemRow({ icon, iconTone = 'text-primary', title, badge = '', meta
     const remove = !viewOnly && removeOnclick
         ? `<button type="button" class="btn btn-sm btn-outline-danger py-0 px-1" onclick="${removeOnclick}" title="${escapeHtml(removeTitle)}" aria-label="${escapeHtml(removeTitle)}"><i class="bi bi-x"></i></button>`
         : '';
-    const metaHtml = meta ? `<div class="panel-item-meta">${escapeHtml(meta)}</div>` : '';
+    const metaHtml = meta ? `<div class="panel-item-meta" data-i18n-skip>${escapeHtml(meta)}</div>` : '';
     return `
         <div class="panel-item">
             <div class="panel-item-head">
                 <i class="bi ${icon} ${iconTone} panel-item-icon"></i>
                 <div class="panel-item-text">
-                    <div class="panel-item-title">${escapeHtml(title)} ${badge}</div>
+                    <div class="panel-item-title"><span data-i18n-skip>${escapeHtml(title)}</span> ${badge}</div>
                     ${metaHtml}
                 </div>
                 ${remove}
@@ -334,7 +334,7 @@ function panelItemRow({ icon, iconTone = 'text-primary', title, badge = '', meta
 
 function panelInlineField({ value = '', placeholder = '', oninput = '', viewOnly = false, id = '' }) {
     if (viewOnly) {
-        return value ? `<div class="panel-item-desc">${escapeHtml(value)}</div>` : '';
+        return value ? `<div class="panel-item-desc" data-i18n-skip>${escapeHtml(value)}</div>` : '';
     }
     const idAttr = id ? ` id="${id}"` : '';
     return `<textarea class="form-control form-control-sm panel-inline-field"${idAttr} rows="1" placeholder="${escapeHtml(placeholder)}" aria-label="${escapeHtml(placeholder)}" oninput="${oninput}">${escapeHtml(value)}</textarea>`;
@@ -648,7 +648,7 @@ async function openEntityPanelForEdit(idx, options = {}) {
     }
     
     const emoji = cls.emoji || OntologyState.defaultClassEmoji || '📦';
-    panel.querySelector('#sharedPanelTitle').innerHTML = `${emoji} <span id="sharedPanelItemName">${cls.name}</span>`;
+    panel.querySelector('#sharedPanelTitle').innerHTML = `${emoji} <span id="sharedPanelItemName" data-i18n-skip>${cls.name}</span>`;
     await renderEntityForm(panel, cls);
     attachDirtyTracking();
 }
@@ -687,7 +687,7 @@ async function openEntityPanelForView(idx, options = {}) {
     if (!panel) return;
     
     const emoji = cls.emoji || OntologyState.defaultClassEmoji || '📦';
-    panel.querySelector('#sharedPanelTitle').innerHTML = `<i class="bi bi-eye"></i> ${emoji} <span id="sharedPanelItemName">${cls.name}</span>`;
+    panel.querySelector('#sharedPanelTitle').innerHTML = `<i class="bi bi-eye"></i> ${emoji} <span id="sharedPanelItemName" data-i18n-skip>${cls.name}</span>`;
     await renderEntityForm(panel, cls, true);
 }
 
@@ -925,7 +925,7 @@ function renderSharedAxiomChips(selectId, viewOnly) {
     const selected = options.filter(o => o.selected);
     chips.innerHTML = selected.length
         ? selected.map(o => `
-            <span class="panel-axiom-chip">${escapeHtml(o.textContent.trim())}${viewOnly ? '' :
+            <span class="panel-axiom-chip"><span data-i18n-skip>${escapeHtml(o.textContent.trim())}</span>${viewOnly ? '' :
                 `<button type="button" class="btn-close" onclick="removeSharedAxiomChip('${selectId}', ${options.indexOf(o)})" aria-label="Remove ${escapeHtml(o.value)}"></button>`}</span>`).join('')
         : `<span class="panel-axiom-none">None</span>`;
     _updatePanelSection(selectId, { count: selected.length });
@@ -934,7 +934,7 @@ function renderSharedAxiomChips(selectId, viewOnly) {
     if (!add) return;
     const free = options.filter(o => !o.selected);
     add.innerHTML = `<option value="">+ Add entity…</option>` +
-        free.map(o => `<option value="${options.indexOf(o)}">${escapeHtml(o.textContent.trim())}</option>`).join('');
+        free.map(o => `<option value="${options.indexOf(o)}" data-i18n-skip>${escapeHtml(o.textContent.trim())}</option>`).join('');
     add.disabled = free.length === 0;
 }
 
@@ -1588,7 +1588,7 @@ function _renderDatasetAssetList(assets) {
                     onclick='_datasetSelectAsset(${JSON.stringify(a).replace(/'/g, "&#39;")})'>
                 <i class="bi ${icon} text-primary"></i>
                 <div class="flex-grow-1">
-                    <div class="fw-semibold">${escapeHtml(a.name)} ${badge}</div>
+                    <div class="fw-semibold"><span data-i18n-skip>${escapeHtml(a.name)}</span> ${badge}</div>
                     ${a.comment ? `<small class="text-muted">${escapeHtml(String(a.comment).substring(0, 80))}</small>` : ''}
                 </div>
                 <i class="bi bi-chevron-right text-muted"></i>
@@ -1884,7 +1884,7 @@ async function _jobSelectorReload() {
             const id = Number(job.job_id);
             const name = job.name || ('job-' + id);
             return `<button type="button" class="btn btn-sm btn-outline-secondary w-100 text-start mb-1" onclick="_jobSelectJob(${id}, this.dataset.name)" data-name="${escapeHtml(name)}">
-                <span class="fw-semibold">${escapeHtml(name)}</span>
+                <span class="fw-semibold" data-i18n-skip>${escapeHtml(name)}</span>
                 <small class="text-muted d-block">job:${id}</small>
             </button>`;
         }).join('');
@@ -2210,9 +2210,9 @@ function _renderBusinessRuleCandidates() {
                 <label class="list-group-item d-flex gap-2 align-items-start ${disabled ? 'text-muted' : ''}">
                     <input class="form-check-input mt-1" type="checkbox" value="${escapeHtml(r.name)}" ${disabled ? 'disabled' : ''} ${checked.has(r.name) ? 'checked' : ''}>
                     <span class="flex-grow-1">
-                        <span class="fw-semibold">${escapeHtml(r.name)}</span>
+                        <span class="fw-semibold" data-i18n-skip>${escapeHtml(r.name)}</span>
                         ${disabled ? '<span class="badge bg-secondary ms-1">Disabled</span>' : ''}
-                        ${r.description ? `<small class="d-block">${escapeHtml(r.description)}</small>` : ''}
+                        ${r.description ? `<small class="d-block" data-i18n-skip>${escapeHtml(r.description)}</small>` : ''}
                         <code class="small d-block text-break">${escapeHtml(r.antecedent || '')} &rarr; ${escapeHtml(r.consequent || '')}</code>
                     </span>
                 </label>`;
@@ -2712,7 +2712,7 @@ async function openBridgeSelectorModal() {
                     onclick="_bridgeSelectDomain('${escapeHtml(p.name)}')">
                 <i class="bi bi-box text-primary"></i>
                 <div class="flex-grow-1">
-                    <div class="fw-semibold">${escapeHtml(p.name)}</div>
+                    <div class="fw-semibold" data-i18n-skip>${escapeHtml(p.name)}</div>
                     ${p.description ? `<small class="text-muted">${escapeHtml(p.description)}</small>` : ''}
                 </div>
                 <i class="bi bi-chevron-right text-muted"></i>
@@ -2761,7 +2761,7 @@ function _renderBridgeClassList(classes) {
                 onclick='_bridgeSelectClass(${JSON.stringify(c).replace(/'/g, "&#39;")})'>
             <span>${c.emoji || '📦'}</span>
             <div class="flex-grow-1">
-                <div class="fw-semibold">${escapeHtml(c.name)}</div>
+                <div class="fw-semibold" data-i18n-skip>${escapeHtml(c.name)}</div>
                 ${c.description ? `<small class="text-muted">${escapeHtml(c.description.substring(0, 80))}</small>` : ''}
             </div>
             <i class="bi bi-chevron-right text-muted"></i>
@@ -3463,7 +3463,7 @@ async function openRelationshipPanelForEdit(idx, options = {}) {
         return;
     }
     
-    panel.querySelector('#sharedPanelTitle').innerHTML = `<span id="sharedPanelItemName">${prop.name}</span>`;
+    panel.querySelector('#sharedPanelTitle').innerHTML = `<span id="sharedPanelItemName" data-i18n-skip>${prop.name}</span>`;
     await renderRelationshipForm(panel, prop);
     attachDirtyTracking();
 }
@@ -3486,7 +3486,7 @@ async function openRelationshipPanelForView(idx, options = {}) {
     const panel = sharedPanelCurrentSection?.querySelector('.shared-detail-panel');
     if (!panel) return;
     
-    panel.querySelector('#sharedPanelTitle').innerHTML = `<i class="bi bi-eye"></i> <span id="sharedPanelItemName">${prop.name}</span>`;
+    panel.querySelector('#sharedPanelTitle').innerHTML = `<i class="bi bi-eye"></i> <span id="sharedPanelItemName" data-i18n-skip>${prop.name}</span>`;
     await renderRelationshipForm(panel, prop, true);
 }
 

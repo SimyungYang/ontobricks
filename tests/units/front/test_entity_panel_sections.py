@@ -143,7 +143,7 @@ def test_inline_field_is_a_borderless_textarea_or_plain_text():
     assert "a&lt;b" in edit
     assert 'oninput="onX(0, this.value)"' in edit
     assert 'aria-label="What does it do?"' in edit
-    assert _run_helpers("panelInlineField({value: 'hello', viewOnly: true})") == '<div class="panel-item-desc">hello</div>'
+    assert _run_helpers("panelInlineField({value: 'hello', viewOnly: true})") == '<div class="panel-item-desc" data-i18n-skip>hello</div>'
     assert _run_helpers("panelInlineField({value: '', viewOnly: true})") == ""
 
 

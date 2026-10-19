@@ -206,14 +206,14 @@
      * "existing entities cannot be edited/excluded/removed" invariant. */
     function renderLockedAnchorRow(anchor) {
         const altChips = (anchor.alternate_labels || [])
-            .map(function (a) { return '<span class="wizard-chip">' + escHtml(a) + '</span>'; })
+            .map(function (a) { return '<span class="wizard-chip" data-i18n-skip>' + escHtml(a) + '</span>'; })
             .join('');
         return (
             '<div class="wizard-entity-row wizard-entity-locked" data-entity-id="' +
             escAttr(anchor.id) + '" data-locked="true">' +
             '<div class="d-flex align-items-center">' +
             '<i class="bi bi-lock-fill wizard-lock-icon" title="Locked \u2014 existing ontology entity" aria-hidden="true"></i>' +
-            '<span class="wizard-entity-label">' + escHtml(anchor.canonical_label) + '</span>' +
+            '<span class="wizard-entity-label" data-i18n-skip>' + escHtml(anchor.canonical_label) + '</span>' +
             '<span class="badge text-bg-secondary ms-auto">Entity</span>' +
             '</div>' +
             (altChips ? '<div class="wizard-chip-list">' + altChips + '</div>' : '') +
@@ -257,7 +257,7 @@
 
         const altChips = altLabels.map(function (label, idx) {
             return (
-                '<span class="wizard-chip" data-idx="' + idx + '">' + escHtml(label) +
+                '<span class="wizard-chip" data-idx="' + idx + '"><span data-i18n-skip>' + escHtml(label) + '</span>' +
                 '<button type="button" class="wizard-chip-remove" data-action="wizard-review-remove-alt-label" ' +
                 'data-entity-id="' + id + '" data-idx="' + idx + '" aria-label="Remove ' + escAttr(label) + '">' +
                 '&times;</button></span>'

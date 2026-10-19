@@ -182,6 +182,13 @@ materialise Explorer indexes (`_adj_out` / `_adj_in`, `_entity_search`,
 [Graph DB Integration](docs/backend.md#engine-integration) ·
 [Graph Query Optimizations](docs/backend.md#graph-query-optimizations).
 
+### English and Korean UI
+Every user can switch the interface between **English** and **한국어** from
+the user menu in the navbar; the choice is remembered per browser. Ontology,
+mapping and graph content is never translated. Deployers set the default with
+`APP_UI_LANG` — see [User Guide](docs/user-guide.md#interface-language) and
+[Deployment](docs/deployment.md).
+
 ## Runs entirely on your Databricks
 
 OntoBricks is not a separate platform. It deploys as a **Databricks App** and

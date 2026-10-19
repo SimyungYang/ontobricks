@@ -190,7 +190,7 @@ var ExplorerFindPath = (function () {
         if (side.picked) {
             side.picked.classList.remove('d-none');
             side.picked.innerHTML =
-                '<span class="sg-find-path-picked-label">' +
+                '<span class="sg-find-path-picked-label" data-i18n-skip>' +
                 _esc(node.label) +
                 (node.type ? ' <span class="sg-find-path-suggest-type d-inline">(' + _esc(node.type) + ')</span>' : '') +
                 '</span>' +

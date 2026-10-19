@@ -52,7 +52,7 @@ async function openEntityBusinessRuleModal(entityUri, ruleName) {
                 <div class="modal-content">
                     <div class="modal-header bg-dark text-white py-2">
                         <h5 class="modal-title" id="${modalId}Label">
-                            <i class="bi bi-diagram-3 me-2"></i>${esc(ruleName)}
+                            <i class="bi bi-diagram-3 me-2"></i><span data-i18n-skip>${esc(ruleName)}</span>
                         </h5>
                         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                     </div>
@@ -96,7 +96,7 @@ async function openEntityBusinessRuleModal(entityUri, ruleName) {
     }
 
     body.innerHTML = `
-        ${pending.description ? `<p class="text-muted small mb-2">${esc(pending.description)}</p>` : ''}
+        ${pending.description ? `<p class="text-muted small mb-2" data-i18n-skip>${esc(pending.description)}</p>` : ''}
         <div class="mb-2 small"><span class="fw-semibold">Entity:</span> <code>${esc(pending.entity_label)}</code></div>
         <div class="p-2 border rounded bg-light small mb-3">
             <code class="text-break">${esc(pending.antecedent)} &rarr; ${esc(pending.consequent)}</code>
@@ -165,7 +165,7 @@ function _brRenderResult(result, esc) {
             ${inferred} triple(s) inferred, ${result.materialized_count || 0} written to the graph.</div>
         <div class="table-responsive"><table class="table table-sm table-striped table-bordered mb-0">
             <thead class="table-light"><tr><th>Subject</th><th>Predicate</th><th>Object</th></tr></thead>
-            <tbody>${rows}</tbody>
+            <tbody data-i18n-skip>${rows}</tbody>
         </table></div>${more}`;
 }
 

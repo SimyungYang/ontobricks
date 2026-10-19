@@ -74,7 +74,10 @@ function openWorkspaceMap(event) {
 function syncWorkspaceMapTitle() {
     const source = document.getElementById('currentDomainName');
     const target = document.getElementById('workspaceMapDomainLabel');
-    if (source && target) target.textContent = source.textContent;
+    if (source && target) {
+        target.toggleAttribute('data-i18n-skip', source.hasAttribute('data-i18n-skip'));
+        target.textContent = source.textContent;
+    }
 }
 
 function highlightWorkspaceMapCurrent() {
@@ -331,6 +334,8 @@ function applyDomainInfo(data) {
     }
 
     if (currentDomainNameEl) {
+        // The domain name is user content; the "Domain" placeholder stays translatable.
+        currentDomainNameEl.toggleAttribute('data-i18n-skip', hasDomain);
         if (hasDomain) {
             currentDomainNameEl.textContent = domainName;
             applyDomainStatusBadge(currentDomainNameEl, status);
@@ -345,6 +350,7 @@ function applyDomainInfo(data) {
 
     const mapLabel = document.getElementById('workspaceMapDomainLabel');
     if (mapLabel) {
+        mapLabel.toggleAttribute('data-i18n-skip', hasDomain);
         mapLabel.textContent = hasDomain ? `${domainName} V${version}` : 'Domain';
         applyDomainStatusBadge(mapLabel, hasDomain ? status : null);
     }

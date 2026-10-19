@@ -349,7 +349,7 @@ function _showEntityActionModal(icon, label, fullName, bodyHtml) {
                 <div class="modal-content">
                     <div class="modal-header bg-dark text-white py-2">
                         <h5 class="modal-title" id="entityActionResultModalLabel">
-                            <i class="bi ${icon} me-2"></i>${escapeHtml(label)}
+                            <i class="bi ${icon} me-2"></i><span data-i18n-skip>${escapeHtml(label)}</span>
                         </h5>
                         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                     </div>
@@ -383,7 +383,7 @@ function openEntityActionModal(entityUri, actionFullName, label, description) {
         ? escapeHtml(String(description).trim())
         : '';
     const descriptionBlock = safeDescription
-        ? `<p class="text-muted small mb-3">${safeDescription}</p>`
+        ? `<p class="text-muted small mb-3" data-i18n-skip>${safeDescription}</p>`
         : '';
     if (_entityActionIsJob(actionFullName)) {
         _openJobActionModal(entityUri, actionFullName, label, descriptionBlock);

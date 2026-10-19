@@ -1,0 +1,97 @@
+================================================================================
+## English/Korean UI internationalisation ported onto 0.9.0 + Korean for the 0.9.0 UI
+================================================================================
+
+Context:
+The client-side i18n layer (global/js/i18n.js + the flat Korean dictionary
+global/js/i18n-ko.js, `ob_lang` cookie, `ONTOBRICKS_UI_LANG` deploy default,
+`data-i18n-skip` for user content) was re-applied on top of 0.9.0. 0.9.0
+added a large amount of new UI copy (Studio, 3-step ontology Generate, SPARQL
+playground, Find Path, SHACL data-quality facets, entity panel regroup with
+Functions / Databricks Jobs / Inference rules, GitHub mirror, version delete
+safeguards, audit before/after, Build vs Query SQL Warehouse and Lakehouse//RT,
+CloudFetch toggle, AI Gateway LLM picker, data assets import limit, Knowledge
+Store, "Information" renamed to "General", ...) that had no Korean entries, so
+the coverage ratchet failed and Korean users saw those screens in English.
+Only application chrome is translated; entity / attribute / domain / rule /
+job names, descriptions, query results and audit values stay verbatim.
+
+Changes:
+
+1. src/front/static/global/js/i18n-ko.js
+   678 new Korean entries: every
+   template and script string the coverage test reported, the five new menu
+   labels, and the JS-built runtime messages of the new modules (toasts,
+   confirm dialogs, `{n}` count templates, status chips). Renamed terms
+   follow the old choices: Data Assets → 데이터 자산, Knowledge Store →
+   지식 스토어, General → 일반, Studio → 스튜디오; Job stays "Job".
+   46 entries whose English 0.9.0 no longer shows (mostly "Data Source(s)",
+   renamed to "Data Asset(s)") were removed; their new wording has entries.
+   "Cohort Discovery" now reads 세그먼트 탐색, matching "Cohort discovery".
+2. src/front/static/ontology/js/ontology-shared-panels.js,
+   ontology-wizard-review.js, ontology-entity-import.js,
+   src/front/static/query/js/query-find-path.js, query-shacl-facets.js,
+   query-business-rules.js, query-dashboard.js, query-execute.js,
+   src/front/static/global/js/llm-endpoint-picker.js, navbar.js,
+   src/front/static/domain/js/domain-audit.js, domain-versions.js
+   `data-i18n-skip` on script-rendered user content: entity panel item
+   titles / meta / descriptions and axiom chips, Generate review labels and
+   alternate labels, entity-import names, Find Path picks, SHACL shape labels
+   and messages, business-rule and Job popup titles / descriptions / result
+   rows, LLM endpoint names, audit asset / old / new values, actors and
+   comments, version descriptions and authors. SPARQL results and the navbar
+   / workspace-map domain name toggle the marker so their placeholders stay
+   translatable.
+3. src/front/templates/partials/domain/_domain_versions.html
+   The version card list is no longer skipped wholesale, so status badges and
+   action buttons translate (user fields are skipped per element).
+4. src/front/templates/partials/dtwin/_query_shacl_facets_modal.html,
+   _query_sigmagraph.html
+   Skip markers on the SHACL facet entity / subtitle and the Find Path
+   suggestion lists.
+5. src/front/templates/partials/ontology/_ontology_business_rules.html,
+   partials/settings/_settings_github.html
+   `translate="no"` on example identifiers (riskTier = high, HighRiskCustomer,
+   VipCustomer, hasOrder, amount) and example placeholders (my-org,
+   ontobricks-ontologies, main, ontobricks@example.com).
+6. tests/units/front/test_i18n.py
+   GitHub added to the keep-in-English menu names; user-content roots updated
+   for 0.9.0 (removed versionsTableBody / ucBrowserFilesList, added SHACL
+   facet and Find Path roots); new checks for the script-rendered skip
+   markers, the version card list and the name/placeholder toggles.
+7. tests/units/front/i18n_untranslated_baseline.json
+   Stale entries removed (6); added only product names / acronyms ((Postgres),
+   AI Gateway, CSV, LLM, Spark SQL), the OWL term Class, two sentence
+   connectors (The, with), exported build-log text titles, audit field keys
+   (label, message), the schedule label fragment "graph cache refresh", and
+   the first literal of concatenated messages whose full runtime text is in
+   the dictionary or embeds user names.
+
+Modified files:
+- src/front/static/global/js/i18n-ko.js
+- src/front/static/global/js/llm-endpoint-picker.js
+- src/front/static/global/js/navbar.js
+- src/front/static/domain/js/domain-audit.js
+- src/front/static/domain/js/domain-versions.js
+- src/front/static/ontology/js/ontology-entity-import.js
+- src/front/static/ontology/js/ontology-shared-panels.js
+- src/front/static/ontology/js/ontology-wizard-review.js
+- src/front/static/query/js/query-business-rules.js
+- src/front/static/query/js/query-dashboard.js
+- src/front/static/query/js/query-execute.js
+- src/front/static/query/js/query-find-path.js
+- src/front/static/query/js/query-shacl-facets.js
+- src/front/templates/partials/domain/_domain_versions.html
+- src/front/templates/partials/dtwin/_query_shacl_facets_modal.html
+- src/front/templates/partials/dtwin/_query_sigmagraph.html
+- src/front/templates/partials/ontology/_ontology_business_rules.html
+- src/front/templates/partials/settings/_settings_github.html
+- tests/units/front/test_i18n.py
+- tests/units/front/test_entity_panel_sections.py
+- tests/units/front/i18n_untranslated_baseline.json
+- changelogs/v0.9.0/simyung-yang_i18n_2026-10-20.log
+
+Tests: tests/units 9031 passed, 12 skipped, 1 xfailed, 0 failed (tests/units/front 1773 passed).
+Deselected tests/units/api/test_routes.py::TestHealthRoutes::test_readiness_route_returns_checks:
+it opens a live SQL warehouse session from the local environment and hangs on
+the plain 0.9.0 code too (environmental, unrelated to this change).

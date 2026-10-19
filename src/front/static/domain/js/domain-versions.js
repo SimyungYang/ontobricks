@@ -165,6 +165,7 @@ function renderVersionCard(version, domainFolder) {
         'dm-version-card-description mt-2 mb-2',
         version.description || 'No description'
     );
+    if (version.description) description.setAttribute('data-i18n-skip', '');
     const metadata = createVersionElement('div', 'dm-version-card-meta mb-3');
     [
         ['person', version.author || 'Unknown author'],
@@ -172,6 +173,7 @@ function renderVersionCard(version, domainFolder) {
         ['hammer', version.last_build || 'Not built']
     ].forEach(function (item) {
         const value = createVersionElement('span', '', item[1]);
+        if (item[0] === 'person' && version.author) value.setAttribute('data-i18n-skip', '');
         prependVersionIcon(value, item[0]);
         metadata.append(value);
     });

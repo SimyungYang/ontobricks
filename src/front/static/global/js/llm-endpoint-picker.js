@@ -38,6 +38,7 @@
             const button = document.createElement('button');
             button.type = 'button';
             button.className = 'list-group-item list-group-item-action llm-picker-item';
+            button.setAttribute('data-i18n-skip', '');
             if (endpoint.name === selected.name && endpoint.kind === selected.kind) {
                 button.classList.add('is-selected');
             }

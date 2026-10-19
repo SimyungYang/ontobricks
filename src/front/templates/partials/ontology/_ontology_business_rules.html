@@ -76,7 +76,7 @@
                     <div class="spinner-border spinner-border-sm text-primary" role="status"></div>
                     <p class="mt-2 mb-0 small">Loading rules&hellip;</p>
                 </div>
-                <div id="swrlRulesList" class="d-none">
+                <div data-i18n-skip id="swrlRulesList" class="d-none">
                     <div class="text-center py-4 text-muted" id="noSwrlRulesMessage">
                         <i class="bi bi-lightning icon-lg"></i>
                         <p class="mt-2 mb-0">No SWRL rules defined</p>
@@ -90,7 +90,7 @@
                     <i class="bi bi-info-circle"></i>
                     DMN-style tabular business rules with conditions and actions.
                 </p>
-                <div id="dtList" class="br-rules-list">
+                <div data-i18n-skip id="dtList" class="br-rules-list">
                     <div class="text-center py-4 text-muted" id="dtEmpty">
                         <i class="bi bi-table fs-1 d-block mb-2"></i>
                         <p class="mb-0">No decision tables defined</p>
@@ -105,7 +105,7 @@
                     <i class="bi bi-info-circle"></i>
                     SPARQL CONSTRUCT queries that infer new triples from graph patterns.
                 </p>
-                <div id="sparqlList" class="br-rules-list">
+                <div data-i18n-skip id="sparqlList" class="br-rules-list">
                     <div class="text-center py-4 text-muted" id="sparqlEmpty">
                         <i class="bi bi-braces fs-1 d-block mb-2"></i>
                         <p class="mb-0">No SPARQL rules defined</p>
@@ -311,7 +311,7 @@
                     conditions. Each <strong>column</strong> reads one attribute of the instance; each
                     <strong>row</strong> is a combination of conditions that must all hold. Matching instances are
                     reported in Data Quality and Reasoning; with an <strong>output</strong>, reasoning can also write a
-                    value on them (e.g. <em>riskTier = high</em>).
+                    value on them (e.g. <em translate="no">riskTier = high</em>).
                 </div>
                 <div class="row g-3 mb-3">
                     <div class="col-md-4">
@@ -411,8 +411,8 @@
                     </div>
                     <div class="form-text small" id="dtOutputHelp">
                         Optional, applied when reasoning materializes inferences. <em>Set value</em> writes the attribute
-                        on each matching instance (e.g. <em>riskTier = high</em>); <em>Assign entity</em> also types it
-                        as the chosen entity (e.g. <em>HighRiskCustomer</em>). Leave empty to only report matches.
+                        on each matching instance (e.g. <em translate="no">riskTier = high</em>); <em>Assign entity</em> also types it
+                        as the chosen entity (e.g. <em translate="no">HighRiskCustomer</em>). Leave empty to only report matches.
                     </div>
                 </div>
                 <div class="alert alert-light border small mt-3 mb-0" id="dtPreview" aria-live="polite">
@@ -511,7 +511,7 @@
                         </select>
                         <div class="form-text small" id="aggGroupByHelp">
                             Relationship followed from each instance to the values being aggregated, e.g.
-                            <em>hasOrder</em>. Alone, it counts these links. Results are always grouped per instance.
+                            <em translate="no">hasOrder</em>. Alone, it counts these links. Results are always grouped per instance.
                         </div>
                     </div>
                     <div class="col-md-6">
@@ -520,7 +520,7 @@
                             <option value="">(none)</option>
                         </select>
                         <div class="form-text small" id="aggAggPropHelp">
-                            Numeric attribute to aggregate, e.g. <em>amount</em>. With a Group-by property it is read on
+                            Numeric attribute to aggregate, e.g. <em translate="no">amount</em>. With a Group-by property it is read on
                             the linked entities; without one, on the instance itself.
                         </div>
                     </div>
@@ -566,7 +566,7 @@
                     </select>
                     <div class="form-text small" id="aggResultClassHelp">
                         When reasoning materializes inferences, each flagged instance is also typed as this entity
-                        (e.g. <em>VipCustomer</em>). Leave empty to only report violations.
+                        (e.g. <em translate="no">VipCustomer</em>). Leave empty to only report violations.
                     </div>
                 </div>
                 <div class="alert alert-light border small mb-0" id="aggPreview" aria-live="polite">

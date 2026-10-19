@@ -292,13 +292,13 @@
             : '';
         const ver = e.version ? '<span class="badge bg-secondary ms-1">v' + esc(e.version) + '</span>' : '';
         const comment = e.comment
-            ? '<div class="audit-comment oc-md">' + renderMarkdown(e.comment) + '</div>'
+            ? '<div class="audit-comment oc-md" data-i18n-skip>' + renderMarkdown(e.comment) + '</div>'
             : '';
         const head = '<div class="audit-head">' +
             '<span class="audit-title ' + meta.cls + '">' + esc(meta.label) + '</span>' +
             ver + transition +
             '<span class="audit-time">' + fmtTime(e.created_at) + '</span></div>';
-        const who = '<div class="audit-meta">' + esc(e.actor || 'unknown') + '</div>';
+        const who = '<div class="audit-meta" data-i18n-skip>' + esc(e.actor || 'unknown') + '</div>';
         return node('audit-marker-review', meta.icon, head + comment + who, meta.label);
     }
 
@@ -339,7 +339,7 @@
 
         const summaryLine = '<div class="audit-comment">' + chip +
             (bits.length ? '<span class="small text-muted">' + bits.join(' &middot; ') + '</span>' : '') +
-            (summary ? '<div class="small mt-1">' + esc(summary) + '</div>' : '') +
+            (summary ? '<div class="small mt-1" data-i18n-skip>' + esc(summary) + '</div>' : '') +
             '</div>';
 
         const steps = Array.isArray(m.steps) ? m.steps : [];
@@ -362,7 +362,7 @@
             '<details class="mt-1">' +
             '<summary class="small text-muted">' +
             'Agent execution report (' + esc(steps.length) + ' steps)</summary>' +
-            '<div class="border rounded p-2 mt-1 audit-agent-log">' +
+            '<div class="border rounded p-2 mt-1 audit-agent-log" data-i18n-skip>' +
             rows.join('') + '</div></details>';
     }
 
@@ -488,15 +488,15 @@
         const newText = missingVal(afterVal) ? '' : fmtValue(afterVal);
         const bits = [];
         if (showAsset && asset) {
-            bits.push('<span class="audit-asset">' + esc(asset) + '</span>');
+            bits.push('<span class="audit-asset" data-i18n-skip>' + esc(asset) + '</span>');
         }
         if (field) bits.push('<span class="audit-field">' + esc(field) + '</span>');
-        if (oldText) bits.push('<span class="audit-old">' + esc(oldText) + '</span>');
+        if (oldText) bits.push('<span class="audit-old" data-i18n-skip>' + esc(oldText) + '</span>');
         bits.push('<span class="audit-arrow" aria-hidden="true">→</span>');
-        if (newText) bits.push('<span class="audit-new">' + esc(newText) + '</span>');
+        if (newText) bits.push('<span class="audit-new" data-i18n-skip>' + esc(newText) + '</span>');
         const title = [showAsset ? asset : '', field, oldText, '→', newText]
             .filter(Boolean).join(' ');
-        return '<div class="audit-diff-row" title="' + esc(title) + '">' +
+        return '<div class="audit-diff-row" data-i18n-skip title="' + esc(title) + '">' +
             bits.join(' ') + '</div>';
     }
 
@@ -540,7 +540,7 @@
               '<i class="bi bi-robot me-1"></i>AI</span>'
             : '';
         const time = '<span class="audit-time">' + fmtTime(c.occurred_at || c.created_at) + '</span>';
-        const who = '<div class="audit-meta">' + esc(c.actor || 'unknown') + '</div>';
+        const who = '<div class="audit-meta" data-i18n-skip>' + esc(c.actor || 'unknown') + '</div>';
         const marker = isRemoveAction(c.action) ? 'audit-marker-remove' : 'audit-marker-change';
         if (c.action === 'agent_auto_map_run') {
             const head = '<div class="audit-head">' +
@@ -572,8 +572,8 @@
         if (run.graph_engine) bits.push(esc(run.graph_engine));
         const metaLine = bits.length ? '<div class="audit-meta">' + bits.join(' &middot; ') + '</div>' : '';
         const msg = run.error
-            ? '<div class="audit-comment text-danger">' + esc(run.error) + '</div>'
-            : (run.message ? '<div class="audit-comment oc-md">' + renderMarkdown(run.message) + '</div>' : '');
+            ? '<div class="audit-comment text-danger" data-i18n-skip>' + esc(run.error) + '</div>'
+            : (run.message ? '<div class="audit-comment oc-md" data-i18n-skip>' + renderMarkdown(run.message) + '</div>' : '');
         const detailsBtn = '<button type="button" class="btn btn-sm btn-outline-primary audit-details" ' +
             'data-run-idx="' + idx + '" title="View build run details">' +
             '<i class="bi bi-eye"></i></button>';
@@ -603,8 +603,8 @@
         const lines = [];
         if (m.message) lines.push('<div class="text-danger">' + esc(m.message) + '</div>');
         (m.errors || []).forEach((e) => lines.push('<div class="text-warning">' + esc(e) + '</div>'));
-        const detail = lines.length ? '<div class="audit-comment">' + lines.join('') + '</div>' : '';
-        const who = '<div class="audit-meta">' + esc(c.actor || 'OntoBricks') +
+        const detail = lines.length ? '<div class="audit-comment" data-i18n-skip>' + lines.join('') + '</div>' : '';
+        const who = '<div class="audit-meta" data-i18n-skip>' + esc(c.actor || 'OntoBricks') +
             (m.repository ? ' &middot; ' + esc(m.repository) : '') + '</div>';
         return node('audit-marker-github', meta.icon, head + detail + who, meta.label);
     }
