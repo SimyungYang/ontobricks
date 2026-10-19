@@ -1,0 +1,102 @@
+================================================================================
+## Port Graph Chat performance work onto 0.9.0
+================================================================================
+
+Context:
+The Graph Chat accuracy / latency work landed on the 0.8.1 line
+(feat/graph-chat-performance, changelogs/v0.8.1/simyung-yang_data_2026-10-12,
+-10-14 and -10-15). 0.9.0 has no shared history with that line, so the work is
+re-applied here as a 3-way patch and reconciled with 0.9.0's own changes:
+companion-table reads (_adj_in / _adj_out / _entity_search / _props),
+single-statement Explorer expand, GraphFilter, per-tool tracing,
+require_read_only_sparql, and the architecture guardrails (one public class
+per file, 800-LOC class / 100-LOC function budgets).
+
+Policy: 0.9.0 wins for BFS / expand / companion reads; GraphQL filters,
+counts and inverse fields, analyze_graphql, the schema digest, tool-result
+compaction and the prompt rules are added on top. The old Explorer edge
+pruning is re-implemented on GraphFilter instead of DigitalTwin.
+
+Changes:
+
+1. src/agents/agent_dtwin_chat/engine.py, tools.py, analysis.py,
+   AnalysisError.py, EntityRef.py
+   Schema digest in the system prompt, analyze_graphql (exact server-side
+   group / intersect / difference / union), compaction of older tool results,
+   CHAT_MAX_TOKENS (ONTOBRICKS_CHAT_MAX_TOKENS, default 8192), unreadable
+   reply logging, drop_unresolvable_links on the final reply. The tool-call
+   loop moved to _run_tool_calls so run_agent stays within its size budget.
+   AnalysisError and EntityRef got their own files (one class per file).
+2. src/agents/tracing.py
+   Tool spans record result length and status, plus payloads when
+   trace_payloads_enabled(). The trace_tool decorator was not re-added to
+   engine_base.dispatch_tool: 0.9.0 already traces each tool, and both
+   together produced duplicate TOOL spans.
+3. src/back/core/graphdb/SubjectFilter.py, SubjectFilterKind.py,
+   SubjectQueryMixin.py, GraphDBBackend.py
+   Typed-subject filters, count_subjects_by_type (with distinct_predicate)
+   and find_subjects_by_predicate_objects live in SubjectQueryMixin, mixed
+   into GraphDBBackend. find_subjects_by_type uses the entity-search
+   companion only when no filters are given.
+4. src/back/core/graphdb/neo4j/Neo4jSubjectQueryMixin.py, Neo4jReadOps.py,
+   Neo4jStore.py
+   Native-Cypher counterparts in Neo4jSubjectQueryMixin, mixed into
+   Neo4jReadOps (keeps the class under 800 LOC).
+5. src/back/core/graphql/* (FieldFilter, InverseField, InverseSource,
+   RelEdge, RelTarget, SchemaDigest, SchemaMetadata, GraphQLSchemaBuilder,
+   ResolverFactory, models, constants)
+   GraphQL list filters, <list>Count, inverse <plural>Via<Property> fields,
+   selection-aware loading, schema digest (12000-char cap, attributes kept
+   before levels are dropped, warning logs). models.py now holds only
+   TypeInfo; the other records got their own files.
+6. src/back/objects/digitaltwin/TwinChatDigest.py, __init__.py,
+   src/api/routers/internal/dtwin.py
+   TwinChatDigest.build(domain, domain_name) builds the chat schema digest
+   (kept out of DigitalTwin, which is at its class budget). Both chat routes
+   pass schema_digest; _chat_forwarded_headers is shared by both routes.
+   0.9.0's GraphFilter.clamp_max_entities replaces the old FILTER_* constants.
+7. src/back/objects/digitaltwin/explorer/GraphFilter.py, DigitalTwin.py
+   GraphFilter.bounded_expand wraps expand (both the single-statement and
+   BFS paths) and drops relationship triples whose object is outside the
+   expanded set (drop_out_of_set_edges), so max_entities bounds what the
+   Explorer draws. DigitalTwin.filter_expand calls it.
+8. src/front/static/query/js/query-sigmagraph.js
+   Explorer focus / centring fixes kept; DEFAULT_MAX_ENTITIES = 5000 to match
+   GraphFilter.EXPLORER_MAX_ENTITIES_DEFAULT and the 0.9.0 template.
+9. src/back/core/graphdb/constants.py, lakebase/_companion_ddl.py,
+   src/agents/tools/graph_formatting.py
+   REVERSE_LOOKUP_MAX_ROWS, reverse-edge index DDL, KRW formatting.
+10. Tests: test_agent_dtwin_chat_analysis.py, test_graphql_relationship_queries.py,
+    test_graph_store_subject_filters.py, test_neo4j_subject_filters.py,
+    test_filter_expand_bounds.py (incl. the single-statement expand path),
+    test_graph_formatting_krw.py; updated engine / tracing / lakebase tests.
+11. .planning/agents/agent_dtwin_chat/SPEC.md,
+    tests/eval/datasets/agent_dtwin_chat/regression.jsonl
+    SPEC and regression dataset for the new tools.
+
+Modified files:
+- .planning/agents/agent_dtwin_chat/SPEC.md
+- src/agents/agent_dtwin_chat/{engine,tools,analysis,AnalysisError,EntityRef}.py
+- src/agents/tools/graph_formatting.py
+- src/agents/tracing.py
+- src/api/routers/internal/dtwin.py
+- src/back/core/graphdb/{__init__,constants,GraphDBBackend,SubjectFilter,
+  SubjectFilterKind,SubjectQueryMixin}.py
+- src/back/core/graphdb/lakebase/_companion_ddl.py
+- src/back/core/graphdb/neo4j/{Neo4jReadOps,Neo4jStore,Neo4jSubjectQueryMixin}.py
+- src/back/core/graphql/{__init__,constants,FieldFilter,GraphQLSchemaBuilder,
+  InverseField,InverseSource,models,RelEdge,RelTarget,ResolverFactory,
+  SchemaDigest,SchemaMetadata}.py
+- src/back/objects/digitaltwin/{__init__,DigitalTwin,TwinChatDigest}.py
+- src/back/objects/digitaltwin/explorer/GraphFilter.py
+- src/front/static/query/js/query-sigmagraph.js
+- tests/eval/datasets/agent_dtwin_chat/regression.jsonl
+- tests/units/agents/, tests/units/api/, tests/units/core/,
+  tests/units/dtwin/, tests/units/graphdb/ (see item 10)
+
+Tests: `uv run --frozen pytest -q -m "not scenario"` -> 9637 passed, 338 skipped, 7 deselected, 1 xfailed (14m41s).
+Architecture guardrails (tests/units/architecture): 9 passed.
+
+AI-feature gate (src/agents/**): the 0.8.1 line was evaluated on a 130-question
+domain set; the port is re-evaluated on an isolated 0.9.0 test app before any
+deploy. Not deployed.

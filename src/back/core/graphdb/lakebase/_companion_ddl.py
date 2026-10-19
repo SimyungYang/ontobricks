@@ -43,10 +43,24 @@ _TRIPLE_TABLE_COLUMNS = """
             PRIMARY KEY (subject, predicate, object_hash)
 """
 
-_TRIPLE_TABLE_INDEXES: tuple[tuple[str, str], ...] = (
-    ("sp", "subject, predicate"),
-    ("po", "predicate, object_hash"),
-    ("oph", "object_hash, predicate"),
+# Graph lookup indexes as ``(name suffix, columns, access method)``; an empty
+# method means the Postgres default (btree).
+#
+# ``obj``: reverse-edge lookups (BFS ``WHERE object IN (...)``) filter on the
+# raw ``object`` text through the union view, which does not expose
+# ``object_hash``. A hash index has no btree row-size limit, so it is safe on
+# long literals and lets those equality filters skip the sequential scan.
+_GRAPH_INDEXES: tuple[tuple[str, str, str], ...] = (
+    ("sp", "subject, predicate", ""),
+    ("po", "predicate, object_hash", ""),
+    ("oph", "object_hash, predicate", ""),
+    ("obj", "object", "hash"),
+)
+
+# Btree indexes keyed like the triple table; the legacy (pre-``object_hash``)
+# upgrade drops and recreates exactly these.
+_TRIPLE_TABLE_INDEXES: tuple[tuple[str, str], ...] = tuple(
+    (sfx, cols) for sfx, cols, method in _GRAPH_INDEXES if not method
 )
 
 
@@ -250,10 +264,11 @@ def ensure_graph_indexes(cur: Any, table_ref: str) -> None:
     (``"schema".g_x_v1_sync``). Index names use the physical table name only.
     """
     table_name = table_ref.split(".")[-1].strip('"')
-    for sfx, cols in _TRIPLE_TABLE_INDEXES:
+    for sfx, cols, method in _GRAPH_INDEXES:
+        using = f"USING {method} " if method else ""
         cur.execute(
             f"CREATE INDEX IF NOT EXISTS {_idx_name(table_name, sfx)} "
-            f"ON {table_ref} ({cols})"
+            f"ON {table_ref} {using}({cols})"
         )
 
 

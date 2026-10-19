@@ -772,7 +772,7 @@ class DigitalTwin:
         """BFS-expand selected URIs and return the induced subgraph triples."""
         from back.objects.digitaltwin.explorer.GraphFilter import GraphFilter
 
-        return GraphFilter.expand(
+        return GraphFilter.bounded_expand(
             store,
             graph_name,
             selected_uris,

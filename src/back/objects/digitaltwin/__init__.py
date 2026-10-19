@@ -14,6 +14,7 @@ from back.objects.digitaltwin.TwinBackgroundTasks import TwinBackgroundTasks
 from back.objects.digitaltwin.query.TwinMapping import TwinMapping
 from back.objects.digitaltwin.TwinAnalytics import TwinAnalytics
 from back.objects.digitaltwin.TwinResolve import TwinResolve
+from back.objects.digitaltwin.TwinChatDigest import TwinChatDigest
 from back.objects.digitaltwin.cache.TwinAssistantCache import TwinAssistantCache
 from back.objects.digitaltwin.explorer.TwinNeighborTriples import TwinNeighborTriples
 from back.objects.digitaltwin.TwinGraphAccess import TwinGraphAccess
@@ -57,6 +58,7 @@ __all__ = [
     "TwinSparqlTranslate",
     "TwinNeighborTriples",
     "TwinResolve",
+    "TwinChatDigest",
     "TwinStoreCache",
     "VirtualAttributeService",
     "RDF_TYPE",

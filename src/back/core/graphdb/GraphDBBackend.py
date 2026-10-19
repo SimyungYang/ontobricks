@@ -33,11 +33,13 @@ from back.core.graphdb.entity_search import (
     preview_select_sql,
     sort_preview_rows,
 )
+from back.core.graphdb.SubjectFilter import SubjectFilter
+from back.core.graphdb.SubjectQueryMixin import SubjectQueryMixin
 
 logger = get_logger(__name__)
 
 
-class GraphDBBackend(ABC):
+class GraphDBBackend(SubjectQueryMixin, ABC):
     """Abstract base for graph DB engines (Lakebase Postgres, Delta, KuzuDB, ...).
 
     Subclasses must implement the core CRUD abstract methods **plus** the
@@ -353,6 +355,7 @@ class GraphDBBackend(ABC):
         limit: int = 50,
         offset: int = 0,
         search: Optional[str] = None,
+        filters: Optional[List[SubjectFilter]] = None,
     ) -> List[str]:
         """Return distinct subject URIs that are ``rdf:type`` *type_uri*.
 
@@ -364,8 +367,11 @@ class GraphDBBackend(ABC):
         *search* then matches only ``rdfs:label``/URI (same fields Explorer
         Preview searches). Falls back to the SPO query below when the
         companion is missing or a missing-table error occurs mid-query.
+        *filters* are AND-combined :class:`SubjectFilter` conditions; the
+        companion cannot apply them, so a filtered lookup always reads the SPO
+        table.
         """
-        if self.entity_search_ready(table_name):
+        if not filters and self.entity_search_ready(table_name):
             if is_asserted_only_relation(table_name):
                 search_table = self.entity_search_asserted_table_id(table_name)
             else:
@@ -390,19 +396,9 @@ class GraphDBBackend(ABC):
                     exc,
                 )
 
-        esc_type = self._sql_escape(type_uri)
-        conditions = [
-            f"predicate = '{RDF_TYPE}'",
-            f"object = '{esc_type}'",
-        ]
-        if search:
-            esc = self._sql_escape(sql_like_escape(search)).lower()
-            conditions.append(
-                f"subject IN ("
-                f"SELECT DISTINCT subject FROM {self._sql_relation(table_name)} "
-                f"WHERE predicate != '{RDF_TYPE}' "
-                f"AND LOWER(object) LIKE '%{esc}%' {LIKE_ESCAPE})"
-            )
+        conditions = self._typed_subject_conditions(
+            table_name, type_uri, search, filters
+        )
         sql = (
             f"SELECT DISTINCT subject FROM {self._sql_relation(table_name)} "
             f"WHERE {' AND '.join(conditions)} "
@@ -422,7 +418,7 @@ class GraphDBBackend(ABC):
             f"SELECT DISTINCT subject FROM {self._sql_relation(table_name)} "
             f"WHERE predicate = '{RDF_TYPE}' "
             f"AND object = '{esc_type}' "
-            f"AND (subject LIKE '%/{esc_id}' OR subject LIKE '%#{esc_id}')"
+            f"AND ({self._local_id_match_sql('subject', esc_id, include_exact=False)})"
         )
         rows = self.execute_query(sql)
         return rows[0]["subject"] if rows else None

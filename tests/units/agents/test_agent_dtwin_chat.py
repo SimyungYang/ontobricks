@@ -193,6 +193,27 @@ class TestDescribeEntity:
         chat_tools.tool_describe_entity(_ctx(), search="Jacob Martinez", depth=1)
         assert captured["params"]["search"] == "Jacob Martinez"
 
+    def test_page_limit_is_bounded(self, patch_client):
+        captured = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            if "/triples/find" in request.url.path:
+                captured["params"] = dict(request.url.params)
+            return httpx.Response(200, json={"success": True, "entities": []})
+
+        patch_client(handler)
+        chat_tools.tool_describe_entity(_ctx(), search="foo")
+        assert captured["params"]["limit"] == str(chat_tools._FIND_PAGE_LIMIT)
+
+    def test_oversized_result_is_truncated(self, patch_client, monkeypatch):
+        monkeypatch.setattr(
+            chat_tools, "format_find_response", lambda *_a, **_k: "x" * 50_000
+        )
+        patch_client(lambda _r: httpx.Response(200, json={"success": True}))
+        out = chat_tools.tool_describe_entity(_ctx(), search="foo")
+        assert len(out) < 50_000
+        assert "truncated" in out
+
     def test_class_actions_are_appended(self, patch_client):
         rdf_type = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type"
 
@@ -317,6 +338,25 @@ class TestQueryGraphql:
             _ctx(), query="{ a }", variables="{not-json"
         )
         assert "Invalid JSON" in json.loads(out)["error"]
+
+    def test_large_result_uses_graphql_cap(self, patch_client, monkeypatch):
+        size = chat_tools._MAX_TOOL_RESULT_CHARS + 5_000
+        monkeypatch.setattr(
+            chat_tools, "format_graphql_response", lambda *_a, **_k: "x" * size
+        )
+        patch_client(lambda _r: httpx.Response(200, json={"data": {}}))
+        out = chat_tools.tool_query_graphql(_ctx(), query="{ a }")
+        assert out == "x" * size
+
+    def test_oversized_result_is_marked_partial(self, patch_client, monkeypatch):
+        monkeypatch.setattr(
+            chat_tools,
+            "format_graphql_response",
+            lambda *_a, **_k: "x" * (chat_tools._MAX_GRAPHQL_RESULT_CHARS + 1),
+        )
+        patch_client(lambda _r: httpx.Response(200, json={"data": {}}))
+        out = chat_tools.tool_query_graphql(_ctx(), query="{ a }")
+        assert "PARTIAL" in out and "Count" in out
 
     def test_happy_path_forwards_variables_dict(self, patch_client):
         captured = {}
