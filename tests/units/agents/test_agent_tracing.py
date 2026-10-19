@@ -446,3 +446,20 @@ class TestActiveSpans:
 
         assert mock_mlflow.start_span.call_args.kwargs["name"] == "tool:list_entity_types"
         assert span.set_outputs.call_args[0][0]["result"] == "tool output"
+
+
+def test_graph_chat_tool_call_opens_a_tool_span_named_after_the_tool():
+    from agents.agent_dtwin_chat import engine
+
+    mock_mlflow, mock_entities, span = TestTraceToolStatus()._fake_mlflow()
+    tracing_mod._TRACING_READY = True
+    try:
+        with patch.dict(
+            "sys.modules",
+            {"mlflow": mock_mlflow, "mlflow.entities": mock_entities},
+        ), patch.object(engine, "dispatch_tool", return_value='{"types": []}'):
+            assert engine._dispatch_chat_tool(None, "list_entity_types", {}) == '{"types": []}'
+    finally:
+        tracing_mod._TRACING_READY = False
+    assert mock_mlflow.start_span.call_args.kwargs["name"] == "tool:list_entity_types"
+    assert span.outputs["status"] == "ok"

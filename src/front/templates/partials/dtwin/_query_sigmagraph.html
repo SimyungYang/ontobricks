@@ -32,10 +32,13 @@
             <label class="form-label small mb-0 text-muted" for="sgMaxEntities"><i class="bi bi-speedometer2"></i></label>
             <select class="form-select form-select-sm py-0 sg-compact-select" id="sgMaxEntities" title="Max entities returned by graph search">
                 <!-- Option values must stay within GraphFilter.EXPLORER_MAX_ENTITIES_* -->
+                <option value="50" selected>50</option>
+                <option value="100">100</option>
+                <option value="200">200</option>
                 <option value="500">500</option>
                 <option value="1000">1 000</option>
                 <option value="2000">2 000</option>
-                <option value="5000" selected>5 000</option>
+                <option value="5000">5 000</option>
                 <option value="10000">10 000</option>
                 <option value="20000">20 000</option>
             </select>

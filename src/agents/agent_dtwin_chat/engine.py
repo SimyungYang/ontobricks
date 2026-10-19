@@ -29,7 +29,7 @@ from agents.engine_base import (
     call_serving_endpoint,
     dispatch_tool,
 )
-from agents.tracing import content_block_types, trace_agent
+from agents.tracing import content_block_types, trace_agent, trace_tool
 
 logger = get_logger(__name__)
 
@@ -368,6 +368,17 @@ def build_system_prompt(
 
 
 @trace_agent(name="dtwin_chat")
+@trace_tool()
+def _dispatch_chat_tool(ctx: ToolContext, tool_name: str, arguments: dict) -> str:
+    """Dispatch one Graph Chat tool call inside a per-tool MLflow TOOL span.
+
+    ``dispatch_tool`` is shared by the other agent engines, so, as in
+    ``agent_owl_generator.staged``, the span is opened here instead of inside
+    it; the span is named ``tool:<tool_name>``.
+    """
+    return dispatch_tool(TOOL_HANDLERS, ctx, tool_name, arguments, trace_name=_TRACE_NAME)
+
+
 def _run_tool_calls(
     tool_calls: List[dict],
     ctx: ToolContext,
@@ -412,13 +423,7 @@ def _run_tool_calls(
             on_event(call_step)
 
         tool_t0 = time.time()
-        tool_result = dispatch_tool(
-            TOOL_HANDLERS,
-            ctx,
-            tool_name,
-            arguments,
-            trace_name=_TRACE_NAME,
-        )
+        tool_result = _dispatch_chat_tool(ctx, tool_name, arguments)
         tool_elapsed = int((time.time() - tool_t0) * 1000)
 
         result_step = AgentStep(

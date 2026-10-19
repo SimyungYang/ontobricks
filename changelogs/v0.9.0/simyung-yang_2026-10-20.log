@@ -1,0 +1,45 @@
+================================================================================
+## Graph Chat port follow-up: Explorer search default 50 and tool spans
+================================================================================
+
+Context:
+A line-by-line check of the 0.8.1-line Graph Chat performance work
+(feat/graph-chat-performance 8387f8a3) against this port found two items lost
+while resolving conflicts with 0.9.0: the Explorer graph-search default of 50
+entities (with 50 / 100 / 200 choices) had reverted to 0.9.0's 5,000, and Graph
+Chat tool calls no longer opened an MLflow TOOL span each.
+
+Changes:
+
+1. src/back/objects/digitaltwin/explorer/GraphFilter.py
+   EXPLORER_MAX_ENTITIES_MIN 100 -> 50 and EXPLORER_MAX_ENTITIES_DEFAULT
+   5000 -> 50 (the minimum). The 20,000 UI ceiling is unchanged.
+2. src/front/templates/partials/dtwin/_query_sigmagraph.html
+   #sgMaxEntities gains 50 (selected), 100 and 200; 5 000 is no longer the
+   selected option.
+3. src/front/static/query/js/query-sigmagraph.js
+   DEFAULT_MAX_ENTITIES fallback 5000 -> 50 to match the backend default.
+4. src/agents/agent_dtwin_chat/engine.py
+   New _dispatch_chat_tool, decorated with @trace_tool(), wraps the shared
+   dispatch_tool, so each Graph Chat tool call shows as a `tool:<name>` span
+   with its ok/error status. Following 0.9.0 (agent_owl_generator.staged), the
+   span is per agent: decorating engine_base.dispatch_tool itself would
+   double the owl generator's spans and change every other agent's traces.
+5. tests/units/agents/test_agent_tracing.py,
+   tests/units/dtwin/test_filter_expand.py,
+   tests/units/front/test_clarity_design_contract.py
+   Tests for the Graph Chat tool span, the new lower clamp, the dropdown minimum
+   and the script fallback matching the backend default.
+
+Modified files:
+- src/back/objects/digitaltwin/explorer/GraphFilter.py
+- src/front/templates/partials/dtwin/_query_sigmagraph.html
+- src/front/static/query/js/query-sigmagraph.js
+- src/agents/agent_dtwin_chat/engine.py
+- tests/units/agents/test_agent_tracing.py
+- tests/units/dtwin/test_filter_expand.py
+- tests/units/front/test_clarity_design_contract.py
+- changelogs/v0.9.0/simyung-yang_2026-10-20.log
+
+Tests: tests/units 9091 passed, 12 skipped, 1 xfailed, 0 failed (deselected the
+live-warehouse readiness test, which hangs locally on plain 0.9.0 too).

@@ -127,6 +127,8 @@ def test_filter_expand_does_not_retry_after_single_statement_failure():
         (20_000, EXPLORER_MAX_ENTITIES_UI_MAX),
         (50_000, EXPLORER_MAX_ENTITIES_UI_MAX),
         (50, EXPLORER_MAX_ENTITIES_MIN),
+        (10, EXPLORER_MAX_ENTITIES_MIN),
+        (100, 100),
     ],
 )
 def test_clamp_max_entities_matches_explorer_ui(raw, expected):

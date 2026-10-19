@@ -449,6 +449,7 @@ def test_sigmagraph_panel_uses_the_shared_compact_tab_rail():
 def test_sigmagraph_max_entities_matches_backend_clamp():
     from back.objects.digitaltwin.explorer.GraphFilter import (
         EXPLORER_MAX_ENTITIES_DEFAULT,
+        EXPLORER_MAX_ENTITIES_MIN,
         EXPLORER_MAX_ENTITIES_UI_MAX,
     )
 
@@ -456,8 +457,18 @@ def test_sigmagraph_max_entities_matches_backend_clamp():
     select = template.split('id="sgMaxEntities"', 1)[1].split("</select>", 1)[0]
     values = [int(v) for v in re.findall(r'<option value="(\d+)"', select)]
     assert values
+    assert min(values) == EXPLORER_MAX_ENTITIES_MIN
     assert max(values) == EXPLORER_MAX_ENTITIES_UI_MAX
     assert f'value="{EXPLORER_MAX_ENTITIES_DEFAULT}" selected' in select
+
+
+def test_sigmagraph_script_fallback_matches_backend_default():
+    from back.objects.digitaltwin.explorer.GraphFilter import (
+        EXPLORER_MAX_ENTITIES_DEFAULT,
+    )
+
+    script = _read(REPO_ROOT / "src/front/static/query/js/query-sigmagraph.js")
+    assert f"var DEFAULT_MAX_ENTITIES = {EXPLORER_MAX_ENTITIES_DEFAULT};" in script
 
 
 def test_mapping_designer_panels_use_the_shared_compact_tab_rail():
