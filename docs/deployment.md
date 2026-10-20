@@ -749,7 +749,7 @@ After the first deployment, bind the app resources in the Databricks workspace U
 1. Go to **Compute > Apps** and open your main app (placeholder **`ontobricks-XXX`** — same string as `resources.apps.ontobricks_dev_app.name` in `databricks.yml`).
 2. Click **Resources**
 3. Bind `sql-warehouse` to a running SQL Warehouse
-4. Bind `volume` to the Unity Catalog Volume for the project registry (e.g., `your_catalog.your_schema.registry` — match `registry_*` variables in `databricks.yml`)
+4. Bind `volume` to the Unity Catalog Volume used as the registry **identifier** and for ad-hoc export bundles (e.g., `your_catalog.your_schema.registry` — match `registry_*` variables in `databricks.yml`). Domain JSON and Knowledge Store documents live in **Lakebase**, not on this Volume.
 5. Repeat for **`mcp-ontobricks`** (same warehouse and volume)
 6. For **`dev-lakebase`**, confirm the **postgres** resource is bound to the Lakebase database you configured (no extra UI step if deploy succeeded).
 7. Verify both apps show status **Running**

@@ -58,7 +58,7 @@ Package                                     Responsibility
 ``back.core.w3c``                           OWL, RDFS, R2RML, SPARQL, SHACL services
 ``back.core.reasoning``                     OWL 2 RL inference + SWRL engine
 ``back.core.graphql``                       Strawberry GraphQL schema from ontology
-``back.objects.registry``                   UC Volume domain registry + permissions
+``back.objects.registry``                   Lakebase domain registry + permissions (optional GitHub mirror)
 ``back.objects.session``                    HTTP session + in-memory domain state
 ``back.objects.domain``                     Session-scoped domain management (UC, metadata, layout)
 ``back.core.industry``                      FIBO, CDISC, IOF importers

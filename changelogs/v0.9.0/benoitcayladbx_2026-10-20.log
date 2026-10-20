@@ -1,0 +1,145 @@
+================================================================================
+## Catch up V0.9.0 release notes and operator docs for load → General
+================================================================================
+
+Context:
+Loading a domain now always opens Domain → General. The V0.9.0 release
+notes, operator guides, Help Center, and several inline comments still
+described a page reload (or the old Information menu label). This pass
+aligns those artifacts with the shipped UI.
+
+Changes:
+
+1. releases/ReleaseNotes_V0.9.0.md
+   Highlights, Versions, bug fixes, documentation list, and upgrade notes
+   cover load navigation to Domain → General. Test status updated.
+2. README.md
+   What's new mentions that a load opens Domain → General.
+3. docs/user-guide.md, docs/getting-started.md, docs/mcp.md,
+   docs/architecture.md, docs/development.md
+   Load steps, MCP / Knowledge Graph paths, sidebar labels, and page
+   verification tables use General (and current Domain/Ontology/Mapping
+   sections).
+4. src/front/templates/partials/layout/help_modal.html
+   Domain workflow lists Knowledge Store; load lands on Domain → General.
+5. Inline comments/docstrings in navbar, home, registry, versions, mapping
+   templates/JS, ontology-core, DigitalTwin, Domain, mcp_tools, materialize,
+   and the Knowledge Graph Overview `/sync/info` handler.
+
+Modified files:
+- releases/ReleaseNotes_V0.9.0.md
+- README.md
+- docs/user-guide.md
+- docs/getting-started.md
+- docs/mcp.md
+- docs/architecture.md
+- docs/development.md
+- src/front/templates/partials/layout/help_modal.html
+- src/front/templates/domain.html
+- src/front/templates/ontology.html
+- src/front/templates/mapping.html
+- src/front/templates/partials/mapping/_mapping_information.html
+- src/front/static/global/js/navbar.js
+- src/front/static/global/js/ontology-core.js
+- src/front/static/global/js/mapping-information.js
+- src/front/static/home/js/home.js
+- src/front/static/registry/js/registry.js
+- src/front/static/domain/js/domain-versions.js
+- src/front/static/query/js/query-sync.js
+- src/back/objects/digitaltwin/DigitalTwin.py
+- src/back/objects/domain/Domain.py
+- src/back/core/mcp_tools.py
+- src/back/core/graphdb/delta/materialize.py
+- src/api/routers/internal/dtwin.py
+- changelogs/v0.9.0/benoitcayladbx_2026-10-20.log
+
+Tests: uv run --frozen pytest -q -m "not scenario" → 9478 passed, 326 skipped, 7 deselected, 1 xfailed, 40 warnings in 48.87s
+
+================================================================================
+## Align v0.9.0 operator docs with shipped features
+================================================================================
+
+Context:
+A documentation audit against the v0.9.0 release notes found leftover 0.8
+storage and menu wording (Unity Catalog Volumes as the domain store,
+Designer instead of Studio, Sphinx build path, wrong release-note file
+names). Online https://ontobricks.org/ still publishes the previous master
+snapshot (0.8.0 hub, Designer, split satellite guides) and cannot be
+updated from this worktree until 0.9.0 is published.
+
+Changes:
+
+1. docs/README.md
+   Added a v0.9.0 feature map, pointed Sphinx build at ci/build_docs.sh,
+   and noted that ontobricks.org lags until publish.
+2. docs/getting-started.md
+   Knowledge Store (no Volume uploads), Search tab, SPARQL playground,
+   staged Generate, Save to Lakebase registry.
+3. docs/user-guide.md
+   Domain storage, Save/Load, and feature inventory describe the Lakebase
+   registry instead of JSON-on-Volume.
+4. docs/examples.md
+   Mapping and ontology walkthroughs use Studio instead of Designer.
+5. docs/architecture.md, docs/advanced_features.md, docs/product.md,
+   docs/development.md, docs/deployment.md, docs/api.md
+   Studio naming, registry vs Volume, /health vs readiness, CSRF.
+6. docs/sphinx/overview/getting-started.rst,
+   docs/sphinx/overview/architecture.rst
+   Python 3.10, frozen pytest, ci/build_docs.sh, Lakebase registry.
+7. releases/ReleaseNotes_V0.9.0.md
+   Documentation file list uses getting-started.md and user-guide.md.
+8. README.md
+   Deploy Volume described as registry identifier / export bundles.
+
+Modified files:
+- docs/README.md
+- docs/getting-started.md
+- docs/user-guide.md
+- docs/examples.md
+- docs/architecture.md
+- docs/advanced_features.md
+- docs/product.md
+- docs/development.md
+- docs/deployment.md
+- docs/api.md
+- docs/sphinx/overview/getting-started.rst
+- docs/sphinx/overview/architecture.rst
+- releases/ReleaseNotes_V0.9.0.md
+- README.md
+- changelogs/v0.9.0/benoitcayladbx_2026-10-20.log
+
+Tests: uv run --frozen pytest -q -m "not scenario" → 9478 passed, 326 skipped, 7 deselected, 1 xfailed, 40 warnings in 52.32s
+
+================================================================================
+## Refresh V0.9.0 release notes and October Asana roadmap
+================================================================================
+
+Context:
+v0.9.0 is closed on the OntoBricks-Product Asana board (all 15 tasks in
+Version 0.9.0 completed). The published release notes still omitted Metric
+Views and OBX Import as. The living roadmap was the September snapshot and
+still listed Knowledge Store / three-stage Generate as unstarted 0.9.0 work.
+
+Changes:
+
+1. releases/ReleaseNotes_V0.9.0.md
+   Highlights, Knowledge Store, GitHub/registry, and documentation list now
+   cover Unity Catalog Metric Views and OBX Import as.
+2. README.md
+   What's new in 0.9.0 lists Metric Views and Import as.
+3. releases/Roadmap_2026-10.md
+   New Asana-first roadmap: 0.8.x/0.9.0 closed; 0.10.0 (Auto-Map High, Genie,
+   LLM allow-list, Marketplace, Job-action close-out, later-wave GA items);
+   To evaluate (13 parents including High industry-catalog rollup).
+4. releases/Roadmap_2026-09.md
+   Marked superseded by the October snapshot.
+
+Modified files:
+- releases/ReleaseNotes_V0.9.0.md
+- README.md
+- releases/Roadmap_2026-10.md
+- releases/Roadmap_2026-09.md
+- changelogs/v0.9.0/benoitcayladbx_2026-10-20.log
+
+Tests: uv run --frozen pytest -q -m "not scenario" → 9478 passed, 326 skipped, 7 deselected, 1 xfailed, 40 warnings in 47.73s
+

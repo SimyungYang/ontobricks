@@ -9,7 +9,7 @@ Getting Started
 Prerequisites
 -------------
 
-- Python 3.9+
+- Python 3.10+
 - `uv <https://docs.astral.sh/uv/>`_ package manager (recommended)
 - Access to a Databricks workspace
 
@@ -45,7 +45,7 @@ Running Tests
 
 .. code-block:: bash
 
-   pytest tests/
+   uv run --frozen pytest -q -m "not scenario"
 
 Building This Documentation
 ----------------------------
@@ -53,7 +53,7 @@ Building This Documentation
 .. code-block:: bash
 
    # From the project root
-   scripts/build_docs.sh
+   ci/build_docs.sh
 
    # Or manually
    cd sphinx && make html

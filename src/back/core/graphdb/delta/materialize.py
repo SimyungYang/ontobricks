@@ -1,7 +1,7 @@
 """CTAS and table lifecycle SQL for the Databricks Delta triple store.
 
 The ``…_data`` relation comes in two shapes, chosen per domain (Domain →
-Information → Knowledge Graph):
+General → Knowledge Graph):
 
 * ``table`` — CTAS the gateway VIEW into a clustered Delta TABLE. A copy of
   the mapped triples, which is what makes graph reads cheap and Graph
