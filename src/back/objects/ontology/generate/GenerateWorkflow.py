@@ -64,6 +64,27 @@ _AXIOM_KINDS_SUBCLASS = "subClassOf"
 _AXIOM_KINDS_BINARY = frozenset({"disjointWith", "equivalentClass"})
 
 
+def _apply_subclass_parent(subject_cls: Dict[str, Any], object_name: str) -> bool:
+    """Set ``parent`` when unset; drop extra parents (single inheritance).
+
+    Returns True when a new parent was applied.
+    """
+    current_parent = subject_cls.get("parent")
+    subject_name = subject_cls.get("name")
+    if not current_parent:
+        subject_cls["parent"] = object_name
+        return True
+    if current_parent == object_name:
+        return False
+    logger.info(
+        "merge: dropping extra subClassOf %s -> %s (already has parent %s)",
+        subject_name,
+        object_name,
+        current_parent,
+    )
+    return False
+
+
 def _substage_runners() -> Dict[str, Callable[..., Any]]:
     """Looked up dynamically (not bound at import time) so tests can
     monkeypatch ``wf.owl_staged.infer_relations``/etc per-call."""
@@ -554,7 +575,9 @@ class GenerateWorkflow:
         ``domain.save()`` and the checkpoint recording that fact) recognizes
         already-merged candidates and never re-adds them under a suffixed name
         (``Carrier2``). Relations and binary axioms are deduped by their
-        resolved identity tuple; ``subClassOf`` is a no-op on an exact repeat.
+        resolved identity tuple; ``subClassOf`` is a no-op on an exact repeat
+        and extra parents (multiple inheritance) are dropped, keeping the
+        already-set parent.
         """
         from back.objects.ontology.Ontology import Ontology
 
@@ -729,28 +752,8 @@ class GenerateWorkflow:
                 subject_cls = class_by_name.get(subject_name)
                 if subject_cls is None:
                     continue
-                current_parent = subject_cls.get("parent")
-                if not current_parent:
-                    subject_cls["parent"] = object_name
+                if _apply_subclass_parent(subject_cls, object_name):
                     added_axioms += 1
-                elif current_parent == object_name:
-                    # Idempotent: exact repeat (retried merge, or the agent
-                    # proposing the same subClassOf twice) — a silent no-op,
-                    # never an error.
-                    continue
-                else:
-                    # The ontology model supports only a single `parent` per
-                    # class (see OntologyGenerator._add_class) — a second,
-                    # *different* parent is multi-inheritance the model
-                    # cannot represent. Reject explicitly rather than
-                    # silently dropping it (task 4 review finding #5).
-                    raise DraftValidationError(
-                        f"Cannot set {subject_name!r} subClassOf {object_name!r}: "
-                        f"{subject_name!r} already has a different parent "
-                        f"({current_parent!r}); multiple parent classes "
-                        "(multi-inheritance) are not supported by the "
-                        "ontology model."
-                    )
             elif kind in _AXIOM_KINDS_BINARY:
                 axiom_key = (kind, subject_name, tuple(sorted([object_name])))
                 if axiom_key in existing_binary_axiom_keys:
