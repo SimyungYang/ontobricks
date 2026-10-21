@@ -272,16 +272,6 @@ class DeltaTripleStoreBuildPipeline:
             self.tm.fail_task(self.task_id, f"Failed to create VIEW: {detail}")
             return False
 
-    def _count_view_triples(self) -> int:
-        try:
-            rows = self.source_client.execute_query(
-                f"SELECT COUNT(*) AS cnt FROM {self.view_table}"
-            )
-            return int(rows[0].get("cnt", 0)) if rows else 0
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("Could not count VIEW %s: %s", self.view_table, exc)
-            return 0
-
     @property
     def _is_view_mode(self) -> bool:
         return self.materialization == "view"
@@ -291,30 +281,53 @@ class DeltaTripleStoreBuildPipeline:
         return "delta_view" if self._is_view_mode else "delta_full"
 
     def _materialize_data_table(self) -> bool:
+        """Build ``…_data`` and count its triples.
+
+        A count that cannot run raises :class:`InfrastructureError`, which
+        ``run()`` turns into a failed build rather than an empty one.
+        """
         step = (
             f"Creating pass-through VIEW {self.data_table}..."
             if self._is_view_mode
             else f"Materializing Delta table {self.data_table}..."
         )
         self.tm.advance_step(self.task_id, step)
-        self.triple_count = self._count_view_triples()
-        if self.triple_count == 0:
-            msg = "VIEW created but no triples generated (check your mappings)"
-            self.tm.complete_task(
-                self.task_id,
-                result={
-                    "triple_count": 0,
-                    "view_table": self.view_table,
-                    "data_table": self.data_table,
-                    "build_mode": self.build_mode,
-                    "materialization": self.materialization,
-                    "duration_seconds": time.time() - self.start_time,
-                },
-                message=msg,
+        if self._is_view_mode:
+            # Nothing is copied, so the gateway VIEW is what gets counted, and
+            # an empty mapping stops the build before ``…_data`` points at it.
+            self.triple_count = materialize.count_triples(
+                self.source_client, self.view_table
             )
-            self._record_build_run("success", message=msg)
-            return False
+            if self.triple_count == 0:
+                self._finish_without_triples()
+                return False
+            if not self._build_data_relation():
+                return False
+        else:
+            # Count the table once it is built. Counting the gateway VIEW
+            # first re-ran every mapped source query: two full scans per build.
+            if not self._build_data_relation():
+                return False
+            self.triple_count = materialize.count_triples(
+                self.source_client, self.data_table
+            )
+            if self.triple_count == 0:
+                self._finish_without_triples()
+                return False
 
+        self.tm.update_progress(
+            self.task_id,
+            85,
+            (
+                f"Exposed {self.triple_count} triples through a view"
+                if self._is_view_mode
+                else f"Materialized {self.triple_count} triples"
+            ),
+        )
+        return True
+
+    def _build_data_relation(self) -> bool:
+        """Create ``…_data``; on failure, fail the task and return ``False``."""
         # This pipeline is a separate entry point from _BuildPipeline — the
         # /dtwin/databricks-build/start endpoint reaches only this one — so the
         # snapshot has to be taken here too. The two never run in the same
@@ -326,20 +339,28 @@ class DeltaTripleStoreBuildPipeline:
                 self.data_table,
                 mode=self.materialization,
             )
-            self.tm.update_progress(
-                self.task_id,
-                85,
-                (
-                    f"Exposed {self.triple_count} triples through a view"
-                    if self._is_view_mode
-                    else f"Materialized {self.triple_count} triples"
-                ),
-            )
             return True
         except Exception as exc:  # noqa: BLE001
             what = "pass-through view" if self._is_view_mode else "Delta table"
             self.tm.fail_task(self.task_id, f"Failed to create the {what}: {exc}")
             return False
+
+    def _finish_without_triples(self) -> None:
+        """Complete the build with the "mappings produced nothing" warning."""
+        msg = "VIEW created but no triples generated (check your mappings)"
+        self.tm.complete_task(
+            self.task_id,
+            result={
+                "triple_count": 0,
+                "view_table": self.view_table,
+                "data_table": self.data_table,
+                "build_mode": self.build_mode,
+                "materialization": self.materialization,
+                "duration_seconds": time.time() - self.start_time,
+            },
+            message=msg,
+        )
+        self._record_build_run("success", message=msg)
 
     def _ensure_inferred_companion(self) -> None:
         if not self.inferred_table:

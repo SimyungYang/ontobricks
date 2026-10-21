@@ -218,9 +218,39 @@ class TestGetSqlConnectionParams:
             warehouse_id="wh-oauth",
         )
         params = auth.get_sql_connection_params()
-        assert params["access_token"] == "sql-oauth"
+        assert "access_token" not in params
+        headers = params["credentials_provider"]()
+        assert headers() == {"Authorization": "Bearer sql-oauth"}
         assert params["use_cloud_fetch"] is True
-        mock_oauth.assert_called()
+
+    @patch.object(DatabricksAuth, "can_use_cloud_fetch", return_value=False)
+    @patch("requests.post")
+    def test_app_mode_sql_auth_picks_up_a_refreshed_token(
+        self, mock_post, _mock_cf, monkeypatch
+    ):
+        """A statement that outlives its token must not keep sending it.
+
+        The connector asks for headers on every request, including the status
+        polls of a running statement. A static ``access_token`` expired one hour
+        into a long COUNT and the build lost the statement.
+        """
+        _clear_databricks_env(monkeypatch)
+        monkeypatch.setenv("DATABRICKS_APP_PORT", "8080")
+        monkeypatch.setenv("DATABRICKS_CLIENT_ID", "cid")
+        monkeypatch.setenv("DATABRICKS_CLIENT_SECRET", "csec")
+        first, second = MagicMock(), MagicMock()
+        first.json.return_value = {"access_token": "tok-1"}
+        second.json.return_value = {"access_token": "tok-2"}
+        mock_post.side_effect = [first, second]
+        auth = DatabricksAuth(
+            host="https://ws.databricks.com", token="", warehouse_id="wh-1"
+        )
+
+        headers = auth.get_sql_connection_params()["credentials_provider"]()
+        assert headers() == {"Authorization": "Bearer tok-1"}
+
+        auth._oauth_token_ts -= 55 * 60  # the statement has now run 55 minutes
+        assert headers() == {"Authorization": "Bearer tok-2"}
 
     @patch.object(DatabricksAuth, "can_use_cloud_fetch", return_value=False)
     def test_legacy_use_sea_flag_selects_kernel_backend(self, _mock_cf, monkeypatch):
