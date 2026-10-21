@@ -1,6 +1,7 @@
 """Tests for :class:`back.objects.ontology.Ontology` helpers used by ontology routes."""
 
 import copy
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -868,6 +869,61 @@ class TestMergeIconSuggestions:
     def test_missing_name(self):
         result = Ontology.merge_icon_suggestions(["Foo", "Baz"], {"Foo": "🔧"})
         assert "Baz" not in result
+
+
+def _bound_volume_settings():
+    settings = MagicMock()
+    settings.registry_volume_path = "/Volumes/jio_home_stg/staging/ontobricks"
+    settings.lakebase_schema = "ontobricks_registry"
+    settings.lakebase_database = ""
+    settings.registry_catalog = ""
+    settings.registry_schema = ""
+    settings.registry_volume = "OntoBricksRegistry"
+    return settings
+
+
+def _capture_run_agent(monkeypatch):
+    captured = {}
+
+    def fake_run_agent(**kwargs):
+        captured.update(kwargs)
+        result = MagicMock()
+        result.success = True
+        return result
+
+    monkeypatch.setattr("agents.agent_owl_generator.run_agent", fake_run_agent)
+    monkeypatch.setattr(
+        "agents.agent_business_rules_generator.run_agent", fake_run_agent
+    )
+    monkeypatch.setattr(
+        "shared.config.settings.get_settings", _bound_volume_settings
+    )
+    monkeypatch.setattr(
+        "back.objects.registry.store.lakebase.store.fetch_lakebase_registry_triplet",
+        lambda *a, **k: None,
+    )
+    return captured
+
+
+class TestGenerateAgentRegistryResolution:
+    def test_generate_with_agent_uses_bound_volume(self, domain_session, monkeypatch):
+        captured = _capture_run_agent(monkeypatch)
+        Ontology(domain_session).generate_with_agent(
+            host="h", token="t", endpoint_name="e", metadata={}
+        )
+        assert captured["registry"]["catalog"] == "jio_home_stg"
+        assert captured["registry"]["schema"] == "staging"
+        assert captured["registry"]["volume"] == "ontobricks"
+
+    def test_generate_rules_with_agent_uses_bound_volume(
+        self, domain_session, monkeypatch
+    ):
+        captured = _capture_run_agent(monkeypatch)
+        Ontology(domain_session).generate_rules_with_agent(
+            host="h", token="t", endpoint_name="e"
+        )
+        assert captured["registry"]["volume"] == "ontobricks"
+        assert captured["registry"]["catalog"] == "jio_home_stg"
 
 
 class TestPostprocessGeneratedOwl:

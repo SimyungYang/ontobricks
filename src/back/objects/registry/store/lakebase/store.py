@@ -671,10 +671,26 @@ class LakebaseRegistryStore(RegistryStore):
         scrubs legacy JSONB keys.  Use this both for first-time setup and
         as an in-app upgrade step when the app is updated to a new version
         that added columns to existing tables.
+
+        When the caller is not the table owner (enterprise pattern: a
+        provisioning identity owns the schema, the app SP is DML-only),
+        ``schema.sql`` is skipped with a warning and the registry row is
+        still pinned. A DML failure still fails Initialize.
         """
         del client  # not used: Lakebase instance is provisioned out of band
         try:
-            self._apply_ddl()
+            try:
+                self._apply_ddl()
+            except Exception as ddl_exc:  # noqa: BLE001
+                # Pre-provisioned schemas are owned by a dedicated deploy SP.
+                # The app identity is DML-only, so schema.sql (ALTER / CREATE
+                # INDEX) raises "must be owner of table". That must not abort
+                # the DML that pins catalog/schema/volume on the registry row.
+                logger.warning(
+                    "Lakebase DDL skipped (schema already provisioned or "
+                    "caller is not table owner): %s",
+                    ddl_exc,
+                )
             self._registry_id = self._ensure_registry_row()
             self._scrub_global_config_legacy_keys()
             # Apply pending column migrations eagerly so the admin gets

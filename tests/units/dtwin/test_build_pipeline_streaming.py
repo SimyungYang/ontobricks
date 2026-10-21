@@ -11,6 +11,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
+from back.core.errors import InfrastructureError
 from back.core.graphdb.GraphDBFactory import GraphDBFactory
 from back.objects.digitaltwin._build_pipeline import (
     _BuildPipeline,
@@ -173,6 +174,20 @@ class TestApplyViaSyncedPipeline:
         # checks don't abort the pipeline in unit tests.
         pipe.tm.is_cancelled.return_value = False
         return pipe
+
+    def test_a_failed_post_sync_count_does_not_fail_the_sync(self):
+        """The count after a successful sync only feeds the progress message."""
+        pipe = self._synced_pipe()
+        pipe._count_view_triples = MagicMock(
+            side_effect=InfrastructureError(
+                "Could not count the triples in cat.sch.v_g: "
+                "Error during request to server"
+            )
+        )
+
+        ok = pipe._apply_via_synced_pipeline()
+
+        assert ok is True
 
     def test_synced_calls_ensure_trigger_and_truncate_companion(self):
         pipe = self._synced_pipe()
