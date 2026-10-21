@@ -152,6 +152,7 @@ class TestLivePageSeedsAWorkspace:
         assert "_seed_loaded_workspace" in src
         assert "ZzE2eLive" in src
         assert "home_redirect_if_unloaded" in src
+        assert "obSubnav" in src
 
 
 class TestLiveRouteReappliesBearer:
@@ -167,7 +168,20 @@ class TestLiveRouteReappliesBearer:
         assert headers["authorization"] == "Bearer tok-abc"
         assert headers["accept"] == "text/html"
 
-    def test_install_redirect_fix_passes_headers_on_every_continue(self):
+    def test_install_redirect_fix_passes_headers_on_document_continue(self):
         src = _read(REPO_ROOT / "tests/e2e/conftest.py")
         assert "route.continue_(headers=" in src
         assert "_bearer_continue_headers" in src
+
+    def test_install_redirect_fix_falls_back_for_xhr(self):
+        """XHR must not use continue_(headers=): Playwright then fails fetch."""
+        src = _read(REPO_ROOT / "tests/e2e/conftest.py")
+        assert "route.fallback()" in src
+        assert 'resource_type != "document"' in src
+        assert 'ctx.route("**/*"' not in src
+
+    def test_live_bearer_is_reminted_before_the_apps_token_dies(self):
+        src = _read(REPO_ROOT / "tests/e2e/conftest.py")
+        assert "_LIVE_BEARER_TTL_S" in src
+        assert "_resolve_live_bearer" in src
+        assert "force_refresh=" in src

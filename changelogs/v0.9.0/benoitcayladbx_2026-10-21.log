@@ -1,4 +1,24 @@
 ================================================================================
+## Rewrite the October 2026 roadmap as a customer vision document
+================================================================================
+
+Context: The October roadmap still read as an Asana snapshot (board counts,
+Needs triage, close-out hygiene). Customers need a vision of where the
+product is going, not an internal tracker.
+
+Changes:
+
+1. releases/Roadmap_2026-10.md
+   Customer-facing vision: Available now / Next / Toward GA / Exploring.
+   No tracker language, no shipped-but-open ticket close-out, no
+   contribution-via-backlog process.
+
+Modified files:
+- releases/Roadmap_2026-10.md
+
+Tests: uv run --frozen pytest -q -m "not scenario" → 9504 passed, 326 skipped, 8 deselected, 1 xfailed, 40 warnings in 54.40s
+
+================================================================================
 ## Prefix scenario domains with Zz and purge leftovers at campaign start
 ================================================================================
 
@@ -96,3 +116,51 @@ Modified files:
 - changelogs/v0.9.0/benoitcayladbx_2026-10-21.log
 
 Tests: uv run --frozen pytest -q -m "not scenario" → 9504 passed, 326 skipped, 8 deselected, 1 xfailed, 40 warnings in 57.59s
+
+================================================================================
+## Keep live Playwright e2e authenticated on the Apps gateway
+================================================================================
+
+Context: Against ontobricks-09x, a catch-all ``page.route("**/*")`` dropped
+gateway bearer headers on fetch/XHR (``TypeError: Failed to fetch``) while
+``continue_(headers=)`` on those requests broke ``window.fetch``. A
+session-minted OAuth token also expired mid-suite (~1h), so later tests
+landed on Databricks Sign-In. Restrict intercepts to HTML navigations,
+remint the bearer every 20 minutes, and isolate a health check from a
+leaked ``DATABRICKS_CONFIG_PROFILE``.
+
+Changes:
+
+1. tests/e2e/conftest.py
+   Document-only slash-redirect intercept; ``fallback()`` for non-document;
+   ``_resolve_live_bearer`` remints before the Apps token dies.
+2. tests/e2e/scenarios/conftest.py
+   Scenario pages use the reminted bearer, not the session probe token.
+3. tests/e2e/domain/test_domain_versions_cards.py
+   Stub ``/settings/registry/domains`` so mocked card tests ignore registry fetch.
+4. tests/e2e/dtwin/test_dtwin_flows.py
+   Wait until SPARQL playground fills the default SELECT query.
+5. tests/e2e/help/test_help_modal_flows.py
+   Path-traversal image URL is rejected as 400 or 404.
+6. tests/units/e2e/test_scenario_campaign_wiring.py
+   Contracts for document continue, XHR fallback, and bearer remint.
+7. tests/units/core/test_health.py
+   Pin CLI profile to ``default`` so a live-run env cannot fail the unit test.
+8. tests/fixtures/databricks_auth.py
+   ``mint_token(..., force_refresh=)`` maps to ``databricks auth token --force-refresh``.
+9. tests/e2e/navigation/test_sidebar_bottom_alignment.py
+   Live mode waits for the seeded L2 rail and expects a 4px gutter (deployed chrome).
+
+Modified files:
+- tests/e2e/conftest.py
+- tests/e2e/scenarios/conftest.py
+- tests/e2e/domain/test_domain_versions_cards.py
+- tests/e2e/dtwin/test_dtwin_flows.py
+- tests/e2e/help/test_help_modal_flows.py
+- tests/units/e2e/test_scenario_campaign_wiring.py
+- tests/units/core/test_health.py
+- tests/fixtures/databricks_auth.py
+- tests/e2e/navigation/test_sidebar_bottom_alignment.py
+
+Tests: uv run --frozen pytest -q -m "not scenario" → 9506 passed, 326 skipped, 8 deselected, 1 xfailed, 40 warnings in 46.46s
+
