@@ -1,4 +1,41 @@
 ================================================================================
+## Raise Dependabot security floors and document 0.8.x → 0.9.0 upgrades
+================================================================================
+
+Context: GitHub Dependabot listed 14 open pip advisories on uv.lock.
+Patched floors close the ones with a published fix. oauthlib 4.x is blocked
+by databricks-sql-connector; nltk has no patched release. Operators needed
+a short in-place upgrade guide matching update_to_0.8.md. No warehouse
+registry DDL: 0.9 only adds domain_documents lazily.
+
+Changes:
+
+1. pyproject.toml
+   Raise strawberry-graphql, aiohttp, mcp, Mako floors; add fsspec,
+   multidict, and werkzeug constraints.
+2. src/mcp-server/pyproject.toml
+   Raise mcp to >=1.30.0 (StreamableHTTP session accumulation).
+3. uv.lock
+   Re-lock patched versions on files.pythonhosted.org.
+4. src/mcp-server/uv.lock
+   Pin mcp 1.30.0 on the public CDN.
+5. docs/development.md
+   Document strawberry-graphql >=0.327.2.
+6. update_to_0.9.0.md
+   In-place 0.8.x → 0.9.0 upgrade: keep deploy.config.sh, updater, OBO
+   grants, Knowledge Store re-upload.
+
+Modified files:
+- pyproject.toml
+- src/mcp-server/pyproject.toml
+- uv.lock
+- src/mcp-server/uv.lock
+- docs/development.md
+- update_to_0.9.0.md
+
+Tests: uv run --frozen pytest -q -m "not scenario" → 9506 passed, 326 skipped, 8 deselected, 1 xfailed, 40 warnings in 55.38s
+
+================================================================================
 ## Rewrite the October 2026 roadmap as a customer vision document
 ================================================================================
 
