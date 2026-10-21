@@ -106,3 +106,22 @@ class TestLoopbackLiveBaseDoesNotNeedAppsToken:
     def test_the_e2e_bearer_fixture_uses_the_loopback_gate(self):
         src = _read(REPO_ROOT / "tests/e2e/conftest.py")
         assert "needs_apps_gateway_token" in src
+
+
+class TestLiveRouteReappliesBearer:
+    """Playwright ``route.continue_()`` drops context extra_http_headers."""
+
+    def test_bearer_is_copied_onto_continue_headers(self):
+        from tests.e2e.conftest import _bearer_continue_headers
+
+        headers = _bearer_continue_headers(
+            {"accept": "text/html", "host": "ontobricks.example"},
+            "tok-abc",
+        )
+        assert headers["authorization"] == "Bearer tok-abc"
+        assert headers["accept"] == "text/html"
+
+    def test_install_redirect_fix_passes_headers_on_every_continue(self):
+        src = _read(REPO_ROOT / "tests/e2e/conftest.py")
+        assert "route.continue_(headers=" in src
+        assert "_bearer_continue_headers" in src

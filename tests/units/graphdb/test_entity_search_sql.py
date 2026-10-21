@@ -42,6 +42,33 @@ def test_is_view_not_table_error_matches_describe_detail_on_a_view() -> None:
     assert is_view_not_table_error(RuntimeError("TABLE_OR_VIEW_NOT_FOUND: g")) is False
 
 
+def test_is_view_not_table_error_reads_apps_sea_detail() -> None:
+    """Statement Execution wraps the warehouse error in InfrastructureError.detail."""
+    from back.core.errors import InfrastructureError
+
+    exc = InfrastructureError(
+        "Databricks SQL statement failed",
+        detail=(
+            '{"error_code":"BAD_REQUEST","message":"[EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE] '
+            "'DESCRIBE DETAIL' expects a table but `cat`.`sch`.`g_data` is a view. "
+            'SQLSTATE: 42809"}'
+        ),
+    )
+    assert is_view_not_table_error(exc) is True
+    assert is_missing_relation_error(exc) is False
+
+
+def test_is_missing_relation_error_reads_apps_sea_detail() -> None:
+    from back.core.errors import InfrastructureError
+
+    exc = InfrastructureError(
+        "Databricks SQL statement failed",
+        detail='{"error_code":"BAD_REQUEST","message":"TABLE_OR_VIEW_NOT_FOUND: g"}',
+    )
+    assert is_missing_relation_error(exc) is True
+    assert is_view_not_table_error(exc) is False
+
+
 def test_asserted_only_suffixes() -> None:
     assert is_asserted_only_relation("cat.sch.g_data") is True
     assert is_asserted_only_relation("g_x_v1_sync") is True

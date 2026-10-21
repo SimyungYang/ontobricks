@@ -194,3 +194,38 @@ Modified files:
 
 Tests: uv run --frozen pytest -q -m "not scenario" → 9484 passed, 326 skipped, 7 deselected, 1 xfailed, 40 warnings in 47.22s
 
+================================================================================
+## Classify SEA-wrapped VIEW errors; keep Apps bearer on Playwright continue
+================================================================================
+
+Context: Live campaign scenario 5 failed after a successful Lakehouse
+zero-copy build because ``DESCRIBE DETAIL`` on the ``…_data`` VIEW comes
+back from Statement Execution as ``InfrastructureError("Databricks SQL
+statement failed")`` with ``EXPECT_TABLE_NOT_VIEW`` only in ``detail``.
+Classifiers that look at ``str(exc)`` treated the VIEW as missing. Live
+Playwright e2e also landed on Databricks Sign-In / 401 because
+``route.continue_()`` dropped ``extra_http_headers``.
+
+Changes:
+
+1. src/back/core/graphdb/entity_search.py
+   ``is_view_not_table_error`` / ``is_missing_relation_error`` also read
+   ``exc.detail`` (SEA warehouse payload).
+2. tests/e2e/conftest.py
+   Re-apply ``Authorization: Bearer`` on every Playwright ``continue_``.
+3. tests/units/graphdb/test_entity_search_sql.py
+   SEA-detail classifier cases.
+4. tests/units/graphdb/delta/test_delta_status_probe.py
+   Zero-copy ``…_data`` VIEW still exists when SEA wraps the VIEW error.
+5. tests/units/e2e/test_scenario_campaign_wiring.py
+   Bearer headers are copied onto ``route.continue_``.
+
+Modified files:
+- src/back/core/graphdb/entity_search.py
+- tests/e2e/conftest.py
+- tests/units/graphdb/test_entity_search_sql.py
+- tests/units/graphdb/delta/test_delta_status_probe.py
+- tests/units/e2e/test_scenario_campaign_wiring.py
+
+Tests: uv run --frozen pytest -q -m "not scenario" → 9489 passed, 326 skipped, 7 deselected, 1 xfailed, 40 warnings in 55.59s
+

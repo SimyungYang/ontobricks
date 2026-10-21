@@ -99,6 +99,18 @@ def _e2e_explicitly_selected(config) -> bool:
     return any("tests/e2e" in a or a.endswith("/e2e") for a in normalized)
 
 
+def _bearer_continue_headers(request_headers: dict, token: str) -> dict:
+    """Re-apply the Apps gateway bearer after Playwright intercepts a request.
+
+    ``page.route`` + ``route.continue_()`` drops ``extra_http_headers``, so
+    document navigations hit the Databricks sign-in page and XHR/API calls
+    come back 401. Copy intercepted headers and set ``Authorization``.
+    """
+    headers = dict(request_headers or {})
+    headers["authorization"] = f"Bearer {token}"
+    return headers
+
+
 def _install_redirect_fix(ctx, base: str, token: str) -> None:
     """Work around the deployed app's wrong-host ``redirect_slashes`` redirects.
 
@@ -112,9 +124,10 @@ def _install_redirect_fix(ctx, base: str, token: str) -> None:
     Instead, for each top-level document navigation we resolve the canonical
     URL server-side with httpx — following redirects but pinning every hop
     back onto ``base`` — then point the browser straight at the resolved
-    same-origin URL (``continue_`` only allows same-origin rewrites). Sub-
-    resource and XHR requests are passed through untouched (they already
-    target ``base`` and carry the bearer header from the context).
+    same-origin URL (``continue_`` only allows same-origin rewrites). Every
+    intercepted request (document, XHR, sub-resource) is continued with the
+    gateway bearer, because Playwright drops ``extra_http_headers`` once a
+    route handler is installed.
     """
     import httpx
 
@@ -146,18 +159,19 @@ def _install_redirect_fix(ctx, base: str, token: str) -> None:
 
     def _route(route):
         req = route.request
+        headers = _bearer_continue_headers(req.headers, token)
         if req.resource_type != "document" or not req.url.startswith(base):
-            route.continue_()
+            route.continue_(headers=headers)
             return
         try:
             resolved = _canonical(req.url)
         except Exception:  # noqa: BLE001 — best-effort; fall back to the browser
-            route.continue_()
+            route.continue_(headers=headers)
             return
         if resolved != req.url:
-            route.continue_(url=resolved)
+            route.continue_(url=resolved, headers=headers)
         else:
-            route.continue_()
+            route.continue_(headers=headers)
 
     ctx.route("**/*", _route)
 
