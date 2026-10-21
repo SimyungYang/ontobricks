@@ -1,4 +1,56 @@
 ================================================================================
+## Prefix scenario domains with Zz and purge leftovers at campaign start
+================================================================================
+
+Context: Campaign domains mixed with real registry entries. Names cannot
+contain underscores (CamelCase alphanumeric only), so the ``ZZ_`` prefix
+becomes ``Zz``. A new scenario 0 deletes leftover ``Zz*`` / ``ZZ_*``
+folders (and the pre-rename ``testscenario1`` / ``testzerocopy`` /
+``testmetadataintegrity`` / ``salesdomain`` ones) before the journey
+recreates them.
+
+Changes:
+
+1. tests/e2e/scenarios/_harness.py
+   Canonical ``Zz*`` domain constants, leftover matcher, and
+   ``purge_campaign_domains``.
+2. tests/e2e/scenarios/test_scenario_00_purge.py
+   Campaign preflight: DELETE every leftover campaign domain.
+3. tests/e2e/scenarios/test_scenario_01_generate_live.py
+   Domain ``ZzTestScenario1``; chain depends on scenario 0.
+4. tests/e2e/scenarios/test_scenario_02_collab_lifecycle.py
+   Default folder ``zztestscenario1``.
+5. tests/e2e/scenarios/test_scenario_03_rules_analysis.py
+   Default folder ``zztestscenario1``.
+6. tests/e2e/scenarios/test_scenario_04_metadata_integrity.py
+   Domain ``ZzTestMetadataIntegrity``; chain depends on scenario 0.
+7. tests/e2e/scenarios/test_scenario_05_zero_copy_entity_features.py
+   Domain ``ZzTestZeroCopy``; chain depends on scenario 0.
+8. tests/e2e/scenarios/test_scenario_validation.py
+   Default folder ``zztestscenario1``.
+9. tests/e2e/scenarios/test_full_lifecycle.py
+   Domain ``ZzSalesDomain``.
+10. tests/e2e/scenarios/README.md
+    Document Zz prefix, purge step, and chain on scenario 0.
+11. tests/units/e2e/test_scenario_campaign_wiring.py
+    Prefix, leftover matcher, and purge-step contracts.
+
+Modified files:
+- tests/e2e/scenarios/_harness.py
+- tests/e2e/scenarios/test_scenario_00_purge.py
+- tests/e2e/scenarios/test_scenario_01_generate_live.py
+- tests/e2e/scenarios/test_scenario_02_collab_lifecycle.py
+- tests/e2e/scenarios/test_scenario_03_rules_analysis.py
+- tests/e2e/scenarios/test_scenario_04_metadata_integrity.py
+- tests/e2e/scenarios/test_scenario_05_zero_copy_entity_features.py
+- tests/e2e/scenarios/test_scenario_validation.py
+- tests/e2e/scenarios/test_full_lifecycle.py
+- tests/e2e/scenarios/README.md
+- tests/units/e2e/test_scenario_campaign_wiring.py
+
+Tests: uv run --frozen pytest -q -m "not scenario" → 9492 passed, 326 skipped, 8 deselected, 1 xfailed, 40 warnings in 56.82s
+
+================================================================================
 ## Fail Knowledge Graph builds on a lost triple count instead of reporting 0
 ================================================================================
 

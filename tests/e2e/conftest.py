@@ -161,7 +161,9 @@ def _install_redirect_fix(ctx, base: str, token: str) -> None:
         req = route.request
         headers = _bearer_continue_headers(req.headers, token)
         if req.resource_type != "document" or not req.url.startswith(base):
-            route.continue_(headers=headers)
+            # Do not rewrite headers on fetch/XHR: Playwright then fails
+            # ``window.fetch`` with TypeError: Failed to fetch.
+            route.continue_()
             return
         try:
             resolved = _canonical(req.url)
@@ -470,6 +472,8 @@ def pytest_collection_modifyitems(config, items):
 
     if not _live_base():
         return
+    if os.environ.get("ONTOBRICKS_LIVE_NO_SKIP") == "1":
+        return
     allow_mut = os.environ.get("ONTOBRICKS_LIVE_ALLOW_MUTATING") == "1"
     skip_env = pytest.mark.skip(
         reason="live mode: ENV-SPECIFIC (assumes local admin/no-auth host)"
@@ -484,6 +488,39 @@ def pytest_collection_modifyitems(config, items):
             item.add_marker(skip_env)
         elif not allow_mut and any(s in nid for s in _LIVE_SKIP_MUTATING):
             item.add_marker(skip_mut)
+
+
+def _seed_loaded_workspace(pg, base: str) -> None:
+    """Give the session a named domain so workspace HTML does not 303 to Home.
+
+    ``home_redirect_if_unloaded`` sends ``/ontology``, ``/mapping``,
+    ``/domain``, and ``/dtwin`` to ``/`` when the session is still the
+    ``NewDomain`` placeholder. Live Apps contexts start empty, so sidebar
+    and title assertions would otherwise run against the home page.
+    Session-only — not saved to the registry.
+    """
+    import json
+
+    pg.goto(base)
+    pg.wait_for_load_state("domcontentloaded")
+    headers = {"Content-Type": "application/json"}
+    cookies = {c["name"]: c["value"] for c in pg.context.cookies()}
+    if csrf := cookies.get("csrf_token"):
+        headers["X-CSRF-Token"] = csrf
+    resp = pg.context.request.post(
+        f"{base}/domain/info",
+        headers=headers,
+        data=json.dumps(
+            {
+                "name": "ZzE2eLive",
+                "description": "Session-only workspace seed for live e2e",
+            }
+        ),
+    )
+    if resp.status != 200:
+        raise AssertionError(
+            f"live workspace seed failed: {resp.status} {resp.text()[:300]}"
+        )
 
 
 @pytest.fixture
@@ -504,6 +541,8 @@ def page(browser_instance, live_server, _live_bearer):
         ctx = browser_instance.new_context()
     pg = ctx.new_page()
     pg.base_url = live_server
+    if _live_base():
+        _seed_loaded_workspace(pg, live_server)
     yield pg
     pg.close()
     ctx.close()

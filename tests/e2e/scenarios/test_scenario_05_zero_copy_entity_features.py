@@ -24,9 +24,9 @@ One connected journey against a running app and a real SQL warehouse:
 Like scenario 4 this journey is self-contained: it builds its own domain over
 scratch Unity Catalog tables and functions it creates and drops itself, so it
 is a sibling of the scenario 1-3 story (own ``chain_marker`` name, no
-``depends``) and never touches ``testscenario1``.
+``depends``) and never touches ``zztestscenario1``.
 
-The domain (``TestZeroCopy``) is intentionally **not** deleted at the end, same
+The domain (``ZzTestZeroCopy``) is intentionally **not** deleted at the end, same
 rationale as scenarios 1 and 4: open the app afterwards and inspect it. Its
 graph is a view over scratch tables that teardown drops, so it reads empty
 until the scenario runs again.
@@ -58,6 +58,7 @@ from urllib.parse import quote
 import pytest
 
 from tests.e2e.scenarios._harness import (
+    ZERO_COPY_DOMAIN_NAME,
     chain_marker,
     csrf_headers,
     json_body,
@@ -73,10 +74,10 @@ pytestmark = [
         "(needs a running app + warehouse; writes a durable domain + scratch "
         "UC tables and functions it drops on teardown)",
     ),
-    *chain_marker("scenario_5"),
+    *chain_marker("scenario_5", depends=("scenario_0",)),
 ]
 
-_DOMAIN_NAME = "TestZeroCopy"
+_DOMAIN_NAME = ZERO_COPY_DOMAIN_NAME
 _DOMAIN_FOLDER = _DOMAIN_NAME.lower()
 _BASE_URI = f"http://ontobricks.ai/{_DOMAIN_NAME}#"
 
