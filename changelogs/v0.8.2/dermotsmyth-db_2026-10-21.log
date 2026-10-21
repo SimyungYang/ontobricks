@@ -22,3 +22,25 @@ Modified files:
 - changelogs/v0.8.2/dermotsmyth-db_2026-10-21.log
 
 Tests: `uv run --frozen pytest -q -m "not scenario"` → 5939 passed, 316 skipped, 9 deselected, 0 failed in 38.05s. Deselected: 6 by the `not scenario` marker and the 3 network-bound health tests listed on 2026-10-19. The two new behaviour tests failed on the old code (SQL refused → ""; tables API never called).
+
+================================================================================
+## Prepare the v0.8.2 release
+================================================================================
+
+Context:
+Release v0.8.2 with the fixes merged after the 13 October release notes: the
+Knowledge Graph build fix (#201) and table descriptions (section above).
+
+Changes:
+
+1. releases/ReleaseNotes_V0.8.2.md
+   Added the Knowledge Graph build and table-description fixes (highlights, two sections, upgrade notes, bug fixes) and replaced the test-status line with the full-suite result.
+2. uv.lock
+   Root package version 0.8.1 → 0.8.2, matching pyproject.toml (one line). A re-lock was not possible from this network: pypi.org is not reachable directly, and `uv lock` through the internal index rewrites every URL to `pypi-proxy.cloud.databricks.com`, which must not be committed (see `.cursor/09-package-management.mdc`).
+
+Modified files:
+- releases/ReleaseNotes_V0.8.2.md
+- uv.lock
+- changelogs/v0.8.2/dermotsmyth-db_2026-10-21.log
+
+Tests: no code change; same full-suite run as the section above (5939 passed, 0 failed).
