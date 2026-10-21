@@ -345,7 +345,9 @@ class UnityCatalog:
             return []
 
     def get_table_comment(self, catalog: str, schema: str, table: str) -> str:
-        """Return the table-level comment (empty string if none or on error).
+        """Return the table-level comment, or "" if it has none or the call fails.
+
+        Invalid identifiers raise :class:`ValidationError`, as before.
 
         Read from the Unity Catalog tables API, like
         :meth:`list_tables_and_views`. It needs only the grants a data source

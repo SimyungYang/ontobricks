@@ -325,7 +325,8 @@ class TestGetTableComment:
             "cat", "sch", "tbl"
         )
 
-        assert comment == ""
+        # The empty string must be the API's answer, not a skipped call.
+        assert (comment, mock_get.call_count) == ("", 1)
 
     @patch.object(_unity_catalog_mod.requests, "get")
     def test_returns_empty_when_the_api_refuses(self, mock_get, auth_with_warehouse):
@@ -337,7 +338,27 @@ class TestGetTableComment:
             "cat", "sch", "tbl"
         )
 
-        assert comment == ""
+        assert (comment, mock_get.call_count) == ("", 1)
+
+    @patch.object(_unity_catalog_mod.requests, "get")
+    def test_sends_nothing_without_credentials(self, mock_get, auth_with_warehouse):
+        auth_with_warehouse.has_valid_auth = lambda: False
+
+        comment = UnityCatalog(auth_with_warehouse).get_table_comment(
+            "cat", "sch", "tbl"
+        )
+
+        assert (comment, mock_get.call_count) == ("", 0)
+
+    @patch.object(_unity_catalog_mod.requests, "get")
+    def test_sends_nothing_without_a_host(self, mock_get, auth_with_warehouse):
+        auth_with_warehouse.host = ""
+
+        comment = UnityCatalog(auth_with_warehouse).get_table_comment(
+            "cat", "sch", "tbl"
+        )
+
+        assert (comment, mock_get.call_count) == ("", 0)
 
 
 class TestGetVolumesSql:

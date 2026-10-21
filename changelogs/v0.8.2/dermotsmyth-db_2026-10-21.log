@@ -44,3 +44,32 @@ Modified files:
 - changelogs/v0.8.2/dermotsmyth-db_2026-10-21.log
 
 Tests: no code change; same full-suite run as the section above (5939 passed, 0 failed).
+
+================================================================================
+## Address Isaac Review comments on PR #202
+================================================================================
+
+Context:
+Isaac Review (`isaac review --base origin/0.8.2`) posted no findings. Of the
+comments it filtered below its auto-post threshold, three were worth acting on:
+two test gaps and a docstring that overclaimed. The others were pre-existing
+behaviour (validation outside the try, one request and one logged error per
+table) or speculative (non-dict response body), and the `has_valid_auth`
+concern does not apply: `DatabricksAuth` reads DATABRICKS_TOKEN at init.
+
+Changes:
+
+1. tests/units/core/test_unity_catalog.py
+   New tests: no request is sent without credentials or without a host (the guard was untested). The "no comment" and "API refuses" tests now also check the tables API was called, so they no longer pass on the old SQL path. Mutation-checked: removing the guard, or skipping the API call, fails these tests.
+2. src/back/core/databricks/uc/UnityCatalog.py
+   Docstring: `get_table_comment()` returns "" when the table has no comment or the call fails; invalid identifiers still raise ValidationError.
+3. releases/ReleaseNotes_V0.8.2.md
+   Test count updated.
+
+Modified files:
+- tests/units/core/test_unity_catalog.py
+- src/back/core/databricks/uc/UnityCatalog.py
+- releases/ReleaseNotes_V0.8.2.md
+- changelogs/v0.8.2/dermotsmyth-db_2026-10-21.log
+
+Tests: `uv run --frozen pytest -q -m "not scenario"` → 5941 passed, 316 skipped, 9 deselected, 0 failed in 35.12s (same 9 deselected as above).

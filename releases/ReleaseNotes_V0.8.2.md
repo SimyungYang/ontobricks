@@ -2,7 +2,7 @@
 
 **Release window:** October 2026<br>
 **Type:** Patch release (v0.8.1 → v0.8.2)<br>
-**Test status:** `uv run --frozen pytest -q -m "not scenario"`: 5939 passed, 316 skipped, 9 deselected, 32 warnings. The deselected tests are 6 scenario tests and 3 health tests that open a live SQL warehouse connection (`tests/units/api/test_routes.py::TestHealthRoutes::test_health_check` and `tests/units/core/test_health.py::TestRunReadinessChecks`). Without a reachable warehouse they wait in the connector's retry back-off, which is the stall at `test_routes.py` recorded on 2026-10-01 and 2026-10-12.
+**Test status:** `uv run --frozen pytest -q -m "not scenario"`: 5941 passed, 316 skipped, 9 deselected, 32 warnings. The deselected tests are 6 scenario tests and 3 health tests that open a live SQL warehouse connection (`tests/units/api/test_routes.py::TestHealthRoutes::test_health_check` and `tests/units/core/test_health.py::TestRunReadinessChecks`). Without a reachable warehouse they wait in the connector's retry back-off, which is the stall at `test_routes.py` recorded on 2026-10-01 and 2026-10-12.
 
 ---
 
