@@ -18,3 +18,29 @@ Modified files:
 - merge of origin/master into 0.9.0 (conflict resolutions as above)
 
 Tests: uv run --frozen pytest -q -m "not scenario" → 9515 passed, 326 skipped, 8 deselected, 40 warnings in 46.74s
+
+================================================================================
+## Keep make deploy from rebinding Lakebase off a sourced .env
+================================================================================
+
+Context: Redeploying ontobricks-09x while ``LAKEBASE_PROJECT`` was still
+exported from ``.env`` overrode ``deploy.config.sh`` and rebound the app
+postgres resource from ``ontobricks-demo-09-registry`` (the populated
+registry) to ``ontobricks-dev-registry``. Domains were not deleted; the
+app pointed at a different database.
+
+Changes:
+
+1. Makefile
+   ``make deploy`` (and siblings) also unset ``LAKEBASE_*`` /
+   ``APP_LAKEBASE_PROJECT`` / ``APP_LAKEBASE_BRANCH`` before
+   ``scripts/deploy.sh``.
+2. tests/units/settings/test_deploy_app_rename_guard.py
+   Contract that the deploy recipes drop those env vars.
+
+Modified files:
+- Makefile
+- tests/units/settings/test_deploy_app_rename_guard.py
+
+Tests: uv run --frozen pytest -q -m "not scenario" → 9516 passed, 326 skipped, 8 deselected, 40 warnings in 54.06s
+
