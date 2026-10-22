@@ -1333,10 +1333,39 @@ class TestIsStatusGatedEdit:
     def test_dtwin_non_gated_paths_remain_open(self, path):
         assert not self._fn(path, "POST")
 
-    # --- Wizard paths are exempt regardless ---
+    # --- Wizard paths are exempt regardless (except an explicit ---
+    # --- carve-out for the one wizard route that actually persists ---
+    # --- into the ontology design: staged Generate's merge). ---
 
     def test_wizard_path_exempt(self):
         assert not self._fn("/ontology/wizard/step1", "POST")
+
+    @pytest.mark.parametrize(
+        "path",
+        [
+            "/ontology/wizard/generate/detect",
+            "/ontology/wizard/generate/draft/update",
+            "/ontology/wizard/generate/draft/discard",
+        ],
+    )
+    def test_generate_review_routes_remain_exempt(self, path):
+        """Stage 1 detect and Stage 2 draft mutations only touch the
+        session-scoped draft, never the persisted ontology design — they
+        must stay reachable on a locked/PUBLISHED version exactly like the
+        rest of the wizard."""
+        assert not self._fn(path, "POST")
+
+    def test_generate_complete_is_gated(self):
+        """Stage 3 ``complete`` calls the deterministic append-only merge,
+        which persists new classes/properties/axioms into the loaded
+        version's design (``domain.save()``) — it must be status/lock
+        gated exactly like every other ``/ontology/`` design mutation,
+        despite living under the generally-exempt ``/wizard/`` prefix."""
+        assert self._fn("/ontology/wizard/generate/complete", "POST")
+
+    def test_generate_complete_get_not_gated(self):
+        """Only the mutating verbs matter — GET is never gated."""
+        assert not self._fn("/ontology/wizard/generate/complete", "GET")
 
 
 # ------------------------------------------------------------------
@@ -1397,3 +1426,220 @@ class TestLifecycleGateInDispatch:
         assert result.get("passed"), (
             f"KG filter should be allowed on {status} version"
         )
+
+
+# ------------------------------------------------------------------
+# Staged Generate: POST /ontology/wizard/generate/complete mutates the
+# design (append-only merge), so it must obey the same lifecycle-status
+# and single-editor-lock gate as every other design edit. Stage 1 detect
+# and Stage 2 draft review only touch the session-scoped draft (never the
+# persisted ontology), so they must remain reachable regardless of status
+# or lock, exactly like the rest of the wizard.
+# ------------------------------------------------------------------
+
+
+class TestGenerateCompleteLifecycleGate:
+    COMPLETE_PATH = "/ontology/wizard/generate/complete"
+    REVIEW_ONLY_PATHS = [
+        "/ontology/wizard/generate/detect",
+        "/ontology/wizard/generate/draft/update",
+        "/ontology/wizard/generate/draft/discard",
+    ]
+
+    @pytest.mark.parametrize("status", ["PUBLISHED", "IN-REVIEW"])
+    def test_complete_blocked_on_non_draft(self, status):
+        _, resp, result = _dispatch_with_status(
+            ROLE_APP_USER, ROLE_BUILDER,
+            version_status=status,
+            path=self.COMPLETE_PATH,
+        )
+        assert resp.status_code == 403
+        assert not result.get("passed")
+
+    def test_complete_passes_on_draft_with_no_lock_holder(self):
+        """Normal builder flow: DRAFT version, lock free/held by the
+        caller — completion must reach the handler."""
+        _, _, result = _dispatch_with_status(
+            ROLE_APP_USER, ROLE_BUILDER,
+            version_status="DRAFT",
+            path=self.COMPLETE_PATH,
+        )
+        assert result.get("passed")
+
+    def test_complete_blocked_by_other_lock_holder_on_draft(self):
+        """DRAFT version but a *different* user holds the edit lock —
+        completion must be blocked exactly like any other design edit."""
+        _, resp, result = _dispatch_with_edit_lock("Bob", path=self.COMPLETE_PATH)
+        assert resp.status_code == 403
+        assert not result.get("passed")
+
+    def test_complete_admin_not_exempt_from_lock(self):
+        """Admins must take over the lock first, same as every other
+        design-editing route — no route-specific admin bypass."""
+        _, resp, result = _dispatch_with_edit_lock(
+            "Bob", app_role=ROLE_ADMIN, domain_role=ROLE_ADMIN, path=self.COMPLETE_PATH,
+        )
+        assert resp.status_code == 403
+        assert not result.get("passed")
+
+    def test_complete_blocked_for_viewer_role(self):
+        """The plain role gate still applies underneath the lifecycle gate."""
+        _, resp, result = _dispatch_with_status(
+            ROLE_APP_USER, ROLE_VIEWER,
+            version_status="DRAFT",
+            path=self.COMPLETE_PATH,
+        )
+        assert resp.status_code == 403
+        assert not result.get("passed")
+
+    @pytest.mark.parametrize("path", REVIEW_ONLY_PATHS)
+    @pytest.mark.parametrize("status", ["PUBLISHED", "IN-REVIEW"])
+    def test_review_routes_reachable_on_locked_version(self, path, status):
+        """Stage 1/2 must stay reachable on a locked version — they never
+        touch the persisted design, only the session-scoped draft."""
+        _, _, result = _dispatch_with_status(
+            ROLE_APP_USER, ROLE_BUILDER,
+            version_status=status,
+            path=path,
+        )
+        assert result.get("passed"), f"{path} should be reachable on a {status} version"
+
+    @pytest.mark.parametrize("path", REVIEW_ONLY_PATHS)
+    def test_review_routes_reachable_despite_other_lock_holder(self, path):
+        """Stage 1/2 must not be blocked by the design edit-lock either —
+        it is not a design mutation."""
+        _, _, result = _dispatch_with_edit_lock("Bob", path=path)
+        assert result.get("passed")
+
+
+# ------------------------------------------------------------------
+# Request identity binding (OBO)
+# ------------------------------------------------------------------
+
+
+class TestRequestIdentityBinding:
+    """PermissionMiddleware binds the caller identity for the request scope."""
+
+    def test_identity_bound_during_call_next(self):
+        from shared.fastapi.main import PermissionMiddleware
+        from back.core.databricks.request_identity import get_request_identity
+
+        req = _make_request(
+            method="GET",
+            path="/dtwin/query",
+            headers={"x-forwarded-access-token": "utok"},
+        )
+        seen = {}
+
+        async def call_next(r):
+            ident = get_request_identity()
+            seen["email"] = ident.email
+            seen["token"] = ident.user_token
+            seen["domain_role"] = ident.domain_role
+            return MagicMock(status_code=200)
+
+        middleware = PermissionMiddleware(MagicMock())
+
+        with (
+            patch("back.core.databricks.is_databricks_app", return_value=True),
+            patch.object(
+                PermissionMiddleware,
+                "_resolve_roles",
+                return_value=(ROLE_APP_USER, ROLE_VIEWER),
+            ),
+        ):
+            _run(middleware.dispatch(req, call_next))
+
+        assert seen["email"] == "user@test.com"
+        assert seen["token"] == "utok"
+        assert seen["domain_role"] == ROLE_VIEWER
+        assert req.state.user_token == "utok"
+        # Identity is reset after the request completes.
+        assert get_request_identity().user_token == ""
+
+    def test_local_dev_binds_admin_identity(self):
+        from shared.fastapi.main import PermissionMiddleware
+        from back.core.databricks.request_identity import get_request_identity
+
+        req = _make_request(method="GET", path="/dtwin/query")
+        seen = {}
+
+        async def call_next(r):
+            seen["role"] = get_request_identity().app_role
+            seen["token"] = get_request_identity().user_token
+            return MagicMock(status_code=200)
+
+        middleware = PermissionMiddleware(MagicMock())
+
+        with patch("back.core.databricks.is_databricks_app", return_value=False):
+            _run(middleware.dispatch(req, call_next))
+
+        assert seen["role"] == "admin"
+        assert seen["token"] == ""
+        assert get_request_identity().user_token == ""
+
+
+# ------------------------------------------------------------------
+# Bypass paths still carry the forwarded user token for OBO (MCP)
+# ------------------------------------------------------------------
+
+
+class TestBypassBindsForwardedTokenForOBO:
+    """`/api/*` and `/graphql/*` skip the session role gate, but they must
+    still stamp the forwarded ``x-forwarded-access-token`` into the request
+    identity so Lakehouse / Unity Catalog reads run on-behalf-of the caller
+    (MCP OBO), exactly like Explorer and Graph Chat on the internal routes.
+
+    Missing token → empty (service-principal fallback, unchanged)."""
+
+    @pytest.mark.parametrize("path", ["/api/v1/digitaltwin/triples/find", "/graphql/"])
+    def test_forwarded_token_bound_on_bypass(self, path):
+        from shared.fastapi.main import PermissionMiddleware
+        from back.core.databricks.request_identity import get_request_identity
+
+        req = _make_request(
+            method="GET",
+            path=path,
+            email="user@test.com",
+            headers={"x-forwarded-access-token": "utok"},
+        )
+        seen = {}
+
+        async def call_next(r):
+            ident = get_request_identity()
+            seen["email"] = ident.email
+            seen["token"] = ident.user_token
+            return MagicMock(status_code=200)
+
+        middleware = PermissionMiddleware(MagicMock())
+        with patch("back.core.databricks.is_databricks_app", return_value=True):
+            _run(middleware.dispatch(req, call_next))
+
+        # Session role gate is still bypassed (no redirect for programmatic
+        # / MCP callers) ...
+        assert req.state.user_role == ""
+        assert req.state.user_domain_role == ""
+        # ... but the forwarded user token is available for OBO.
+        assert seen["token"] == "utok"
+        assert seen["email"] == "user@test.com"
+        assert req.state.user_token == "utok"
+        # Identity is reset after the request completes.
+        assert get_request_identity().user_token == ""
+
+    def test_bypass_without_token_stays_service_principal(self):
+        from shared.fastapi.main import PermissionMiddleware
+        from back.core.databricks.request_identity import get_request_identity
+
+        req = _make_request(method="GET", path="/api/v1/domains", email="")
+        seen = {}
+
+        async def call_next(r):
+            seen["token"] = get_request_identity().user_token
+            return MagicMock(status_code=200)
+
+        middleware = PermissionMiddleware(MagicMock())
+        with patch("back.core.databricks.is_databricks_app", return_value=True):
+            _run(middleware.dispatch(req, call_next))
+
+        assert seen["token"] == ""
+        assert req.state.user_token == ""

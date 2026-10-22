@@ -20,7 +20,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from databricks.sql.exc import RequestError
 
-from back.objects.digitaltwin._build_pipeline import _BuildPipeline
+from back.objects.digitaltwin.build._build_pipeline import _BuildPipeline
 
 _VIEW = "cat.sch.triplestore_dom_V3"
 _DATA = "cat.sch.triplestore_dom_V3_data"
@@ -40,6 +40,9 @@ class _StubTM:
         self.steps.append(str(msg))
 
     def update_progress(self, task_id, pct, msg="") -> None:
+        self.steps.append(str(msg))
+
+    def skip_step(self, task_id, msg="") -> None:
         self.steps.append(str(msg))
 
     def fail_task(self, task_id, msg="") -> None:
@@ -77,7 +80,9 @@ class _RecordingClient:
         self.calls.append(sql)
         if self._fail_on and self._fail_on in sql:
             raise RequestError("Error during request to server")
-        return [{"cnt": self._count}]
+        if sql.strip().upper().startswith("SELECT COUNT"):
+            return [{"cnt": self._count}]
+        return []
 
     def execute_statement(self, sql: str) -> bool:
         self.calls.append(sql)
@@ -337,6 +342,7 @@ def _bare_delta_pipeline(
     pipe._ensure_inferred_companion = MagicMock()
     pipe._truncate_inferred = MagicMock()
     pipe._ensure_graph_view = MagicMock()
+    pipe._rebuild_adjacency_index = MagicMock()
     pipe._log_phase = MagicMock()
 
     if not real_reporting:
@@ -515,3 +521,15 @@ class TestCountingTriples:
 
         assert results[0]["triple_count"] == 0
         assert "no triples generated" in pipe.tm.messages[0]
+
+    def test_an_empty_count_result_fails_the_build(self):
+        """COUNT(*) with no row is infrastructure, not an empty mapping."""
+        from back.core.errors import InfrastructureError
+        from back.core.graphdb.delta import materialize
+
+        class _Empty:
+            def execute_query(self, sql: str):
+                return []
+
+        with pytest.raises(InfrastructureError, match="returned no row"):
+            materialize.count_triples(_Empty(), _VIEW)

@@ -39,11 +39,6 @@ window.DQExecModule = {
             const t = e.target.closest('[data-dq-action]');
             if (!t || !root.contains(t)) return;
             const act = t.getAttribute('data-dq-action');
-            if (act === 'open-graph-switcher') {
-                e.preventDefault();
-                if (typeof _openGraphSwitcherModal === 'function') _openGraphSwitcherModal();
-                return;
-            }
             if (act === 'run-all-checks') {
                 e.preventDefault();
                 this.runAllChecks();

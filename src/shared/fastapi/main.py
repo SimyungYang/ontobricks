@@ -19,6 +19,11 @@ from contextlib import asynccontextmanager
 from shared.config.settings import get_settings
 from shared.config.constants import APP_VERSION, SESSION_COOKIE_NAME
 from back.objects.session import FileSessionMiddleware, reap_expired_sessions
+from back.core.databricks.request_identity import (
+    RequestIdentity,
+    set_request_identity,
+    reset_request_identity,
+)
 from back.core.logging import setup_logging, get_logger
 from shared.fastapi.ui_branding import UIBrandingMiddleware
 
@@ -284,6 +289,17 @@ _STATUS_GATE_OPEN_SUFFIXES = (
 # Status values that allow editing the version content.
 _STATUS_EDITABLE = "DRAFT"
 
+# Wizard sub-routes that are the exception to the blanket "/wizard/"
+# exemption below: unlike the rest of the staged-Generate wizard (detect,
+# draft read/update/discard), which only stages a session-scoped draft and
+# never touches the persisted ontology, `.../generate/complete` runs the
+# deterministic append-only merge and calls `domain.save()` — a genuine
+# design mutation. It must be gated exactly like any other `/ontology/`
+# write, so it is checked (and matched) before the wizard exemption.
+_STATUS_GATE_WIZARD_EDIT_SUFFIXES = (
+    "/wizard/generate/complete",
+)
+
 
 def _is_status_gated_edit(path: str, method: str) -> bool:
     """True when *path*/*method* mutates the loaded version's content."""
@@ -291,6 +307,8 @@ def _is_status_gated_edit(path: str, method: str) -> bool:
         return False
     if any(path.endswith(suffix) for suffix in _STATUS_GATE_OPEN_SUFFIXES):
         return False
+    if any(path.endswith(suffix) for suffix in _STATUS_GATE_WIZARD_EDIT_SUFFIXES):
+        return True
     if "/wizard/" in path:
         return False
     if any(path.startswith(p) for p in _STATUS_GATE_EDIT_PREFIXES):
@@ -354,16 +372,44 @@ class PermissionMiddleware(BaseHTTPMiddleware):
                 request.state.user_email = get_local_user_email()
             request.state.user_role = "admin"
             request.state.user_domain_role = "admin"
-            return await call_next(request)
+            request.state.user_token = ""
+            _tok = set_request_identity(
+                RequestIdentity(
+                    email=request.state.user_email,
+                    user_token="",
+                    app_role="admin",
+                    domain_role="admin",
+                )
+            )
+            try:
+                return await call_next(request)
+            finally:
+                reset_request_identity(_tok)
 
         # Raw routed path, not request.url.path: the latter is reconstructed
         # from the Host header and could be poisoned (BadHost / CVE-2026-48710).
         path = request.scope["path"]
 
         if any(path.startswith(p) for p in _PERM_BYPASS_PREFIXES):
+            # These prefixes skip the session role gate (programmatic /api,
+            # GraphQL, static, health, docs) so M2M / MCP callers are not
+            # 302-redirected to /access-denied. We still stamp the forwarded
+            # end-user identity so Lakehouse / Unity Catalog reads run
+            # on-behalf-of the caller (OBO) when a Databricks Apps user token
+            # is attached — e.g. the MCP companion forwarding the signed-in
+            # user's x-forwarded-access-token. This mirrors Explorer / Graph
+            # Chat on the internal routes. No token → SP fallback, unchanged.
+            user_token = request.headers.get("x-forwarded-access-token", "") or ""
             request.state.user_role = ""
             request.state.user_domain_role = ""
-            return await call_next(request)
+            request.state.user_token = user_token
+            _tok = set_request_identity(
+                RequestIdentity(email=email, user_token=user_token)
+            )
+            try:
+                return await call_next(request)
+            finally:
+                reset_request_identity(_tok)
 
         try:
             role, domain_role = self._resolve_roles(request, email)
@@ -475,7 +521,20 @@ class PermissionMiddleware(BaseHTTPMiddleware):
                     "read-only access. Take over editing to make changes.",
                 )
 
-        return await call_next(request)
+        user_token = request.headers.get("x-forwarded-access-token", "") or ""
+        request.state.user_token = user_token
+        _tok = set_request_identity(
+            RequestIdentity(
+                email=email,
+                user_token=user_token,
+                app_role=role,
+                domain_role=domain_role,
+            )
+        )
+        try:
+            return await call_next(request)
+        finally:
+            reset_request_identity(_tok)
 
     @staticmethod
     def _session_edit_lock_holder(request: Request) -> str:
@@ -488,7 +547,7 @@ class PermissionMiddleware(BaseHTTPMiddleware):
         """
         try:
             from back.objects.session import SessionManager
-            from back.objects.registry.lockmgt import EditLockService
+            from back.objects.registry.collab import EditLockService
 
             session_mgr = SessionManager(request)
             return EditLockService.blocking_holder(

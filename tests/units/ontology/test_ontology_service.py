@@ -1,12 +1,18 @@
 """Tests for :class:`back.objects.ontology.Ontology` helpers used by ontology routes."""
 
 import copy
-from unittest.mock import MagicMock
+import importlib
 
 import pytest
+from rdflib import RDFS, Graph, Literal, URIRef
 
 from back.core.errors import NotFoundError, ValidationError
 from back.objects.ontology import Ontology
+from back.objects.ontology.Import import Import
+
+ontology_import_module = importlib.import_module(
+    "back.objects.ontology.Import"
+)
 
 
 class TestEnsureUris:
@@ -289,6 +295,64 @@ class TestParseOwl:
         assert len(result) == 3
 
 
+class TestApplyParsedOwl:
+    def test_uses_header_label_as_imported_ontology_name(self):
+        class StubDomain:
+            def __init__(self):
+                self.info = {"name": "Existing Domain"}
+                self.ontology = {}
+
+            def save(self) -> None:
+                pass
+
+        domain = StubDomain()
+        Import(domain).apply_parsed_owl_to_domain(
+            {"label": "Test Ontology", "uri": "http://example.org/onto"},
+            [],
+            [],
+            [],
+            [],
+            [],
+        )
+
+        assert domain.ontology["name"] == "Test Ontology"
+
+    def test_persists_header_language_for_generated_owl(self):
+        class StubDomain:
+            def __init__(self):
+                self.info = {"name": "Existing Domain"}
+                self.ontology = {}
+
+            def save(self) -> None:
+                pass
+
+        domain = StubDomain()
+        Import(domain).apply_parsed_owl_to_domain(
+            {
+                "label": "Test Ontology",
+                "label_lang": "en",
+                "comment_lang": "fr",
+                "namespace": "http://example.org/onto#",
+            },
+            [],
+            [],
+            [],
+            [],
+            [],
+        )
+
+        assert domain.ontology["label_lang"] == "en"
+        assert domain.ontology["comment_lang"] == "fr"
+
+        generated = Graph()
+        generated.parse(data=Ontology.generate_owl(domain.ontology), format="turtle")
+        assert (
+            URIRef("http://example.org/onto"),
+            RDFS.label,
+            Literal("Test Ontology", lang="en"),
+        ) in generated
+
+
 class TestNormalizePropertyDomainRange:
     def test_fixes_domain_range_case(self):
         config = {
@@ -345,6 +409,36 @@ class TestPruneMappingsToOntologyUris:
 
 
 class TestSaveOntologyConfigFromEditor:
+    def test_save_preserves_imported_ontology_label_and_language(
+        self, domain_session, sample_ontology_config
+    ):
+        domain_session.info["name"] = "ImportedProject"
+        domain_session.ontology.update(
+            {"name": "Test Ontology", "label_lang": "en"}
+        )
+
+        Ontology(domain_session).save_ontology_config_from_editor(
+            {"config": sample_ontology_config}
+        )
+
+        assert domain_session.ontology["name"] == "Test Ontology"
+        assert domain_session.ontology["label_lang"] == "en"
+
+    def test_save_rederives_default_ontology_name_and_clears_language(
+        self, domain_session, sample_ontology_config
+    ):
+        domain_session.info["name"] = "ImportedProject"
+        domain_session.ontology.update(
+            {"name": "ImportedProject", "label_lang": "en"}
+        )
+
+        Ontology(domain_session).save_ontology_config_from_editor(
+            {"config": sample_ontology_config}
+        )
+
+        assert domain_session.ontology["name"] == "importedproject"
+        assert domain_session.ontology["label_lang"] is None
+
     def test_save_and_prune_orphans(
         self, domain_session, sample_ontology_config, sample_mapping_config
     ):
@@ -746,6 +840,61 @@ class TestApplyParsedRdfs:
         assert r["success"]
         assert r["stats"]["classes"] >= 1
 
+    def test_clears_owl_import_fidelity_metadata(self, domain_session):
+        domain_session.ontology.update(
+            {
+                "rdf_extras": {"triples": [{"s": "stale"}]},
+                "label_lang": "en",
+                "comment_lang": "fr",
+            }
+        )
+        rdfs = """@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix : <http://example.org/> .
+<http://example.org/> a owl:Ontology ; rdfs:label "Vocabulary" .
+:Foo a owl:Class .
+"""
+
+        Ontology(domain_session).apply_parsed_rdfs_to_domain(rdfs)
+
+        assert domain_session.ontology["rdf_extras"] == {}
+        assert domain_session.ontology["label_lang"] is None
+        assert domain_session.ontology["comment_lang"] is None
+
+
+class TestImportIndustryOntology:
+    def test_clears_owl_import_fidelity_metadata(self, domain_session, monkeypatch):
+        domain_session.ontology.update(
+            {
+                "rdf_extras": {"triples": [{"s": "stale"}]},
+                "label_lang": "en",
+                "comment_lang": "fr",
+            }
+        )
+        result = {
+            "ontology_info": {"name": "FIBO", "uri": "http://example.org/fibo/"},
+            "classes": [],
+            "properties": [],
+            "constraints": [],
+            "swrl_rules": [],
+            "axioms": [],
+            "expressions": [],
+            "message": "Imported",
+            "stats": {},
+            "failed": [],
+        }
+        monkeypatch.setitem(
+            ontology_import_module._INDUSTRY_FETCH,
+            "fibo",
+            lambda _keys: result,
+        )
+
+        Ontology(domain_session).import_industry_ontology("fibo", ["core"])
+
+        assert domain_session.ontology["rdf_extras"] == {}
+        assert domain_session.ontology["label_lang"] is None
+        assert domain_session.ontology["comment_lang"] is None
+
 
 class TestRenameRelationshipReferences:
     def test_renames_across_mappings_and_constraints(
@@ -869,61 +1018,6 @@ class TestMergeIconSuggestions:
     def test_missing_name(self):
         result = Ontology.merge_icon_suggestions(["Foo", "Baz"], {"Foo": "🔧"})
         assert "Baz" not in result
-
-
-def _bound_volume_settings():
-    settings = MagicMock()
-    settings.registry_volume_path = "/Volumes/jio_home_stg/staging/ontobricks"
-    settings.lakebase_schema = "ontobricks_registry"
-    settings.lakebase_database = ""
-    settings.registry_catalog = ""
-    settings.registry_schema = ""
-    settings.registry_volume = "OntoBricksRegistry"
-    return settings
-
-
-def _capture_run_agent(monkeypatch):
-    captured = {}
-
-    def fake_run_agent(**kwargs):
-        captured.update(kwargs)
-        result = MagicMock()
-        result.success = True
-        return result
-
-    monkeypatch.setattr("agents.agent_owl_generator.run_agent", fake_run_agent)
-    monkeypatch.setattr(
-        "agents.agent_business_rules_generator.run_agent", fake_run_agent
-    )
-    monkeypatch.setattr(
-        "shared.config.settings.get_settings", _bound_volume_settings
-    )
-    monkeypatch.setattr(
-        "back.objects.registry.store.lakebase.store.fetch_lakebase_registry_triplet",
-        lambda *a, **k: None,
-    )
-    return captured
-
-
-class TestGenerateAgentRegistryResolution:
-    def test_generate_with_agent_uses_bound_volume(self, domain_session, monkeypatch):
-        captured = _capture_run_agent(monkeypatch)
-        Ontology(domain_session).generate_with_agent(
-            host="h", token="t", endpoint_name="e", metadata={}
-        )
-        assert captured["registry"]["catalog"] == "jio_home_stg"
-        assert captured["registry"]["schema"] == "staging"
-        assert captured["registry"]["volume"] == "ontobricks"
-
-    def test_generate_rules_with_agent_uses_bound_volume(
-        self, domain_session, monkeypatch
-    ):
-        captured = _capture_run_agent(monkeypatch)
-        Ontology(domain_session).generate_rules_with_agent(
-            host="h", token="t", endpoint_name="e"
-        )
-        assert captured["registry"]["volume"] == "ontobricks"
-        assert captured["registry"]["catalog"] == "jio_home_stg"
 
 
 class TestPostprocessGeneratedOwl:
