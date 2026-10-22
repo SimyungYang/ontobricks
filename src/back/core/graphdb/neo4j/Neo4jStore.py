@@ -418,6 +418,27 @@ class Neo4jStore(GraphDBBackend):
             table_name, seed_where, depth, search=search, entity_type=entity_type
         )
 
+    def find_triples_bfs_page(
+        self,
+        table_name: str,
+        seed_where: str,
+        depth: int,
+        *,
+        limit: int,
+        offset: int = 0,
+        search: str = "",
+        entity_type: str = "",
+    ) -> Dict[str, Any]:
+        return self._reads.find_triples_bfs_page(
+            table_name,
+            seed_where,
+            depth,
+            limit=limit,
+            offset=offset,
+            search=search,
+            entity_type=entity_type,
+        )
+
     def find_seed_subjects(
         self,
         table_name: str,

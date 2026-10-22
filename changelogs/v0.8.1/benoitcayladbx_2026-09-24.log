@@ -1,0 +1,23 @@
+## Translate SWRL built-ins during inference
+
+Context: The active "Owns meter" rule returned no inferred relationships even
+when customers had active contracts linked to meters. The inference translator
+treated `swrlb:contains` as a graph property instead of applying its SQL string
+predicate.
+
+Changes:
+
+1. src/back/core/reasoning/SWRLSQLTranslator.py
+   Exclude built-ins from inference graph joins and apply them as SQL filters after antecedent variables are bound.
+2. tests/units/ontology/test_swrl_engine.py
+   Add a regression test requiring `swrlb:contains` to produce a SQL filter rather than a nonexistent property join.
+
+Modified files:
+- src/back/core/reasoning/SWRLSQLTranslator.py
+- tests/units/ontology/test_swrl_engine.py
+- changelogs/v0.8.1/benoitcayladbx_2026-09-24.log
+
+Tests:
+- RED: `uv run --frozen pytest -q tests/units/ontology/test_swrl_engine.py::TestSWRLSQLTranslator::test_inference_translates_string_builtin_to_filter` → 1 failed, 1 warning in 1.23s.
+- Focused: `uv run --frozen pytest -q tests/units/ontology/test_swrl_engine.py` → 24 passed, 1 warning in 0.88s.
+- Mandatory: `uv run --frozen pytest -q -m "not scenario"` → 5920 passed, 304 skipped, 6 deselected, 32 warnings in 45.50s.
