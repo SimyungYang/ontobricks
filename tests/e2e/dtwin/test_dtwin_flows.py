@@ -94,6 +94,10 @@ class TestQueryPlayground:
         page.goto(f"{live_server}/dtwin/?section=graphql&tab=sparql")
         page.wait_for_load_state("domcontentloaded")
         page.locator("#sparqlPlaygroundQuery").wait_for(state="visible")
+        page.wait_for_function(
+            "() => (document.querySelector('#sparqlPlaygroundQuery') || {})"
+            ".value.includes('SELECT')"
+        )
         query = page.locator("#sparqlPlaygroundQuery").input_value()
         assert "SELECT ?subject ?predicate ?object" in query
         assert "LIMIT 100" in query
@@ -129,6 +133,10 @@ class TestQueryPlayground:
         page.goto(f"{live_server}/dtwin/?section=graphql&tab=sparql")
         page.wait_for_load_state("domcontentloaded")
         page.locator("#sparqlPlaygroundQuery").wait_for(state="visible")
+        page.wait_for_function(
+            "() => (document.querySelector('#sparqlPlaygroundQuery') || {})"
+            ".value.includes('SELECT')"
+        )
 
         explore_btn = page.locator("#sparqlExploreBtn")
         sql_pane = page.locator(".sparql-sql-pane")

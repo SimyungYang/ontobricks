@@ -63,6 +63,44 @@ class TestCampaignUsesThisWorktreeInterpreter:
         assert "pytest tests/e2e/scenarios -m scenario" not in recipe
 
 
+class TestCampaignDomainsArePrefixedZz:
+    def test_names_are_valid_camelcase_and_start_with_zz(self):
+        from back.objects.session.DomainSession import is_valid_domain_name
+        from tests.e2e.scenarios._harness import (
+            CAMPAIGN_DOMAIN_NAME,
+            LIFECYCLE_DOMAIN_NAME,
+            METADATA_DOMAIN_NAME,
+            ZERO_COPY_DOMAIN_NAME,
+        )
+
+        for name in (
+            CAMPAIGN_DOMAIN_NAME,
+            METADATA_DOMAIN_NAME,
+            ZERO_COPY_DOMAIN_NAME,
+            LIFECYCLE_DOMAIN_NAME,
+        ):
+            assert name.startswith("Zz"), name
+            assert is_valid_domain_name(name), name
+
+    def test_leftover_matcher_covers_zz_underscore_and_legacy_folders(self):
+        from tests.e2e.scenarios._harness import is_campaign_leftover
+
+        assert is_campaign_leftover("ZzTestScenario1") is True
+        assert is_campaign_leftover("ZZ_TestScenario1") is True
+        assert is_campaign_leftover("zz_testzerocopy") is True
+        assert is_campaign_leftover("testscenario1") is True
+        assert is_campaign_leftover("Customer360") is False
+
+    def test_campaign_starts_with_a_purge_step(self):
+        purge = REPO_ROOT / "tests/e2e/scenarios/test_scenario_00_purge.py"
+        assert purge.is_file()
+        src = _read(purge)
+        assert "purge_campaign_domains" in src
+        assert 'chain_marker("scenario_0")' in src
+        one = _read(SCENARIO_01)
+        assert 'depends=("scenario_0",)' in one
+
+
 class TestScenario1DrivesTheStagedWizard:
     def test_it_detects_then_posts_complete(self):
         src = _read(SCENARIO_01)
@@ -106,3 +144,44 @@ class TestLoopbackLiveBaseDoesNotNeedAppsToken:
     def test_the_e2e_bearer_fixture_uses_the_loopback_gate(self):
         src = _read(REPO_ROOT / "tests/e2e/conftest.py")
         assert "needs_apps_gateway_token" in src
+
+
+class TestLivePageSeedsAWorkspace:
+    def test_page_fixture_seeds_a_named_domain_in_live_mode(self):
+        src = _read(REPO_ROOT / "tests/e2e/conftest.py")
+        assert "_seed_loaded_workspace" in src
+        assert "ZzE2eLive" in src
+        assert "home_redirect_if_unloaded" in src
+        assert "obSubnav" in src
+
+
+class TestLiveRouteReappliesBearer:
+    """Playwright ``route.continue_()`` drops context extra_http_headers."""
+
+    def test_bearer_is_copied_onto_continue_headers(self):
+        from tests.e2e.conftest import _bearer_continue_headers
+
+        headers = _bearer_continue_headers(
+            {"accept": "text/html", "host": "ontobricks.example"},
+            "tok-abc",
+        )
+        assert headers["authorization"] == "Bearer tok-abc"
+        assert headers["accept"] == "text/html"
+
+    def test_install_redirect_fix_passes_headers_on_document_continue(self):
+        src = _read(REPO_ROOT / "tests/e2e/conftest.py")
+        assert "route.continue_(headers=" in src
+        assert "_bearer_continue_headers" in src
+
+    def test_install_redirect_fix_falls_back_for_xhr(self):
+        """XHR must not use continue_(headers=): Playwright then fails fetch."""
+        src = _read(REPO_ROOT / "tests/e2e/conftest.py")
+        assert "route.fallback()" in src
+        assert 'resource_type != "document"' in src
+        assert 'ctx.route("**/*"' not in src
+
+    def test_live_bearer_is_reminted_before_the_apps_token_dies(self):
+        src = _read(REPO_ROOT / "tests/e2e/conftest.py")
+        assert "_LIVE_BEARER_TTL_S" in src
+        assert "_resolve_live_bearer" in src
+        assert "force_refresh=" in src

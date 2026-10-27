@@ -684,7 +684,9 @@ def infer_axioms(
         draft=draft,
         system_prompt=prompts.build_axioms_system_prompt(),
         user_prompt=prompts.build_axioms_user_prompt(draft),
-        parse_fn=schemas.parse_axioms_payload,
+        parse_fn=lambda text: schemas.parse_axioms_payload(
+            text, existing_parents=draft.existing_parents()
+        ),
         refs_fn=schemas.axioms_referenced_ids,
         response_format=_completion_response_format(
             schemas.build_axioms_response_format, draft

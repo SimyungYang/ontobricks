@@ -1,7 +1,7 @@
 # OntoBricks — Release Notes V0.8.0
 
-**Release window:** August 2026<br>
-**Test status:** all changes shipped with the non-scenario suite green: 5756 passed, 305 skipped, 6 deselected, 1 xfailed, 23 warnings.
+**Release window:** August – September 2026<br>
+**Test status:** all changes shipped with the non-scenario suite green: 5860 passed, 304 skipped, 6 deselected, 23 warnings.
 
 ---
 
@@ -89,6 +89,7 @@
 ### Graph reliability
 
 - Lakebase and SQL Warehouse reads have scoped statement timeouts.
+- Lakebase authentication, Settings discovery, and provisioning follow every Postgres project-list page, so projects beyond the API's first page resolve correctly.
 - Graph Chat result size is bounded and reports blocking-pool pressure.
 - Analytics no longer displays historical charts as if they described a graph whose live objects were deleted; run history remains available under Management → Runs.
 
@@ -188,6 +189,25 @@
 - Fixed ontology attributes, relationships, inheritance, and other structural edits being restored from stale mirrors after navigation.
 - Fixed Lakehouse Build storage labels and a JavaScript scope error on populated graphs.
 - Fixed mobile Graph Chat, Data Quality, and Logs panes blocking natural page scrolling.
+- Fixed Lakebase Autoscaling endpoint resolution failing when the bound project appeared beyond the first Postgres API page.
+
+---
+
+## September follow-up (still v0.8.0)
+
+Work that landed after the original August notes and remains on the 0.8.0 line:
+
+- **Analytics ranking chart** — one exhaustive ordered metric series with server-side LTTB sampling above 5,000 nodes; distribution histograms default to a logarithmic count axis.
+- **Lakehouse Health** — Settings reports Unity Catalog schema permission readiness for the app principal without blocking on domain graph assets.
+- **Mapping Designer** — unchanged entity previews are reused in memory; closing an inspected-but-unedited panel does not save or rebuild the canvas.
+- **MCP server packaging** — `src/mcp-server/server/` is split by topic (`tools`, `resources`, `session`, HTTP client). Import paths and the uvicorn entry point are unchanged.
+- **Unity Catalog identifiers** — catalog, schema, and table names may start with a digit (`5_g_subscribers`).
+- **Ontology Designer** — metadata-only saves refresh visible map elements without a full rebuild.
+- **`GET /api/v1/digitaltwin/triples`** — no longer raises `NameError`; CI enforces repository-wide Ruff F821.
+- **Lakebase bootstrap** — credential minting failures from `lakebase-perms.sh` are observable instead of exiting silently.
+- **Deployment docs** — explicit 0.7 → 0.8 upgrade path, including `deploy.config.sh` backup.
+
+Lakehouse//RT query warehouses, the Build vs Query split, and CloudFetch control belong to **v0.9.0**, not this line.
 
 ---
 

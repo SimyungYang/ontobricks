@@ -71,7 +71,7 @@ Every class, property, and group has two identities:
 | `label` | Human-readable display name | `rdfs:label` |
 | `alternate_labels` | Synonyms | `skos:altLabel` |
 
-- Designer and the generate wizard mint `name` from the label: **PascalCase**
+- Studio and the generate wizard mint `name` from the label: **PascalCase**
   for classes, **lowerCamelCase** for properties and relationships.
 - If there is no label, the UI falls back to `name`.
 - Import can keep a file’s `rdfs:label` (and optional `label_lang`) separate
@@ -151,7 +151,7 @@ Databricks/product layer.
 |---|---|---|
 | `ontobricks:icon` | class, group | Emoji / visualization icon |
 | `ontobricks:isGroup` | class | Marks a group class; parser excludes it from `classes` |
-| `ontobricks:groupColor` | group | Designer color |
+| `ontobricks:groupColor` | group | Studio color |
 | `ontobricks:direction` | object property | `forward` / `reverse` / bidirectional (UI + graph, not OWL) |
 | `ontobricks:dashboard` | class | Databricks dashboard URL |
 | `ontobricks:dashboardParams` | class | JSON: map dashboard filters → `__ID__` or an attribute |

@@ -444,8 +444,8 @@ async function confirmResetMappings() {
 }
 
 async function resetAllMappings() {
-    // The button exists on both the Mapping/Information and Mapping/Designer
-    // pages; target whichever one is currently rendered for the spinner.
+    // The button exists on both Mapping → General and Mapping → Studio;
+    // target whichever one is currently rendered for the spinner.
     const btn = document.getElementById('resetMappingsBtn')
         || document.getElementById('resetMappingsDesignBtn');
     const originalHTML = btn ? btn.innerHTML : '';
@@ -811,8 +811,8 @@ async function exportR2RMLToUC() {
 
 function _initMappingInformationButtons() {
     setupImportExportButtons();
-    // "Unmap all" appears on both Mapping/Information (#resetMappingsBtn) and
-    // Mapping/Designer (#resetMappingsDesignBtn); both open the same confirm
+    // "Unmap all" appears on both Mapping → General (#resetMappingsBtn) and
+    // Mapping → Studio (#resetMappingsDesignBtn); both open the same confirm
     // dialog before clearing mappings.
     ['resetMappingsBtn', 'resetMappingsDesignBtn'].forEach(function(_id) {
         var _btn = document.getElementById(_id);

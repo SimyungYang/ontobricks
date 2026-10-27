@@ -31,8 +31,10 @@ from __future__ import annotations
 
 import json
 
+from tests.e2e.scenarios._harness import LIFECYCLE_DOMAIN_NAME
 
-_DOMAIN_NAME = "SalesDomain"
+
+_DOMAIN_NAME = LIFECYCLE_DOMAIN_NAME
 
 # URIs come from the ``sample_owl_content`` fixture (base http://test.org/ontology#)
 # and line up with ``sample_mapping_config`` so the mapping step references

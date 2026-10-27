@@ -19,7 +19,7 @@ import pathlib
 
 import pytest
 
-from tests.e2e.conftest import _install_redirect_fix
+from tests.e2e.conftest import _install_redirect_fix, _resolve_live_bearer
 from tests.e2e.scenarios._harness import base_url, probe_app
 
 _SCENARIOS_DIR = pathlib.Path(__file__).parent.resolve()
@@ -63,11 +63,12 @@ def scenario_base(_live_bearer) -> str:
 @pytest.fixture
 def scenario_page(browser_instance, scenario_base, _live_bearer):
     """A fresh browser page on a clean context pointed at the running app."""
-    if _live_bearer:
+    token = _resolve_live_bearer() if _live_bearer else None
+    if token:
         ctx = browser_instance.new_context(
-            extra_http_headers={"Authorization": f"Bearer {_live_bearer}"}
+            extra_http_headers={"Authorization": f"Bearer {token}"}
         )
-        _install_redirect_fix(ctx, scenario_base, _live_bearer)
+        _install_redirect_fix(ctx, scenario_base, token)
     else:
         ctx = browser_instance.new_context()
     pg = ctx.new_page()

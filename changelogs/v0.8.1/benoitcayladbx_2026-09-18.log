@@ -1,0 +1,36 @@
+## Preserve data quality condition properties
+
+Context: Selecting a property in a data quality rule condition triggered a
+rerender through options captured before the target entity was selected. The
+selected value disappeared and the condition property list became empty.
+
+Changes:
+
+1. src/front/static/ontology/js/ontology-conditions.js
+   Keep delegated condition-row handlers synchronized with the latest render options.
+2. tests/units/front/test_dq_condition_builder.py
+   Add a Node-based regression test covering an initially empty property list followed by a populated render.
+
+Modified files:
+- src/front/static/ontology/js/ontology-conditions.js
+- tests/units/front/test_dq_condition_builder.py
+- changelogs/v0.8.1/benoitcayladbx_2026-09-18.log
+
+Tests: uv run --frozen pytest -q -m "not scenario" → 5909 passed, 304 skipped, 6 deselected, 32 warnings in 52.12s
+
+## Document version-named working branches
+
+Context: GitHub no longer has a `develop` branch. Active work lives on a
+version-named branch (`0.9.0` for the next release). Agent merge-safety
+rules still told people to merge from `develop`.
+
+Changes:
+
+1. .cursor/07-project-conventions.mdc
+   Replace the develop gitflow with version-named working branches and retarget merge-safety wording.
+
+Modified files:
+- .cursor/07-project-conventions.mdc
+- changelogs/v0.8.1/benoitcayladbx_2026-09-18.log
+
+Tests: uv run --frozen pytest -q -m "not scenario" → 5909 passed, 304 skipped, 6 deselected, 32 warnings in 50.24s

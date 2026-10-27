@@ -150,7 +150,12 @@ async function openDomain(name, version) {
             return;
         }
         if (typeof invalidateDomainCaches === 'function') invalidateDomainCaches();
-        window.location.href = '/domain/';
+        // Open lands on Domain → General, not a Home reload.
+        if (typeof navigateToDomainGeneral === 'function') {
+            navigateToDomainGeneral();
+        } else {
+            window.location.href = '/domain/?section=information';
+        }
     } catch (err) {
         showNotification('Error opening domain: ' + err.message, 'error');
     }

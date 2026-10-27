@@ -503,6 +503,67 @@ class Neo4jReadOps(Neo4jSubjectQueryMixin):
         )
         return rows or []
 
+    def find_triples_bfs_page(
+        self,
+        table_name: str,
+        seed_where: str,
+        depth: int,
+        *,
+        limit: int,
+        offset: int = 0,
+        search: str = "",
+        entity_type: str = "",
+    ) -> Dict[str, Any]:
+        """Cypher equivalent of the folded SQL page: traverse, fetch, de-dup, page.
+
+        Neo4j cannot consume the SQL *seed_where*, so it walks from the
+        structured *search* / *entity_type* seeds, then de-duplicates and
+        paginates in Python (secondary backend — parity, not perf-critical).
+        """
+        bfs_rows = list(
+            self.bfs_traversal(
+            table_name, "", depth, search=search, entity_type=entity_type
+            )
+            or []
+        )
+        seed_count = sum(int(r.get("min_lvl", 0)) == 0 for r in bfs_rows)
+        entities = {r["entity"] for r in bfs_rows}
+        local_ids = {
+            str(entity).rsplit("#", 1)[-1].rsplit("/", 1)[-1]
+            for entity in entities
+        }
+        patterns = [f"%/{local_id}" for local_id in local_ids if local_id]
+        # Alias matches expand entity coverage but never count as additional seeds.
+        entities.update(self.find_subjects_by_patterns(table_name, patterns))
+        entity_count = len(entities)
+        if not entities:
+            return {
+                "triples": [],
+                "has_more": False,
+                "seed_count": seed_count,
+                "total": 0,
+                "entity_count": entity_count,
+            }
+        rows = self.get_triples_for_subjects(table_name, list(entities))
+        seen: Set = set()
+        dedup: List[Dict[str, str]] = []
+        for r in rows:
+            key = (r["subject"], r["predicate"], r["object"])
+            if key not in seen:
+                seen.add(key)
+                dedup.append(r)
+        dedup.sort(key=lambda r: (r["subject"], r["predicate"], r["object"]))
+        total = len(dedup)
+        triples = dedup[offset : offset + limit]
+        has_more = offset + len(triples) < total
+        return {
+            "triples": triples,
+            "has_more": has_more,
+            "seed_count": seed_count,
+            "total": total,
+            "entity_count": entity_count,
+        }
+
     def find_seed_subjects(
         self,
         table_name: str,

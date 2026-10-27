@@ -11,6 +11,28 @@ Center and the Sphinx site include the same files, grouped the same way.
 **New here?** [Get Started](getting-started.md) → [Examples](examples.md) →
 [User Guide](user-guide.md).
 
+## What's new in 0.9.0
+
+Operator guides for this version. Full details:
+[Release notes V0.9.0](../releases/ReleaseNotes_V0.9.0.md).
+
+| Feature | Where it is documented |
+|---------|------------------------|
+| Lakehouse//RT query warehouse, SEA, CloudFetch | [Get Started](getting-started.md#sql-warehouses-and-explorer-timing), [User Guide](user-guide.md#lakehouse-sql-warehouses-and-cloudfetch), [Deployment](deployment.md) |
+| Three-stage Ontology Generate (detect → review → complete) | [User Guide](user-guide.md#option-c-ai-powered-wizard) |
+| Knowledge Store (parsed text in Lakebase, no Volume) | [User Guide](user-guide.md#knowledge-store), [Get Started](getting-started.md#upload-documents-to-the-knowledge-store-optional) |
+| Ontology Studio (renamed Designer), entity panel tabs | [User Guide](user-guide.md#ontology-studio-map-full-graph) |
+| Entity Data Quality Checks, SWRL on an entity, Jobs as class actions | [User Guide](user-guide.md#feature-inventory), [MCP](mcp.md) |
+| SPARQL playground | [User Guide](user-guide.md#sparql-playground) |
+| GitHub domain mirror | [User Guide](user-guide.md#github-mirror), [Advanced features](advanced_features.md#load-from-github-repository) |
+| Load opens Domain → General | [User Guide](user-guide.md#domain-saveload) |
+| No LLM, AI Gateway picker, OBO / MCP Team gate | [User Guide](user-guide.md#no-llm-mode), [Deployment](deployment.md) |
+| App `/health` vs readiness, CSRF | [API](api.md#csrf-protection), [Deployment](deployment.md) |
+
+The in-app Help Center serves these same files. [ontobricks.org](https://ontobricks.org/)
+mirrors the last published `master` snapshot and stays on the previous
+release until this documentation is published.
+
 ---
 
 ## Start here
@@ -24,7 +46,7 @@ Center and the Sphinx site include the same files, grouped the same way.
 
 | Guide | What you'll find |
 |-------|------------------|
-| [User Guide](user-guide.md) | Domain cockpit, Studio, mapping, triple-store pipeline, quality, reasoning, industry import. Ends with the [feature inventory](user-guide.md#feature-inventory) |
+| [User Guide](user-guide.md) | Domain cockpit, Studio, Knowledge Store, staged Generate, mapping, Explorer quality/rules/jobs, SPARQL, GitHub mirror. Ends with the [feature inventory](user-guide.md#feature-inventory) |
 | [Advanced features](advanced_features.md) | [Ontology specifics](advanced_features.md#ontology-specifics) (`name` vs `label`, URI minting, `ontobricks:` vocabulary), [registry import and export](advanced_features.md#registry-import-and-export) (OBX, `registry_transfer.sh`), [cohort discovery](advanced_features.md#cohort-discovery) |
 | [MCP](mcp.md) | MCP server, Playground, clients, [Unity Catalog + Genie One registration](mcp.md#register-the-mcp-in-unity-catalog-and-genie-one) |
 
@@ -74,10 +96,10 @@ Project overview: root [README](../README.md).
 
 ## Sphinx site
 
-- **Build:** `scripts/build_docs.sh` (Sphinx + myst-parser; see `pyproject.toml` extras).
+- **Build:** `ci/build_docs.sh` from the repository root (Sphinx + myst-parser;
+  see `pyproject.toml` extras).
 - **Output:** `docs/sphinx/_build/html/index.html` — topic guides are MyST
   `{include}`s of the Markdown above.
-- **Open:** root [`documentation.html`](../documentation.html) redirects to the build.
 
 ## Quick links
 

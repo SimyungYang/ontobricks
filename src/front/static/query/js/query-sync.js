@@ -50,7 +50,7 @@ function _canStartBuild() {
 }
 
 /**
- * Fetch all Information-page data in a single round-trip and distribute
+ * Fetch all Knowledge Graph Overview data in a single round-trip and distribute
  * results to the individual rendering functions.
  *
  * The caller is responsible for showing/hiding the loading overlay so that

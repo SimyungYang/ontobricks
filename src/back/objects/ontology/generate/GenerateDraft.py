@@ -161,6 +161,10 @@ class GenerateEntity:
     origin: str = ORIGIN_DETECTED
     included: bool = True
     locked: bool = False
+    # Snapshot of the live class's single ``parent`` (class name). Empty for
+    # candidates and for existing roots. The ontology model supports only
+    # one parent per class — Generate must never propose a second.
+    parent: str = ""
 
     def __post_init__(self) -> None:
         if not self.id:
@@ -198,6 +202,7 @@ class GenerateEntity:
             "origin": self.origin,
             "included": self.included,
             "locked": self.locked,
+            "parent": self.parent,
         }
 
     @classmethod
@@ -228,6 +233,7 @@ class GenerateEntity:
             origin=origin,
             included=included,
             locked=locked,
+            parent=str(data.get("parent", "") or ""),
         )
 
     @classmethod
@@ -268,6 +274,7 @@ class GenerateEntity:
         *,
         alternate_labels: Optional[List[str]] = None,
         type_hint: str = TYPE_CLASS,
+        parent: str = "",
     ) -> "GenerateEntity":
         """Build a locked snapshot of an existing ontology entity."""
         return cls(
@@ -278,6 +285,7 @@ class GenerateEntity:
             origin=ORIGIN_EXISTING,
             included=True,
             locked=True,
+            parent=parent or "",
         )
 
     def with_updates(self, **kwargs: Any) -> "GenerateEntity":
@@ -330,6 +338,7 @@ def build_locked_anchors_from_classes(
                 name,
                 cls.get("label") or name,
                 alternate_labels=list(cls.get("alternate_labels") or []),
+                parent=str(cls.get("parent") or ""),
             )
         )
     return anchors
@@ -610,6 +619,14 @@ class GenerateDraft:
         ids = {a.id for a in self.existing_anchors}
         ids.update(c.id for c in self.candidate_entities if c.included)
         return ids
+
+    def existing_parents(self) -> Dict[str, str]:
+        """``id -> parent id`` for locked anchors that already have a parent.
+
+        Used by Stage-3 axiom parsing to drop extra ``subClassOf`` axioms
+        (the ontology model allows a single parent per class).
+        """
+        return {a.id: a.parent for a in self.existing_anchors if a.parent}
 
     def validate_references(self, referenced_ids: Iterable[str], *, context: str = "") -> None:
         """Raise if any id in *referenced_ids* is outside the closed entity set.

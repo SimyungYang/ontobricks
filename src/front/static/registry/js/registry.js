@@ -651,7 +651,14 @@ document.addEventListener('DOMContentLoaded', function () {
             if (data.success) {
                 showNotification(data.message || 'Domain loaded!', 'success');
                 if (typeof fetchCachedInvalidate === 'function') fetchCachedInvalidate('/navbar/state');
-                setTimeout(() => window.location.reload(), 800);
+                // Generic loads open Domain → General; do not reload Browse.
+                setTimeout(() => {
+                    if (typeof navigateToDomainGeneral === 'function') {
+                        navigateToDomainGeneral();
+                    } else {
+                        window.location.href = '/domain/?section=information';
+                    }
+                }, 800);
             } else {
                 showNotification('Error: ' + (data.message || 'Failed to load domain'), 'error');
             }

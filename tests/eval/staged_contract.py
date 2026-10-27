@@ -794,6 +794,22 @@ def _c_relation_dedup(_e, constraint) -> bool:
     return got == value["expect"]
 
 
+def _c_drops_extra_subclassof(_e, constraint) -> bool:
+    """Single inheritance: extra subClassOf parents are dropped.
+
+    Deterministic — exercises the parser, no LLM. ``value.axioms`` is parsed
+    with ``value.existing_parents``; remaining axioms must match
+    ``value.expect`` as ``kind:subject:object`` triples in order.
+    """
+    value = constraint["value"]
+    payload = json.dumps({"axioms": value["axioms"]})
+    result = schemas.parse_axioms_payload(
+        payload, existing_parents=value.get("existing_parents") or {}
+    )
+    got = [f"{a['kind']}:{a['subject']}:{a['object']}" for a in result["axioms"]]
+    return got == value["expect"]
+
+
 _CHECKS: Dict[str, Callable[[dict, dict], bool]] = {
     "all_candidates_included_by_default": _c_all_included,
     "excludes_existing_anchor_as_new": _c_excludes_anchor,
@@ -834,6 +850,7 @@ _CHECKS: Dict[str, Callable[[dict, dict], bool]] = {
     "collapses_inverse_paraphrase": _c_relation_dedup,
     "keeps_distinct_predicates_same_pair": _c_relation_dedup,
     "keeps_existing_ontology_relation": _c_relation_dedup,
+    "drops_extra_subclassof": _c_drops_extra_subclassof,
 }
 
 

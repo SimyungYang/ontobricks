@@ -118,6 +118,7 @@ class TestCheckDatabricksAuth:
     def test_local_mode_with_cli_profile(self, monkeypatch):
         monkeypatch.delenv("DATABRICKS_APP_PORT", raising=False)
         monkeypatch.delenv("DATABRICKS_TOKEN", raising=False)
+        monkeypatch.setenv("DATABRICKS_CONFIG_PROFILE", "default")
         fake_cfg = MagicMock()
         fake_cfg.host = "https://cli.databricks.com"
         fake_cfg.authenticate.return_value = {

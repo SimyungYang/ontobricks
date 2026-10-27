@@ -1,7 +1,7 @@
 """CTAS and table lifecycle SQL for the Databricks Delta triple store.
 
 The ``…_data`` relation comes in two shapes, chosen per domain (Domain →
-Information → Knowledge Graph):
+General → Knowledge Graph):
 
 * ``table`` — CTAS the gateway VIEW into a clustered Delta TABLE. A copy of
   the mapped triples, which is what makes graph reads cheap and Graph
@@ -17,6 +17,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
+from back.core.errors import InfrastructureError, OntoBricksError
 from back.core.graphdb.adjacency import typed_in_select, typed_out_select
 from back.core.graphdb.entity_search import entity_search_select
 from back.core.graphdb.props import props_select
@@ -241,3 +242,29 @@ def optimize_table(client: Any, table_fqn: str) -> None:
     validate_table_name(table_fqn)
     logger.info("Optimizing Delta table: %s", table_fqn)
     run_sql(client, f"OPTIMIZE {table_fqn}")
+
+
+def count_triples(client: Any, relation_fqn: str) -> int:
+    """Return ``COUNT(*)`` of *relation_fqn*.
+
+    Raises :class:`InfrastructureError` when the count cannot run. A failed
+    count must never read as an empty graph: builds that lost the warehouse
+    connection mid-count were reported as "no triples generated (check your
+    mappings)", which sent users debugging mappings that were fine.
+    """
+    validate_table_name(relation_fqn)
+    try:
+        rows = client.execute_query(f"SELECT COUNT(*) AS cnt FROM {relation_fqn}")
+    except OntoBricksError:
+        raise
+    except Exception as exc:  # noqa: BLE001 — re-raised with the relation named
+        raise InfrastructureError(
+            f"Could not count the triples in {relation_fqn}: {exc}"
+        ) from exc
+    raw = rows[0].get("cnt") if rows else None
+    if raw is None:
+        raise InfrastructureError(
+            f"Could not count the triples in {relation_fqn}: "
+            "COUNT(*) returned no row"
+        )
+    return int(raw)

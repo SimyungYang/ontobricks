@@ -247,6 +247,23 @@ function invalidateDomainCaches() {
     }
 }
 
+const DOMAIN_GENERAL_HREF = '/domain/?section=information';
+
+/**
+ * After a domain is loaded (navbar, home, registry, import), land on
+ * Domain → General. Reloading the current page would keep the user on
+ * Home with only the top menus updated.
+ */
+function navigateToDomainGeneral() {
+    const path = (window.location.pathname || '').replace(/\/+$/, '') || '/';
+    const section = new URLSearchParams(window.location.search).get('section') || 'information';
+    if (path === '/domain' && section === 'information') {
+        window.location.reload();
+        return;
+    }
+    window.location.href = DOMAIN_GENERAL_HREF;
+}
+
 window.refreshNavbarIndicators = refreshNavbarIndicators;
 window.invalidateDomainCaches = invalidateDomainCaches;
 
@@ -603,9 +620,9 @@ async function domainNew() {
 
         invalidateDomainCaches();
 
-        // Sync any stale Information form on the current page with the NEW
+        // Sync any stale Domain → General form on the current page with the NEW
         // domain values. When "New Domain" is triggered from another domain's
-        // Information page, #domainName still holds the previously-loaded
+        // General page, #domainName still holds the previously-loaded
         // domain's name. doDomainSave()'s pre-save duplicate-name guard reads
         // that field, so without this it would validate (and reject) the OLD
         // name — e.g. "A domain named \"cust360auto\" already exists" — instead
@@ -636,7 +653,7 @@ async function domainNew() {
                 if (typeof applyGraphlessConstraints === 'function') applyGraphlessConstraints();
             }
             if (typeof updateAutoBaseUri === 'function') updateAutoBaseUri();
-        } catch (e) { /* Information form not on this page — nothing to sync */ }
+        } catch (e) { /* General form not on this page — nothing to sync */ }
 
         // Register the new domain in the registry directly (no Save popup)
         // and open it on success.
@@ -746,9 +763,9 @@ function buildMcpPolicy() {
 }
 
 /**
- * Build the ``/domain/info`` payload from the Information form.
+ * Build the ``/domain/info`` payload from the Domain → General form.
  *
- * Single source of truth for both save entry points (the Information form's
+ * Single source of truth for both save entry points (the General form's
  * own Save and the auto-save that runs before a UC save) so the two cannot
  * drift and silently drop a field.
  */
@@ -808,7 +825,7 @@ function buildDomainInfoPayload() {
 window.buildDomainInfoPayload = buildDomainInfoPayload;
 
 /**
- * True when the Information form can be persisted.
+ * True when the Domain → General form can be persisted.
  *
  * A Neo4j domain must name a connection — the server rejects a blank one, so
  * catch it here with a message that names the fix.
@@ -1545,7 +1562,7 @@ async function doDomainLoad(domainSlug, version) {
             invalidateDomainCaches();
             clearRememberedDomainInfo();
             await loadNavbarState();
-            setTimeout(() => location.reload(), 1000);
+            setTimeout(() => navigateToDomainGeneral(), 1000);
         } else {
             hideDomainLoading();
             showNotification('Error: ' + data.message, 'error');
@@ -1688,7 +1705,7 @@ function handleImportResponse(data) {
         }
         showNotification(msg, 'success');
         invalidateDomainCaches();
-        setTimeout(() => location.reload(), 1500);
+        setTimeout(() => navigateToDomainGeneral(), 1500);
     } else {
         hideDomainLoading();
         showNotification('Error loading domain: ' + data.message, 'error');
@@ -1706,6 +1723,7 @@ window.showDomainSaveDialog = showDomainSaveDialog;
 window.showDomainLoadDialog = showDomainLoadDialog;
 window.doDomainSave = doDomainSave;
 window.doDomainLoad = doDomainLoad;
+window.navigateToDomainGeneral = navigateToDomainGeneral;
 window.checkDomainSavedStatus = loadDomainName;
 window.enableMenusAfterSave = enableMenusAfterSave;
 window.updateMenusForDomainStatus = updateMenusForDomainStatus;

@@ -32,13 +32,13 @@ Before you begin, ensure you have:
   the domain registry (domains, versions, permissions, schedules, global config)
   and for the Graph DB triple store. Required since **v0.4.0**.
   Provisioned Lakebase instances are **not** supported.
-- **Unity Catalog Volume** — reserved for binary artefacts (`documents/`
-  uploads — domain-scoped attachments imported by the ontology designer).
-  The same catalog/schema that hosts the volume is also used by
-  OntoBricks for the Delta triple-store family
-  (`triplestore_<domain>_V<n>` VIEW plus `_data` / `_inferred` tables and
-  the `_graph` union VIEW — see
+- **Unity Catalog catalog/schema** — hosts the optional registry Volume
+  (ad-hoc export bundles only) and, for Lakehouse domains, the Delta
+  triple-store family (`triplestore_<domain>_V<n>` VIEW plus `_data` /
+  `_inferred` tables and the `_graph` union VIEW — see
   [Architecture → Lakehouse Unity Catalog objects](architecture.md#lakehouse-unity-catalog-objects)).
+  Uploaded documents are **not** stored on a Volume: they are parsed into
+  the Lakebase **Knowledge Store** (`domain_documents`).
 - **`psql`** (libpq client) on `PATH` for the Lakebase permission
   bootstrap scripts. On macOS: `brew install libpq && brew link --force libpq`.
 
@@ -237,6 +237,14 @@ In local development mode, there are no restrictions — all users have full adm
    Then run `make bootstrap-lakebase` once to grant the app SP
    USAGE/DML on the freshly-created schema.
 
+### Upload documents to the Knowledge Store (optional)
+
+Use **Domain → Knowledge Store** to upload specifications or glossaries
+before Generate or Auto-Map. OntoBricks parses each file once
+(`ai_parse_document` on the SQL warehouse) and stores **only the parsed
+text** in Lakebase. There is a 10 MB per-file cap. Generate and Mapping
+read the same corpus; no `READ VOLUME` / `WRITE VOLUME` grant is required.
+
 ### 2. Design an Ontology (Studio)
 
 The fastest way to create an ontology is using the visual **Business Views** interface:
@@ -295,7 +303,7 @@ Alternatively, use the traditional form interface:
 
 1. Open **Studio** and click **Export** (top right) to download the generated ontology as Turtle
 2. Click **Validate** to check your ontology
-3. Click **Save** to store in Unity Catalog
+3. Click **Save** to write the domain to the Lakebase registry
 
 ### 5. Assign Data Assets
 
@@ -340,11 +348,11 @@ Then map those tables on the **Mapping** page:
 3. Click **Explorer** in the sidebar to explore your graph viewer interactively:
    - Click on entities to see details in the right panel
    - Use **Find** to search for specific entities
-   - Use **Filters** to narrow down by entity type, field, or depth
+   - Use the **Search** tab to narrow down by entity type, field, or depth
    - View all mapped attributes, values, and relationships
-4. Run **Data Quality** checks from the **Data Quality** sidebar section — validates cardinality, datatypes, patterns, and custom SPARQL rules against the triple store
-5. Run inference from the **Inference** sidebar section — executes OWL 2 RL inference and SWRL business rules to discover inferred triples
-6. Access the **Query** sidebar section to query your graph viewer with auto-generated typed GraphQL queries
+4. Run **Data Quality** checks from the **Data Quality** sidebar section — validates cardinality, datatypes, patterns, and custom SPARQL rules against the triple store. In **Explorer**, right-click a node for **Data Quality Checks** on that entity.
+5. Run inference from the **Inference** sidebar section — executes OWL 2 RL inference and SWRL business rules to discover inferred triples. Explorer can also run a class **Inference rule** or a bound **Job** on one entity.
+6. Open **Query → GraphQL** for the typed schema, or **Query → SPARQL** for read-only SELECT queries (generated SQL stays below the editor).
 
 ## Common Commands
 
@@ -381,7 +389,8 @@ The OntoBricks interface has a navigation bar with status indicators:
 | **Mapping** | Shows ✓ (green) when R2RML mapping exists, ✗ (red) otherwise |
 | **Knowledge Graph** | Access the sync, graph viewer, and quality checks interface |
 | **Settings** | Manage Databricks connection and settings |
-| **Versions** (navbar popup) | Switch or reload versions; **New Version** branches the open domain without opening Domain → Versions |
+| **Versions** (navbar popup) | Switch or reload versions (then opens Domain → General); **New Version** branches the open domain without opening Domain → Versions |
+| **Load Domain** | Loads a registry domain/version and always opens **Domain → General** |
 
 ## SQL warehouses and Explorer timing
 
@@ -417,7 +426,7 @@ other graph backends retain their native or iterative traversal.
 |-----------|-------------|
 | **General** | Basic ontology settings (name, URI) |
 | **Import** | Import OWL, RDFS, FIBO, CDISC, IOF standards |
-| **Generate** | AI-powered ontology generation from database schema using an LLM |
+| **Generate** | Three-stage wizard: detect entities from metadata and the Knowledge Store, review the catalog, then complete relations, attributes, and axioms (append-only merge) |
 | **Studio** | Interactive force-directed ontology graph (OntoViz canvas) |
 | **Groups** | Manage entity groupings |
 | **Business Views** | Visual drag-and-drop business view designer |

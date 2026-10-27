@@ -23,7 +23,7 @@ from __future__ import annotations
 
 import json
 import re
-from typing import Any, Dict, Iterable, List, Sequence, Set
+from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Set
 
 from agents.agent_owl_generator.RelationDeduplicator import RelationDeduplicator
 from back.core.logging import get_logger
@@ -496,13 +496,58 @@ def parse_attributes_payload(text: str) -> Dict[str, Any]:
     return {"attributes": attributes}
 
 
-def parse_axioms_payload(text: str) -> Dict[str, Any]:
-    """Parse a Stage-3 axioms answer: ``{"axioms": [{kind, subject, object}]}``."""
+def drop_multi_parent_subclass_axioms(
+    axioms: List[Dict[str, Any]],
+    existing_parents: Optional[Mapping[str, str]] = None,
+) -> List[Dict[str, Any]]:
+    """Keep at most one ``subClassOf`` parent per subject.
+
+    Subjects that already have a parent in the live ontology (``existing_parents``)
+    lose every extra ``subClassOf`` axiom. Within the payload, the first
+    ``subClassOf`` for a subject is kept and later ones are dropped. Other
+    axiom kinds are unchanged.
+    """
+    assigned: Dict[str, str] = {
+        str(subject): str(parent)
+        for subject, parent in (existing_parents or {}).items()
+        if subject and parent
+    }
+    kept: List[Dict[str, Any]] = []
+    for axiom in axioms:
+        if axiom.get("kind") != "subClassOf":
+            kept.append(axiom)
+            continue
+        subject = str(axiom.get("subject") or "")
+        obj = str(axiom.get("object") or "")
+        current = assigned.get(subject)
+        if current:
+            logger.info(
+                "Dropping extra subClassOf %s -> %s (already has parent %s)",
+                subject,
+                obj,
+                current,
+            )
+            continue
+        assigned[subject] = obj
+        kept.append(axiom)
+    return kept
+
+
+def parse_axioms_payload(
+    text: str, existing_parents: Optional[Mapping[str, str]] = None
+) -> Dict[str, Any]:
+    """Parse a Stage-3 axioms answer: ``{"axioms": [{kind, subject, object}]}``.
+
+    Extra ``subClassOf`` parents (existing or repeated in the payload) are
+    dropped so Generate never proposes multiple inheritance.
+    """
     data = parse_json_object(text)
     axioms = _require_list(data, "axioms")
     for axiom in axioms:
         _require_fields(axiom, ("kind", "subject", "object"), "axiom")
-    return {"axioms": axioms}
+    return {
+        "axioms": drop_multi_parent_subclass_axioms(axioms, existing_parents)
+    }
 
 
 def relations_referenced_ids(result: Dict[str, Any]) -> Set[str]:

@@ -92,6 +92,14 @@ def _open(page, live_server, viewport, versions=VERSIONS):
             body=json.dumps(versions),
         ),
     )
+    page.route(
+        "**/settings/registry/domains*",
+        lambda route: route.fulfill(
+            status=200,
+            content_type="application/json",
+            body=json.dumps({"success": True, "domains": []}),
+        ),
+    )
     page.goto(f"{live_server}/domain")
     page.wait_for_load_state("domcontentloaded")
     page.wait_for_function(
