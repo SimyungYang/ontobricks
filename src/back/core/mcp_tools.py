@@ -3,7 +3,7 @@
 The MCP server (``src/mcp-server/``) is a separate process that only ever
 *applies* a policy it receives over REST; it deliberately knows nothing about
 this catalog. Everything that needs to enumerate or validate the surface —
-the Domain / Information MCP tab, the domain service, the external REST
+the Domain → General MCP tab, the domain service, the external REST
 contract — resolves it here so the two packages cannot drift.
 
 Two independent settings make up a domain's MCP policy:

@@ -177,12 +177,14 @@ def _apply_synced_pipeline(
 
 
 def _count_view_triples(src, view_table: str) -> int:
-    """Return the server-side triple count for *view_table*."""
-    try:
-        rows = src.execute_query(f"SELECT COUNT(*) AS cnt FROM {view_table}")
-        return int(rows[0].get("cnt", 0)) if rows else 0
-    except Exception:
-        return 0
+    """Return the server-side triple count for *view_table*.
+
+    Raises :class:`InfrastructureError` when the count cannot run, so a
+    scheduled rebuild does not look like an empty mapping.
+    """
+    from back.core.graphdb.delta import materialize
+
+    return materialize.count_triples(src, view_table)
 
 
 def _write_graph_triples(
@@ -213,7 +215,16 @@ def _write_graph_triples(
             domain=domain,
             settings=settings,
         )
-        return _count_view_triples(src, view_table)
+        try:
+            return _count_view_triples(src, view_table)
+        except InfrastructureError as exc:
+            logger.warning(
+                "Scheduled build [%s]: could not count the synced triples "
+                "(the sync itself succeeded): %s",
+                domain_name,
+                exc,
+            )
+            return 0
 
     triple_count = _count_view_triples(src, view_table)
     logger.info(

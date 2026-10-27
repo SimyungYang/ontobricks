@@ -156,7 +156,7 @@ class DigitalTwin:
         """Return the graph DB engine resolved from the per-domain backend choice.
 
         The selection lives in ``DomainSession.info['graph_backend']`` (Domain
-        Information -> Knowledge Graph tab) and maps to a concrete engine
+        → General → Knowledge Graph tab) and maps to a concrete engine
         (``lakebase`` or ``neo4j``) via
         :class:`back.core.graphdb.GraphDBFactory`.
         """

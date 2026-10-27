@@ -22,7 +22,11 @@ import time
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
-from back.core.errors import OntoBricksError, OperationCancelledError
+from back.core.errors import (
+    InfrastructureError,
+    OntoBricksError,
+    OperationCancelledError,
+)
 
 
 def _raise_if_cancelled(cancel_check) -> None:
@@ -152,6 +156,46 @@ def step_times_from_task(task) -> Dict[str, float]:
     except Exception:  # noqa: BLE001
         return {}
     return out
+
+
+def _report_post_sync_triple_count(pipe: Any) -> None:
+    """Count VIEW triples after a successful Lakeflow sync.
+
+    The count is reporting only: a lost warehouse connection must not
+    turn a successful sync into a failed build, and must not publish
+    ``0`` as if the graph were empty.
+    """
+    counted = False
+    try:
+        pipe.triple_count = pipe._count_view_triples()
+        counted = True
+    except InfrastructureError as exc:
+        logger.warning(
+            "[DT-BUILD %s] could not count the synced triples "
+            "(the sync itself succeeded): %s",
+            pipe.task_id,
+            exc,
+        )
+    else:
+        if pipe.triple_count == 0:
+            logger.warning(
+                "[DT-BUILD %s] post-sync VIEW %s contains 0 triples — "
+                "the Lakeflow pipeline may have synced an empty source or "
+                "the VIEW SQL produces no rows; check mappings and source data",
+                pipe.task_id,
+                pipe.view_table,
+            )
+    if pipe.is_api:
+        return
+    pipe.tm.update_progress(
+        pipe.task_id,
+        90,
+        (
+            f"Synced {pipe.triple_count} triples"
+            if counted
+            else "Sync succeeded (triple count unavailable)"
+        ),
+    )
 
 
 class _BuildPipeline:
@@ -334,30 +378,24 @@ class _BuildPipeline:
         return self._lakebase_managed_synced()
 
     def _count_view_triples(self) -> int:
-        """Return the number of triples in the VIEW (server-side COUNT)."""
+        """Return the number of triples in the VIEW (server-side COUNT).
+
+        Raises :class:`InfrastructureError` when the count cannot run, so a
+        lost connection fails the build instead of reading as 0 triples.
+        """
+        from back.core.graphdb.delta import materialize
+
         logger.debug(
             "[DT-BUILD %s] counting triples in VIEW %s", self.task_id, self.view_table
         )
-        try:
-            rows = self.source_client.execute_query(
-                f"SELECT COUNT(*) AS cnt FROM {self.view_table}"
-            )
-            count = int(rows[0].get("cnt", 0)) if rows else 0
-            logger.debug(
-                "[DT-BUILD %s] VIEW %s contains %d triple(s)",
-                self.task_id,
-                self.view_table,
-                count,
-            )
-            return count
-        except Exception as exc:  # noqa: BLE001
-            logger.warning(
-                "[DT-BUILD %s] could not count triples in VIEW %s: %s",
-                self.task_id,
-                self.view_table,
-                exc,
-            )
-            return 0
+        count = materialize.count_triples(self.source_client, self.view_table)
+        logger.debug(
+            "[DT-BUILD %s] VIEW %s contains %d triple(s)",
+            self.task_id,
+            self.view_table,
+            count,
+        )
+        return count
 
     # ------------------------------------------------------------------
     # Orchestrator
@@ -1311,20 +1349,7 @@ class _BuildPipeline:
             )
             return False
 
-        self.triple_count = self._count_view_triples()
-        if self.triple_count == 0:
-            logger.warning(
-                "[DT-BUILD %s] post-sync VIEW %s contains 0 triples — "
-                "the Lakeflow pipeline may have synced an empty source or "
-                "the VIEW SQL produces no rows; check mappings and source data",
-                self.task_id,
-                self.view_table,
-            )
-
-        if not self.is_api:
-            self.tm.update_progress(
-                self.task_id, 90, f"Synced {self.triple_count} triples"
-            )
+        _report_post_sync_triple_count(self)
         logger.info(
             "[DT-BUILD %s] _apply_via_synced_pipeline complete: "
             "triples=%d total_elapsed=%.1fs",

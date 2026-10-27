@@ -102,6 +102,10 @@ body[data-app-role="admin"] .ob-domain-empty-cta[data-requires-app="admin"] {
     display: inline-flex !important;
 }
 
+body[data-app-role="admin"] .ob-domain-empty-cta[data-requires-app="admin"] {
+    display: inline-flex !important;
+}
+
 /* ==========================================================================
    Domain-role gates (builder / editor)
    ========================================================================== */

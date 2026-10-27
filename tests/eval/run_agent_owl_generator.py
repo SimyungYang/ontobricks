@@ -68,7 +68,10 @@ THRESHOLDS = ROOT / "tests/eval/thresholds.yaml"
 # rows prove paraphrases/inverses collapse to one active-voice relation,
 # distinct predicates on the same pair survive, and existing ontology
 # relations are never restated — see SPEC.md §6.
-_MIN_STAGED_EXAMPLES = 28
+#
+# Raised 28 -> 31 (single-inheritance axioms): extra subClassOf parents
+# against an existing hierarchy are dropped — see SPEC.md §6.
+_MIN_STAGED_EXAMPLES = 31
 _REQUIRED_STAGED_CONSTRAINT_FIELDS = {"kind", "value"}
 
 # Every required staged topic must be exercised by at least one staged
@@ -94,6 +97,7 @@ _REQUIRED_STAGED_CONSTRAINT_KINDS = {
     "collapses_inverse_paraphrase",
     "keeps_distinct_predicates_same_pair",
     "keeps_existing_ontology_relation",
+    "drops_extra_subclassof",
 }
 
 

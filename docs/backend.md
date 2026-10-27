@@ -1023,7 +1023,7 @@ get_graphdb(domain, settings)          # engine=None → auto-resolve
 | `src/back/core/graphdb/constants.py` | Shared RDF constants (`RDF_TYPE`, `RDFS_LABEL`). |
 | `src/back/core/graphdb/delta/DeltaFlatStore.py` | Unity Catalog Delta engine (also the raw `view` store). |
 | `src/back/core/graphdb/delta/_table_naming.py` | FQN helpers for the R2RML VIEW, `_data`, `_inferred`, `_graph`. |
-| `src/back/core/graphdb/delta/materialize.py` | CTAS / companion / union-VIEW SQL used by Build. |
+| `src/back/core/graphdb/delta/materialize.py` | CTAS / companion / union-VIEW SQL and the triple count (`count_triples`, which raises instead of returning 0 on error) used by Build. |
 | `src/back/core/graphdb/__init__.py` | Package exports (`get_graphdb`, `GRAPHDB_AVAILABLE`). |
 | `src/back/objects/session/GlobalConfigService.py` | Persists the engine *connection* config (`graph_engine_config`) in `.global_config.json`. The backend *selection* lives per-domain in `DomainSession.info['graph_backend']`. |
 

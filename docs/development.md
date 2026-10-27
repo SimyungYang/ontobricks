@@ -87,7 +87,7 @@ This document describes all external dependencies used by OntoBricks, including 
 | **owlrl** | ≥7.0.0 | OWL 2 RL forward-chaining reasoner — performs deductive closure on RDFLib graphs for ontology-level inference | W3C | [owl-rl.readthedocs.io](https://owl-rl.readthedocs.io/) |
 | **pyshacl** | ≥0.26.0 | W3C SHACL validator for RDFLib graphs — validates RDF data against SHACL shapes for data quality checks | Apache-2.0 | [github.com/RDFLib/pySHACL](https://github.com/RDFLib/pySHACL) |
 | **NetworkX** | ≥3.0 | Graph analysis library — server-side community detection (Louvain, Label Propagation, Greedy Modularity) on the full graph viewer | BSD-3-Clause | [networkx.org](https://networkx.org/) |
-| **strawberry-graphql[fastapi]** | ≥0.315.7 | GraphQL library for Python — auto-generates typed schema from ontology and integrates with FastAPI | MIT | [strawberry.rocks](https://strawberry.rocks/) |
+| **strawberry-graphql[fastapi]** | ≥0.327.2 | GraphQL library for Python — auto-generates typed schema from ontology and integrates with FastAPI | MIT | [strawberry.rocks](https://strawberry.rocks/) |
 | **MLflow** | ≥3.16.1 | ML lifecycle platform — used for agent tracing, evaluation, and the Databricks Agent Framework (ResponsesAgent) | Apache-2.0 | [mlflow.org](https://mlflow.org/) |
 
 ##### MCP Server Additional Dependencies
@@ -764,9 +764,9 @@ Fast tests that fetch pages via the Starlette `TestClient` and verify DOM struct
 | Settings `/settings` | Connection form, host/token/warehouse displays, Test Connection button, base URI field, Save button |
 | Registry modal (`/?open=registry`) | Navbar boxes icon (`bi-boxes`) → Browse + Bridges modal |
 | Settings `/settings` | Databricks/Global/backends config; Admin → Teams; Automation (Scheduler, Runs — admin only, all domains); Developer → API |
-| Ontology `/ontology` | Sidebar section groups: Ontology Editor (Information, Import, Generate, Studio, Business Views, Entities, Relationships), Advanced (Data Quality, Business Rules, Expr. & Axioms); Studio **Export** (OWL); section divs, OntoViz script |
-| Mapping `/mapping` | Sidebar with section links (Information, Studio, Manual, Auto-Map, Spark SQL), Studio **Export** (R2RML), mapping-core.js |
-| Domain `/domain` | Sidebar with 6 section links (Information, Metadata, Documents, Validation, OWL, R2RML), section divs |
+| Ontology `/ontology` | Sidebar section groups: Ontology Editor (General, Import, Generate, Studio, Groups, Business Views, Entities, Relationships), Advanced (Data Quality, Business Rules, Cohorts, Expr. & Axioms, Pitfalls); Studio **Export** (OWL); section divs, OntoViz script |
+| Mapping `/mapping` | Sidebar with section links (General, Import, Studio, Manual, Auto-Map, Diagnostics, Spark SQL), Studio **Export** (R2RML), mapping-core.js |
+| Domain `/domain` | Sidebar with section links (General, Versions, Publication, Data Assets, Knowledge Store, My Tasks, Discussions, Cockpit, Audit trail, OWL, R2RML), section divs |
 | Knowledge Graph `/dtwin/` | Sidebar section groups: Navigation (Graph Viewer, GraphQL), Advanced (Data Quality, Reasoning); Sigma.js script |
 | About `/about` | Page renders, contains "OntoBricks" |
 
@@ -1157,7 +1157,7 @@ The entire Settings page (`/settings` and all sub-routes) is restricted
 to **admin users only**. This includes:
 
 - The General tab (Databricks connection, SQL Warehouse).
-- The Registry tab (Unity Catalog Volume configuration).
+- The Registry tab (Lakebase registry + optional Unity Catalog Volume for export bundles).
 - The Admin → Teams matrix (per-domain role management).
 - The About tab.
 
@@ -1438,7 +1438,7 @@ over MCP — the registry-level tools that are always exposed, the domain-scoped
 tools that are not, the three ontology attachments, and their modes — plus
 `coerce_mcp_policy()`, which normalizes any persisted or user-submitted blob
 (dropping unknown or registry-level entries, never raising). The Domain
-Information MCP tab, the domain service and the external REST contract all
+→ General MCP tab, the domain service and the external REST contract all
 resolve the surface here so they cannot drift. The MCP server process
 deliberately does **not** import it: it only ever applies a policy it received
 over REST, and the two packages cannot import each other.
@@ -1819,7 +1819,7 @@ All logging goes through `back/core/logging/LogManager`.
 - Source files in `/docs/sphinx` (config in `conf.py`, module `.rst` files in `api/`).
 - After any change that adds, removes, or renames a Python module, class, or public function:
   1. Update or create the corresponding `.rst` file under `/docs/sphinx/api/`.
-  2. Re-build by running `scripts/build_docs.sh` from the project root.
+  2. Re-build by running `ci/build_docs.sh` from the project root.
   3. Verify no new Sphinx warnings about missing or renamed symbols.
 - When adding a **new subpackage** to `back/core`, `back/objects`, or `agents`, add a new `.rst` file and reference it from the parent `.rst` toctree.
 - All public classes and functions must have **docstrings** (Google or NumPy style) so `autodoc` renders them properly.

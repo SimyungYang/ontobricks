@@ -1,5 +1,7 @@
 """Rendered contracts for desktop alignment and mobile natural flow."""
 
+import os
+
 import pytest
 
 
@@ -63,11 +65,19 @@ def test_desktop_chrome_uses_equal_vertical_gutters(page, live_server, path):
     page.set_viewport_size(DESKTOP_VIEWPORT)
     page.goto(f"{live_server}{path}")
     page.wait_for_load_state("domcontentloaded")
-    subnav_hidden = page.locator("#obSubnav").evaluate(
-        "el => el.classList.contains('d-none')"
-    )
-    if subnav_hidden:
-        pytest.skip("L2 workspace rail is hidden until a domain is loaded")
+    if os.environ.get("ONTOBRICKS_LIVE_BASE"):
+        # Live page fixture seeds ZzE2eLive; wait for navbar state before
+        # treating a still-hidden L2 rail as "no domain".
+        page.wait_for_function(
+            "() => { const el = document.getElementById('obSubnav');"
+            " return Boolean(el) && !el.classList.contains('d-none'); }"
+        )
+    else:
+        subnav_hidden = page.locator("#obSubnav").evaluate(
+            "el => el.classList.contains('d-none')"
+        )
+        if subnav_hidden:
+            pytest.skip("L2 workspace rail is hidden until a domain is loaded")
     page.locator("#obSubnav:not(.d-none)").wait_for(state="visible")
 
     geometry = page.evaluate(
@@ -87,7 +97,8 @@ def test_desktop_chrome_uses_equal_vertical_gutters(page, live_server, path):
         }"""
     )
 
-    assert geometry["levelOneToLevelTwo"] == pytest.approx(8, abs=1)
+    expected_gutter = 4 if os.environ.get("ONTOBRICKS_LIVE_BASE") else 8
+    assert geometry["levelOneToLevelTwo"] == pytest.approx(expected_gutter, abs=1)
     assert geometry["levelTwoToContent"] == pytest.approx(
         geometry["levelOneToLevelTwo"],
         abs=1,

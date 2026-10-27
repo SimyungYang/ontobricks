@@ -145,6 +145,7 @@ class TestGenerateEntitySerialization:
         assert restored.origin == "detected"
         assert restored.included is True
         assert restored.locked is False
+        assert restored.parent == ""
 
 
 class TestGenerateEntityEdits:
@@ -221,6 +222,17 @@ class TestBuildLockedAnchorsFromClasses:
     def test_empty_classes(self):
         assert build_locked_anchors_from_classes([]) == []
         assert build_locked_anchors_from_classes(None) == []
+
+    def test_copies_existing_parent(self):
+        anchors = build_locked_anchors_from_classes(
+            [
+                {"name": "Party", "label": "Party"},
+                {"name": "Customer", "label": "Customer", "parent": "Party"},
+            ]
+        )
+        by_id = {a.id: a for a in anchors}
+        assert by_id["Party"].parent == ""
+        assert by_id["Customer"].parent == "Party"
 
 
 # ---------------------------------------------------------------------------

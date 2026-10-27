@@ -1,0 +1,80 @@
+## Fold describe_entity BFS traversal into one server-side query (263s → ~34s)
+
+Context: MCP QA testing hit 502s on "heavy depth-2 scans". Measurement showed
+the 502 is a latency symptom, not a warehouse-capacity problem: a Medium/4-cluster
+warehouse gave 0% improvement over Small/1-cluster, and the warehouse sat
+near-idle. The `describe_entity` data path (`/api/v1/digitaltwin/triples/find`
+→ `DigitalTwin.find_triples_bfs`) was the bottleneck. For a type-wide scan
+(`entity_type="Counterparty", depth=2`): the recursive BFS discovered ~20,920
+entities (59.5s, on the 60s statement-timeout edge), then `get_triples_for_subjects`
+fetched ~366,284 triples with no DISTINCT/LIMIT, which were de-duplicated in
+Python and sliced to 100. Two isolated fixes were verified against the live
+warehouse before implementation: (a) folding traversal+fetch+dedup+pagination
+into one query removes the ~200s of Python materialisation; (b) replacing the
+non-sargable OR-join with a bidirectional-edge UNION cuts the CTE ~60s→~32s.
+Combined, the folded query returns the same first 100-triple page in ~34.5s
+(7.6×), with no change to the triples returned.
+
+Changes:
+
+1. src/back/core/graphdb/GraphDBBackend.py
+   Added `_bfs_edge_filter` (shared edge predicate) and `_bfs_walk_cte`
+   (bidirectional-edge recursive walk) helpers. Rewrote `bfs_traversal` to use
+   the sargable single-equality edge join instead of the OR-join. Added
+   `find_triples_bfs_page` (folds seed → BFS → triple fetch → DISTINCT → ORDER
+   BY → LIMIT/OFFSET into one query; fetches limit+1 to derive `has_more`
+   without a COUNT) and `count_seeds`.
+2. src/back/objects/digitaltwin/DigitalTwin.py
+   Rewrote `find_triples_bfs` to delegate to `store.count_seeds` +
+   `store.find_triples_bfs_page`; removed the in-Python dedup loop and
+   post-fetch slice. Return payload now carries `has_more` instead of the
+   expensive `total`/`entity_count`. Alias expansion is no longer applied on
+   this path (it re-materialised the full entity set); `expand_uri_aliases`
+   remains for its other callers.
+3. src/api/routers/digitaltwin.py
+   `FindResponse`: replaced `total`/`entity_count` with `has_more`. Route maps
+   the new field and logs page count + has_more.
+4. src/api/routers/internal/dtwin.py
+   Session-aware `/dtwin/triples/find` payload aligned to `has_more`.
+5. src/mcp-server/server/tools.py
+   `describe_entity`: added performance guidance to the docstring (entity-scoped
+   deep scans via `search`; keep `depth=1` for type-wide scans). Updated the
+   stale `total` comment to `has_more`.
+6. src/mcp-server/server/formatting.py, src/agents/tools/graph_formatting.py
+   `_format_find_response` uses `has_more` (shows "N+ triples" and a
+   "more exist" hint) instead of `total`.
+7. src/back/core/graphdb/neo4j/Neo4jReadOps.py, Neo4jStore.py
+   Added `count_seeds` and `find_triples_bfs_page` Cypher overrides so the
+   non-SQL backend keeps the abstract contract (walk from structured
+   search/entity_type seeds, de-dup and paginate in Python).
+8. tests/units/dtwin/test_digitaltwin_api.py
+   Wired the SQL-capture harness to the real `_bfs_walk_cte`/`_sql_relation`
+   helpers; added tests for the bidirectional-edge join, folded-page
+   DISTINCT/ORDER/LIMIT+1 and `has_more`, and `count_seeds`.
+9. tests/back/core/digitaltwin/test_digitaltwin_units.py
+   Added `TestFindTriplesBfs` covering delegation, `has_more`, and the
+   no-seeds short-circuit (no page query issued).
+
+Modified files:
+- src/back/core/graphdb/GraphDBBackend.py
+- src/back/objects/digitaltwin/DigitalTwin.py
+- src/api/routers/digitaltwin.py
+- src/api/routers/internal/dtwin.py
+- src/mcp-server/server/tools.py
+- src/mcp-server/server/formatting.py
+- src/agents/tools/graph_formatting.py
+- src/back/core/graphdb/neo4j/Neo4jReadOps.py
+- src/back/core/graphdb/neo4j/Neo4jStore.py
+- tests/units/dtwin/test_digitaltwin_api.py
+- tests/back/core/digitaltwin/test_digitaltwin_units.py
+
+Tests: touched-area unit tests pass —
+`uv run --frozen pytest -q -m "not scenario" tests/units/dtwin/test_digitaltwin_api.py
+tests/back/core/digitaltwin/test_digitaltwin_units.py
+tests/units/core/test_lakebase_flat_store.py tests/units/agents/test_agent_dtwin_chat.py`
+→ all green (incl. 11 new/updated cases). The full `-m "not scenario"` run could
+not complete in this local environment: `db`/`integration`/`external` tests hang
+on real Databricks connections, and `tests/units/settings/test_app_yaml_template.py`
+fails to collect under Python 3.10 (`tomllib`). The remaining unit failures
+(settings health/registry, graphdb secret-auth/purge/backend-config,
+ResolveDomain) reproduce identically on `master` and are unrelated to this change.

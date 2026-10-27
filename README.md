@@ -34,13 +34,16 @@
 - **Lakehouse//RT graph queries**: Knowledge Graph reads can run on a serverless Lakehouse//RT warehouse, while builds keep a classic or serverless one.
 - **Three-stage Ontology Generate**: detect entities, lock the catalog, then complete relations, attributes and axioms. The result is appended to your ontology instead of replacing it.
 - **Knowledge Store**: parsed documents live in Lakebase and are shared by Generate and Mapping. No Volume grants are needed.
+- **Unity Catalog Metric Views**: Metric Views import as data assets with dimension/measure roles; Auto-Map emits `MEASURE(...)` SQL.
 - **Entity Data Quality Checks**: right-click a node in Explorer, or call it from MCP, to check that entity against every SHACL shape that applies, with gauges for each dimension.
 - **Entity business rules**: attach SWRL rules, aggregate rules and decision tables to a class, then run them on one entity from Explorer or MCP.
 - **Databricks Jobs as class actions**: trigger a workspace Job for an entity next to Unity Catalog functions.
 - **SPARQL playground**: query the graph in SPARQL and inspect the generated SQL.
 - **GitHub domain mirror**: push the domain configuration (OWL, R2RML, SHACL, rules) to a GitHub repository and restore it from there.
+- **OBX Import as**: rename a domain on import; a renamed copy does not reuse the previous graph objects.
 - **Faster Explorer**: indexed search, paged expansion and no blocking `COUNT(*)` on first load.
 - **Ontology Studio**: the renamed Designer adds multi-select, Business Views, cross-domain import, and OWL/R2RML export from the canvas.
+- **Load opens Domain → General**: opening a domain from Home, the navbar, Registry, or Versions lands on Domain → General instead of staying on the current page.
 - **Security hardening**: stricter CSRF, a `/health` that leaks no internals, dialect-aware SQL escaping and sanitised Markdown.
 
 Full details are in the [Release Notes](releases/ReleaseNotes_V0.9.0.md).
@@ -222,7 +225,8 @@ make deploy
 ```
 
 Prerequisites (Databricks workspace with Apps enabled, a SQL Warehouse, a
-**Lakebase Autoscaling** database, and a Unity Catalog Volume) and the full,
+**Lakebase Autoscaling** database, and a Unity Catalog Volume for the registry
+identifier / export bundles) and the full,
 idempotent deploy checklist — including one-click graph-DB provisioning and
 permission bootstrap — are in the
 **[Get Started](docs/getting-started.md)** and

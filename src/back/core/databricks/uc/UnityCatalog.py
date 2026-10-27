@@ -463,28 +463,31 @@ class UnityCatalog:
             ) from exc
 
     def get_table_comment(self, catalog: str, schema: str, table: str) -> str:
-        """Return the table-level comment (empty string if none)."""
-        catalog_q = quote_uc_identifier(catalog, role="catalog")
+        """Return the table-level comment, or "" if it has none or the call fails.
+
+        Invalid identifiers raise :class:`ValidationError`, as before.
+
+        Read from the Unity Catalog tables API, like
+        :meth:`list_tables_and_views`. It needs only the grants a data source
+        already has (USE CATALOG, USE SCHEMA, SELECT). The previous
+        ``information_schema.tables`` query also needed access to
+        ``information_schema``, which an app service principal often lacks;
+        the error was swallowed and every table showed an empty description.
+        """
         catalog_val = validate_uc_identifier(catalog, role="catalog")
         schema_val = validate_uc_identifier(schema, role="schema")
         table_val = validate_uc_identifier(table, role="table")
+        if not self._auth.host or not self._auth.has_valid_auth():
+            return ""
+        full_name = quote(f"{catalog_val}.{schema_val}.{table_val}", safe=".")
+        url = f"{self._auth.host.rstrip('/')}/api/2.1/unity-catalog/tables/{full_name}"
         try:
-            params = self._auth.get_sql_connection_params()
-            with sql.connect(**params) as conn:
-                with conn.cursor() as cur:
-                    # Databricks SQL Connector (use_inline_params=False) only
-                    # rewrites qmark ``?`` placeholders — pyformat ``%s`` is
-                    # sent to the warehouse verbatim and raises PARSE_SYNTAX_ERROR.
-                    query = (
-                        f"SELECT comment FROM {catalog_q}.information_schema.tables "
-                        "WHERE table_catalog = ? "
-                        "AND table_schema = ? "
-                        "AND table_name = ?"
-                    )
-                    cur.execute(query, (catalog_val, schema_val, table_val))
-                    row = cur.fetchone()
-                    return row[0] if row and row[0] else ""
-        except Exception as exc:
+            response = requests.get(
+                url, headers=self._auth.get_auth_headers(), timeout=10
+            )
+            response.raise_for_status()
+            return response.json().get("comment") or ""
+        except Exception as exc:  # noqa: BLE001 — callers treat "" as "no description"
             logger.exception("Error fetching table comment: %s", exc)
             return ""
 

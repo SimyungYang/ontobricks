@@ -663,6 +663,36 @@ class TestInferAxioms:
         assert "cls-UnknownGhost" in result.rejection_reason
         assert mock_llm.call_count == 1
 
+    def test_drops_subclassof_for_anchor_that_already_has_parent(self):
+        draft = _draft(
+            anchors=[
+                GenerateEntity.locked_anchor("Party", "Party"),
+                GenerateEntity.locked_anchor(
+                    "Customer", "Customer", parent="Party"
+                ),
+            ],
+            candidates=[
+                GenerateEntity.new_candidate("Agent", entity_id="cand-agent")
+            ],
+            relations_done=True,
+            attributes_done=True,
+        )
+        payload = json.dumps(
+            {
+                "axioms": [
+                    {
+                        "kind": "subClassOf",
+                        "subject": "Customer",
+                        "object": "cand-agent",
+                    }
+                ]
+            }
+        )
+        result, mock_llm = self._run([_answer(payload)], draft)
+        assert result.success is True
+        assert result.result["axioms"] == []
+        assert mock_llm.call_count == 1
+
     def test_axioms_call_uses_enum_constrained_response_format(self):
         draft = _draft(relations_done=True, attributes_done=True)
         _, mock_llm = self._run([_answer('{"axioms": []}')], draft)
@@ -877,6 +907,24 @@ class TestPrompts:
         # counter-example, so the model can't misinterpret "no brackets"
         # as merely stylistic.
         assert "[agent]" in lowered
+
+    def test_axioms_prompt_forbids_multiple_inheritance(self):
+        draft = _draft(
+            anchors=[
+                GenerateEntity.locked_anchor(
+                    "Customer", "Customer", parent="Party"
+                ),
+                GenerateEntity.locked_anchor("Party", "Party"),
+            ],
+            relations_done=True,
+            attributes_done=True,
+        )
+        system = prompts.build_axioms_system_prompt()
+        user = prompts.build_axioms_user_prompt(draft)
+        assert "Single inheritance only" in system
+        assert "EXISTING SUBCLASS AXIOMS" in user
+        assert "Customer subClassOf Party" in user
+        assert "parent: Party" in user
 
     def test_closure_rule_wording_shared_by_attributes_and_axioms_prompts(self):
         # The strengthened closure rule text is shared via `_CLOSURE_RULE`

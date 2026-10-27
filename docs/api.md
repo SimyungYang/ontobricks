@@ -9,6 +9,7 @@ The OntoBricks REST API provides stateless endpoints for external applications t
 - [Interactive references](#interactive-references)
 - [Authentication](#authentication)
 - [CSRF Protection](#csrf-protection)
+- [App liveness vs readiness](#app-liveness-vs-readiness)
 - [Response Format](#response-format)
 - [Endpoints](#endpoints)
 - [GraphQL API](#graphql-api)
@@ -66,6 +67,17 @@ State-changing requests (POST, PUT, PATCH, DELETE) to internal endpoints require
 4. External API endpoints (`/api/v1/`) and GraphQL are exempted.
 5. A request with no cookie, no header, or mismatching values is rejected with `403`.
 
+## App liveness vs readiness
+
+These are **not** the same as `GET /api/v1/health`.
+
+| Endpoint | Who | What it returns |
+|----------|-----|-----------------|
+| `GET /health` | Public | Cheap liveness: `{status, version, service, timestamp}`. Always HTTP 200. No catalog names, paths, or exception text. |
+| `GET /settings/diagnostics/readiness` | Admin | Full readiness: Databricks auth, SQL warehouse, registry DDL, Lakebase USAGE, … as `{status, summary, checks}`. Settings → Health → Databricks calls this. |
+
+Probes that only need HTTP 200 should keep calling `/health`. Anything that parsed the old `checks` list from `/health` must switch to the readiness endpoint.
+
 ## Response Format
 
 All endpoints return JSON responses with a standard format:
@@ -114,7 +126,7 @@ URLs use `/api/v1/domains` and `/api/v1/domain/…` for **domain** operations (s
 
 #### `POST /api/v1/domains/list`
 
-List available domains in a Unity Catalog volume.
+List domains in the Lakebase registry identified by the catalog / schema / volume triplet (the volume name is the registry key, not a JSON-on-Volume store).
 
 **Request:**
 ```json

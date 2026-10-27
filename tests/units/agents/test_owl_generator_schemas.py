@@ -381,6 +381,63 @@ class TestParseAxiomsPayload:
                 '{"axioms": [{"kind": "subClassOf", "object": "cls-Customer-a1"}]}'
             )
 
+    def test_drops_second_parent_in_payload(self):
+        payload = json.dumps(
+            {
+                "axioms": [
+                    {
+                        "kind": "subClassOf",
+                        "subject": "cand-6",
+                        "object": "Vehicle",
+                    },
+                    {
+                        "kind": "subClassOf",
+                        "subject": "cand-6",
+                        "object": "Boat",
+                    },
+                    {
+                        "kind": "disjointWith",
+                        "subject": "cand-6",
+                        "object": "Boat",
+                    },
+                ]
+            }
+        )
+        result = schemas.parse_axioms_payload(payload)
+        subclass = [a for a in result["axioms"] if a["kind"] == "subClassOf"]
+        assert subclass == [
+            {"kind": "subClassOf", "subject": "cand-6", "object": "Vehicle"}
+        ]
+        assert result["axioms"][-1]["kind"] == "disjointWith"
+
+    def test_drops_subclassof_when_subject_already_has_parent(self):
+        payload = json.dumps(
+            {
+                "axioms": [
+                    {
+                        "kind": "subClassOf",
+                        "subject": "Customer",
+                        "object": "Agent",
+                    },
+                    {
+                        "kind": "disjointWith",
+                        "subject": "Customer",
+                        "object": "Supplier",
+                    },
+                ]
+            }
+        )
+        result = schemas.parse_axioms_payload(
+            payload, existing_parents={"Customer": "Party"}
+        )
+        assert result["axioms"] == [
+            {
+                "kind": "disjointWith",
+                "subject": "Customer",
+                "object": "Supplier",
+            }
+        ]
+
 
 # ---------------------------------------------------------------------------
 # Residual live-reliability bug: transport-level JSON double-encoding.

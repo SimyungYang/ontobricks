@@ -192,8 +192,10 @@ def _entity_catalog(draft: GenerateDraft) -> str:
         alt = ", ".join(entity.alternate_labels)
         alt_suffix = f" | alt: {alt}" if alt else ""
         desc = f" — {entity.description}" if entity.description else ""
+        parent_line = f"\n  parent: {entity.parent}" if entity.parent else ""
         lines.append(
-            f"- id: {entity.id}\n  label: {entity.canonical_label}{alt_suffix}{desc}"
+            f"- id: {entity.id}\n  label: {entity.canonical_label}"
+            f"{alt_suffix}{desc}{parent_line}"
         )
     return "\n".join(lines)
 
@@ -266,6 +268,12 @@ closed set of entities.
 • kind ∈ {{subClassOf, disjointWith, equivalentClass}}.
 • Prefer OWL 2 EL-like modelling; add an axiom only when justified.
 • Never make a class disjoint from its own subclass.
+• Single inheritance only: each class may have at most ONE subClassOf parent.
+• If an entity already lists a parent in the closed entity set (or under
+  EXISTING SUBCLASS AXIOMS), do NOT emit a subClassOf axiom for that
+  subject — neither a second parent nor a restatement. The ontology model
+  cannot represent multiple inheritance.
+• Never emit two subClassOf axioms with the same subject.
 
 # OUTPUT (JSON ONLY — NO PROSE, NO CODE FENCES)
 {{"axioms": [
@@ -333,6 +341,21 @@ def build_attributes_user_prompt(draft: GenerateDraft) -> str:
     )
 
 
+def _existing_subclass_block(draft: GenerateDraft) -> str:
+    lines = [
+        f"- {subject} subClassOf {parent}"
+        for subject, parent in draft.existing_parents().items()
+    ]
+    if not lines:
+        return ""
+    return (
+        "EXISTING SUBCLASS AXIOMS (already in the ontology — do not add "
+        "another parent for these subjects; single inheritance only):\n"
+        + "\n".join(lines)
+        + "\n\n"
+    )
+
+
 def build_axioms_user_prompt(draft: GenerateDraft) -> str:
     prior = _prior_results_block(draft, ("relations", "attributes"))
     prior_section = f"\n{prior}\n" if prior else "\n"
@@ -340,5 +363,6 @@ def build_axioms_user_prompt(draft: GenerateDraft) -> str:
         "Closed entity set (reference ONLY these ids):\n"
         f"{_entity_catalog(draft)}\n"
         f"{prior_section}"
+        f"{_existing_subclass_block(draft)}"
         "\nNow infer and provide the axioms."
     )

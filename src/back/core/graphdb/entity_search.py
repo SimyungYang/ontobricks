@@ -31,9 +31,18 @@ def is_asserted_only_relation(table_name: str) -> bool:
     return leaf.endswith("_data") or leaf.endswith("_sync")
 
 
+def _exception_haystack(exc: Exception) -> str:
+    """Message plus ``detail`` — SEA keeps warehouse text only in ``detail``."""
+    chunks = [str(exc)]
+    detail = getattr(exc, "detail", None)
+    if detail:
+        chunks.append(str(detail))
+    return " ".join(chunks).lower()
+
+
 def is_missing_relation_error(exc: Exception) -> bool:
     """Whether *exc* reports that a referenced table/view does not exist."""
-    message = str(exc).lower()
+    message = _exception_haystack(exc)
     return (
         "table_or_view_not_found" in message
         or "does not exist" in message
@@ -43,7 +52,7 @@ def is_missing_relation_error(exc: Exception) -> bool:
 
 def is_view_not_table_error(exc: Exception) -> bool:
     """Whether *exc* is a table-only statement (``DESCRIBE DETAIL``) run on a view."""
-    return "expect_table_not_view" in str(exc).lower()
+    return "expect_table_not_view" in _exception_haystack(exc)
 
 
 def entity_search_select(spo: str) -> str:

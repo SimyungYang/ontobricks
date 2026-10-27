@@ -1,5 +1,7 @@
 # OntoBricks — Product Roadmap
 
+> **Superseded** by `releases/Roadmap_2026-10.md` (Asana snapshot 2026-10-20). Kept as the September 2026 historical snapshot.
+
 > **Version:** 0.9.0 → beyond<br>
 > **Last updated:** 2026-09-11<br>
 > **Status:** Living document — Asana-first prioritization<br>

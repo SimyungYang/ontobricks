@@ -1,0 +1,183 @@
+## Add Spark SPARQL capability validator
+
+Context:
+Task 1 of the Spark SPARQL fail-closed implementation for issue #167 required a
+new capability validator that rejects unsupported SPARQL constructs before
+translation. The change was developed with strict TDD: a new validator test
+suite was added first, observed failing at import time, then minimal production
+code was implemented to satisfy the required accepted and rejected constructs.
+
+Changes:
+
+1. src/back/core/w3c/sparql/SparqlCapabilityValidator.py
+   Added a fail-closed SPARQL algebra validator using rdflib `prepareQuery`,
+   explicit unsupported-feature labels, filter-expression shape checks, path
+   rejection, and union branch restrictions.
+2. tests/back/core/w3c/sparql/test_sparql_capability_validator.py
+   Added unit tests covering valid basic SELECT, invalid syntax handling, and
+   rejection of GROUP BY, ORDER BY, numeric FILTER, property paths, subquery,
+   MINUS, VALUES, SERVICE, GRAPH, arbitrary UNION, non-literal BIND, and OFFSET.
+
+Modified files:
+- src/back/core/w3c/sparql/SparqlCapabilityValidator.py
+- tests/back/core/w3c/sparql/test_sparql_capability_validator.py
+
+Tests: uv run --frozen pytest -q -m "not scenario" -> 5874 passed, 304 skipped, 6 deselected in 48.36s
+
+## Address Task 1 review findings
+
+Context:
+The Task 1 review reported missing positive coverage for accepted algebra
+shapes and one incorrect annotation in the parser exception path. This update
+adds all requested positive validator tests, fixes OPTIONAL/LeftJoin acceptance
+for RDFLib's `TrueFilter` node shape, removes the incorrect `no cover` pragma,
+and verifies/removes the suspect `GroupGraphPatternSub -> SERVICE` mapping.
+
+Changes:
+
+1. tests/back/core/w3c/sparql/test_sparql_capability_validator.py
+   Added positive tests for accepted LIMIT, OPTIONAL/LeftJoin, all allowed
+   FILTER shapes (CONTAINS, STR equals, STRSTARTS, STRENDS, predicate IN), and
+   the accepted specialized relationship-UNION shape.
+2. src/back/core/w3c/sparql/SparqlCapabilityValidator.py
+   Fixed LeftJoin handling to accept RDFLib `TrueFilter` nodes, removed
+   incorrect `# pragma: no cover`, removed `GroupGraphPatternSub -> SERVICE`
+   mapping, and documented RDFLib's lowercase `values` node in ToMultiSet
+   handling.
+
+Modified files:
+- tests/back/core/w3c/sparql/test_sparql_capability_validator.py
+- src/back/core/w3c/sparql/SparqlCapabilityValidator.py
+
+Tests: uv run --frozen pytest -q tests/back/core/w3c/sparql/test_sparql_capability_validator.py -> 22 passed in 1.36s; uv run --frozen pytest -q -m "not scenario" -> 5882 passed, 304 skipped, 6 deselected in 51.90s
+
+## Integrate fail-closed validator in translator
+
+Context:
+Task 2 required integrating the Spark SPARQL capability boundary into the
+public translator entrypoint while preserving supported query behavior. The
+change followed strict TDD: translator-level unsupported-shape regression tests
+were added first and confirmed red, then the validator call was integrated and
+the targeted suites were rerun to green.
+
+Changes:
+
+1. tests/back/core/w3c/sparql/test_sparql_translator_units.py
+   Added translator-level fail-closed regressions for GROUP BY, numeric/complex
+   FILTER, and property paths; added positive coverage for basic BGP, supported
+   string FILTER, literal BIND, and the accepted specialized UNION+BIND shape.
+2. src/back/core/w3c/sparql/SparqlTranslator.py
+   Imported and invoked `SparqlCapabilityValidator.validate()` at the start of
+   `translate_sparql_to_spark` before query normalization/parsing.
+
+Modified files:
+- tests/back/core/w3c/sparql/test_sparql_translator_units.py
+- src/back/core/w3c/sparql/SparqlTranslator.py
+
+Tests: uv run --frozen pytest -q tests/back/core/w3c/sparql/test_sparql_translator_units.py -> 5 failed, 24 passed (RED expected); uv run --frozen pytest -q tests/back/core/w3c/sparql/test_sparql_capability_validator.py tests/back/core/w3c/sparql/test_sparql_translator_units.py -> 51 passed; uv run --frozen pytest -q -m "not scenario" -> 5890 passed, 304 skipped, 6 deselected in 49.09s
+
+## Harden Spark translator assertions and docs boundary
+
+Context:
+Task 4 completed the verification hardening and documentation pass for the
+Spark SPARQL fail-closed rollout on `0.8.1`. The unit tests now fail loudly on
+unexpected translator outcomes, exception swallowing was tightened to explicit
+validation failure handling, and the docs now describe the exact supported
+Spark subset plus the no-equivalent-fallback fact for local RDFLib execution.
+
+Changes:
+
+1. `tests/back/core/w3c/sparql/test_sparql_translator_units.py`
+   Replaced all nine `if result.get("success")` guards with mandatory
+   `assert result["success"], result` assertions, then executed SQL/shape
+   checks unconditionally; replaced broad exception swallowing in the SQL
+   injection test with explicit `ValidationError` handling.
+2. `docs/architecture.md`
+   Documented the fail-closed Spark SPARQL capability boundary with the exact
+   supported subset, explicit rejected construct families, and clarified that
+   local RDFLib execution is not a warehouse-data fallback.
+3. `docs/user-guide.md`
+   Added a user-facing "Spark SPARQL support boundary (fail-closed)" section in
+   the Explorer guidance, including supported operators, rejected operators,
+   and the no-equivalent-fallback statement for local RDFLib execution.
+
+Modified files:
+- tests/back/core/w3c/sparql/test_sparql_translator_units.py
+- docs/architecture.md
+- docs/user-guide.md
+- changelogs/v0.8.1/benoitcayladbx_2026-09-11.log
+
+Tests:
+- `uv run --frozen pytest -q tests/back/core/w3c/sparql` -> 57 passed, 1 warning
+- `uv run --frozen ruff check src/back/core/w3c/sparql/SparqlCapabilityValidator.py src/back/core/w3c/sparql/SparqlTranslator.py tests/back/core/w3c/sparql` -> failed with 9 findings in pre-existing translator/validator files (`UP035`, `I001`, `UP045`, `F541`, `W291`, `B007`)
+- `uv run --frozen pytest -q -m "not scenario"` -> 5896 passed, 304 skipped, 6 deselected, 32 warnings
+
+## Fix Task 4 feature-introduced lint findings
+
+Context:
+Follow-up on Task 4 to remove only the two lint findings introduced by the
+Spark SPARQL fail-closed feature before porting to `0.9.0`, while preserving
+the seven known pre-existing findings in `SparqlTranslator.py`.
+
+Changes:
+
+1. `src/back/core/w3c/sparql/SparqlCapabilityValidator.py`
+   Replaced `from typing import Iterable` with
+   `from collections.abc import Iterable` to resolve `UP035`.
+2. `src/back/core/w3c/sparql/SparqlTranslator.py`
+   Sorted the import block (no behavior change) to resolve `I001` introduced
+   when adding the capability-validator import in Task 2.
+
+Modified files:
+- src/back/core/w3c/sparql/SparqlCapabilityValidator.py
+- src/back/core/w3c/sparql/SparqlTranslator.py
+- changelogs/v0.8.1/benoitcayladbx_2026-09-11.log
+
+Tests:
+- `uv run --frozen ruff check src/back/core/w3c/sparql/SparqlCapabilityValidator.py src/back/core/w3c/sparql/SparqlTranslator.py` -> failed with 7 findings, all pre-existing in `SparqlTranslator.py` (`UP045`, `F541`, `W291`, `B007` x4); no feature-introduced lint findings remain
+- `uv run --frozen pytest -q tests/back/core/w3c/sparql` -> 57 passed, 1 warning
+- `uv run --frozen pytest -q -m "not scenario"` -> 5896 passed, 304 skipped, 6 deselected, 32 warnings
+
+## Apply final-review hardenings before port
+
+Context:
+Applied the two actionable final-review hardenings requested for branch/worktree
+`0.8.1` before porting: keep translator-compatible predicate-IN aliases accepted
+by the validator, and tighten specialized relationship-UNION validation so
+non-specialized UNION shapes fail at capability validation time (instead of
+failing later with unrelated mapping errors). Work was done test-first with
+explicit RED then GREEN verification.
+
+Changes:
+
+1. `tests/back/core/w3c/sparql/test_sparql_capability_validator.py`
+   Added positive tests for `FILTER(?predicate|?p|?pred IN (...))` URI lists and
+   added negative tests proving non-specialized UNION variants are rejected with
+   the `UNION` capability error.
+2. `tests/back/core/w3c/sparql/test_sparql_translator_units.py`
+   Added public-translator positive tests for `predicate/p/pred` IN aliases and
+   added negative tests proving unsupported non-specialized UNION shapes raise
+   capability `ValidationError` containing `UNION`.
+3. `src/back/core/w3c/sparql/SparqlCapabilityValidator.py`
+   Extended allowed IN-variable aliases to `predicate`, `p`, and `pred`; carried
+   projected SELECT variables through validation traversal; and tightened UNION
+   acceptance to the translator-compatible specialized shape only
+   (`SELECT ?subject ?predicate ?object` plus branch variable naming
+   `?subject ... ?object` with `BIND(... AS ?predicate)`).
+4. `src/back/core/w3c/sparql/SparqlTranslator.py`
+   Tightened `_is_specialized_relationship_union_query` to require exact branch
+   variable naming (`subject`, `object`) in addition to existing projected
+   variables and predicate constraints, keeping validator and translator aligned.
+
+Modified files:
+- src/back/core/w3c/sparql/SparqlCapabilityValidator.py
+- src/back/core/w3c/sparql/SparqlTranslator.py
+- tests/back/core/w3c/sparql/test_sparql_capability_validator.py
+- tests/back/core/w3c/sparql/test_sparql_translator_units.py
+- changelogs/v0.8.1/benoitcayladbx_2026-09-11.log
+
+Tests:
+- `uv run --frozen pytest -q tests/back/core/w3c/sparql/test_sparql_capability_validator.py tests/back/core/w3c/sparql/test_sparql_translator_units.py` (RED phase) -> 9 failed, 59 passed (expected before fixes)
+- `uv run --frozen pytest -q tests/back/core/w3c/sparql/test_sparql_capability_validator.py tests/back/core/w3c/sparql/test_sparql_translator_units.py` (GREEN phase) -> 68 passed, 1 warning
+- `uv run --frozen ruff check src/back/core/w3c/sparql/SparqlCapabilityValidator.py src/back/core/w3c/sparql/SparqlTranslator.py tests/back/core/w3c/sparql/test_sparql_capability_validator.py tests/back/core/w3c/sparql/test_sparql_translator_units.py` -> failed with 7 findings, all pre-existing in `SparqlTranslator.py` (`UP045`, `F541`, `W291`, `B007` x4)
+- `uv run --frozen pytest -q -m "not scenario"` -> 5907 passed, 304 skipped, 6 deselected, 32 warnings
