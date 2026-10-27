@@ -121,7 +121,7 @@
     margin: 0;
     font-size: 0.85rem;
     writing-mode: vertical-rl;
-    text-orientation: mixed;
+    text-orientation: sideways;  /* CJK too, so the 180deg turn reads bottom-up */
     transform: rotate(180deg);
     white-space: nowrap;
     overflow: hidden;

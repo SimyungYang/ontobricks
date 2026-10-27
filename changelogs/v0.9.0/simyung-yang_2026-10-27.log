@@ -451,3 +451,30 @@ tests/units/agents tests/units/architecture -> 2426 passed. Prompt change:
 there is no mapping-quality eval runner for this agent yet. It is verified
 live by re-running auto-mapping for the affected subclasses on a deployed
 app; an eval delta is still owed for the AI-feature gate.
+
+================================================================================
+## Mapping panel: vertical titles no longer turn Korean text upside down
+================================================================================
+
+Context:
+The collapsed mapping-panel title (e.g. "공장") showed Korean glyphs upside
+down while English read correctly. The title uses writing-mode: vertical-rl
+plus a 180deg rotation. With text-orientation: mixed, CJK glyphs stay upright
+before the rotation, so the rotation flips them.
+
+Changes:
+
+1. src/front/static/global/css/mapping.css
+   Panel title text-orientation is sideways, so every script is laid on its
+   side and the rotation reads bottom-to-top. Checked in Chrome with Korean
+   and English labels.
+2. tests/units/front/test_vertical_panel_title.py
+   New contract test for the rule.
+
+Modified files:
+- src/front/static/global/css/mapping.css
+- tests/units/front/test_vertical_panel_title.py (new)
+- changelogs/v0.9.0/simyung-yang_2026-10-27.log
+
+Test result:
+uv run --frozen pytest -q tests/units/front -> 1780 passed.
