@@ -62,3 +62,144 @@ Modified files:
 
 Tests: tests/units/agents/test_agent_dtwin_chat_analysis.py -> 49 passed
 (6 TestFetchAllRows cases failed before the fix).
+
+================================================================================
+## Table metadata counts DESCRIBE section rows as columns
+================================================================================
+
+Context:
+On workspaces with automatic liquid clustering, DESCRIBE <table> appends a
+"# Clustering Information" section that repeats the clustering columns
+("# col_name | data_type | comment" header, then one row per column).
+Partitioned tables do the same with a blank row and "# Partition
+Information". UnityCatalog.get_table_columns() returned every row, so the
+Data Assets page showed two phantom columns per table (463 columns instead
+of 373 on a 45-table schema) and reported 45 columns "missing
+descriptions" even though every real column had a comment. The phantom rows
+also reached mapping and ontology generation as if they were columns.
+
+Changes:
+
+1. src/back/core/databricks/uc/UnityCatalog.py
+   get_table_columns() stops at the first DESCRIBE row whose name is empty
+   or starts with "#", i.e. where a metadata section begins.
+2. tests/units/core/test_unity_catalog.py
+   New tests: clustering section rows and partition section rows (with the
+   blank separator) are not returned as columns.
+
+Modified files:
+- src/back/core/databricks/uc/UnityCatalog.py
+- tests/units/core/test_unity_catalog.py
+- changelogs/v0.9.0/simyung-yang_2026-10-27.log
+
+Test result:
+uv run --frozen pytest -q -m "not scenario" --deselect
+tests/units/settings/test_deploy_instance_id.py
+-> 9774 passed, 338 skipped, 16 deselected, 1 xfailed.
+The deselected file asserts the committed default INSTANCE_ID and fails only
+because the worktree carries uncommitted deployment-specific values in
+scripts/deploy.config.sh (not part of this change).
+
+================================================================================
+## Lakebase graph engine rejects a bare branch name ("production")
+================================================================================
+
+Context:
+The deployment docs and deploy.config.sh configure LAKEBASE_BRANCH as a bare
+branch id ("production"). The Settings > Lakebase Connection tab pre-fills an
+empty branch field from that env var, so saving before the branch picker
+loads (or saving through the Advanced JSON) stores
+graph_engine_config.lakebase.lakebase_branch = "production" next to
+lakebase_project = "projects/<p>". GraphDBFactory, the Lakebase health check
+and the graph DB setup path passed that value straight to
+BranchLakebaseAuth, which expects "projects/<p>/branches/<b>", so the health
+check showed "Health check failed" and the graph backend was unavailable.
+Seen on two fresh deployments; the same code exists in 0.8.1.
+
+Changes:
+
+1. src/back/core/graphdb/engine_config.py
+   New resolve_lakebase_branch_path(): returns a full branch path; a bare
+   branch is joined with lakebase_project ("projects/" prefix added when the
+   project is a bare id); unchanged when no project is set.
+2. src/back/core/graphdb/GraphDBFactory.py
+   Lakebase backend resolves the branch through resolve_lakebase_branch_path.
+3. src/back/objects/domain/settings/graphengine/GraphEngineLakebaseSettings.py
+   Health check and the graph DB setup / objects / permissions auth path
+   resolve the branch (form value or saved value) the same way.
+4. tests/units/graphdb/test_graph_engine_config_keys.py
+   Tests for full path, bare branch + project path, bare branch + bare
+   project id, bare branch without project, and unset branch.
+
+Modified files:
+- src/back/core/graphdb/engine_config.py
+- src/back/core/graphdb/GraphDBFactory.py
+- src/back/objects/domain/settings/graphengine/GraphEngineLakebaseSettings.py
+- tests/units/graphdb/test_graph_engine_config_keys.py
+- changelogs/v0.9.0/simyung-yang_2026-10-27.log
+
+Test result:
+uv run --frozen pytest -q tests/units -k "lakebase or graph_engine or settings"
+-> 1741 passed; the only 2 failures are tests/units/settings/
+test_deploy_instance_id.py, which depend on uncommitted
+deployment-specific deploy.config.sh values. Deployed before the full-suite run finished at the
+user's request; the full-suite result is reported separately.
+
+Follow-up: the first full-suite run flagged tests/units/architecture/
+test_size_budget.py (GraphEngineLakebaseSettings and two already-oversized
+functions grew by a few lines). The resolver import moved to module level in
+GraphDBFactory.py and GraphEngineLakebaseSettings.py and the call sites were
+rewritten without adding lines, so the frozen size baselines hold.
+uv run --frozen pytest -q tests/units -k "architecture or lakebase or
+graph_engine or settings" (deploy_instance_id deselected) -> 1751 passed.
+
+================================================================================
+## Lakebase managed sync fails on Autoscaling projects ("Database instance is not found")
+================================================================================
+
+Context:
+SyncedTableManager registered synced tables only through the legacy
+/api/2.0/database/synced_tables endpoint with database_instance_name set to
+the project id. That endpoint resolves database *instances*; a Lakebase
+Autoscaling project created through the Postgres API is not one, so every
+managed_synced build failed at "Registering synced table in Unity Catalog"
+with "Database instance is not found". Autoscaling projects register synced
+tables under /api/2.0/postgres/synced_tables (spec.branch =
+projects/<p>/branches/<b>, spec.postgres_database). Verified live: the
+Postgres API accepts a regular UC catalog for the synced table and a VIEW as
+the source, needs no new_pipeline_spec, and returns the same detailed_state
+values (SYNCED_TABLE_*) and pipeline_id the manager already polls.
+
+Changes:
+
+1. src/back/core/graphdb/lakebase/SyncedTableManager.py
+   New _RoutedSyncedTablesAPI (extends _RestDatabaseAPI), used by
+   _CompatWorkspaceClient:
+   - create: POST /api/2.0/postgres/synced_tables?synced_table_id=<fqn> with
+     the branch path and Postgres database built from the existing payload;
+     falls back to the legacy endpoint only when the Postgres API answers
+     not-found (project unknown). "already exists" / ghost-reservation
+     errors propagate unchanged to the existing recovery logic.
+   - get: Postgres API first, then the legacy endpoint, so tables registered
+     the old way keep resolving.
+   - delete: removes the registration from both APIs (not-found ignored).
+   - Responses are reshaped to the legacy SyncedDatabaseTable form
+     (name = UC FQN, data_synchronization_status = status) so ensure /
+     trigger / wait / state extraction are unchanged.
+2. tests/units/core/test_synced_tables_rest_api.py
+   Create payload and query, legacy-shaped response, legacy fallback on an
+   unknown project, no fallback on "already exists", get via either API,
+   delete from both.
+
+Modified files:
+- src/back/core/graphdb/lakebase/SyncedTableManager.py
+- tests/units/core/test_synced_tables_rest_api.py
+- changelogs/v0.9.0/simyung-yang_2026-10-27.log
+
+Test result:
+uv run --frozen pytest -q tests/units/core/test_synced_tables_rest_api.py
+tests/units/core/test_synced_table_manager.py tests/units/architecture
+-> 42 passed. Live check on a Lakebase Autoscaling project: ensure() created
+the synced table through the Postgres API, a probe table reached
+ONLINE_NO_PENDING_UPDATE with all rows in Postgres, and delete() removed
+both probes (probe objects cleaned up).

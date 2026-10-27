@@ -302,12 +302,98 @@ class _RestDatabaseAPI:
             raise
 
 
+class _RoutedSyncedTablesAPI(_RestDatabaseAPI):
+    """Synced-table client for Lakebase Autoscaling with a legacy fallback.
+
+    Autoscaling projects register synced tables under ``/api/2.0/postgres``;
+    the legacy ``/api/2.0/database`` endpoints only resolve database
+    *instances* and answer "Database instance is not found" for a project.
+    Creates go through the Postgres API (falling back to the legacy API when
+    the Postgres API does not know the project). Reads and deletes also cover
+    tables registered through the legacy API, so existing deployments keep
+    working. Responses are reshaped to the legacy ``SyncedDatabaseTable``
+    form (``data_synchronization_status``) the manager already reads.
+    """
+
+    _PG_PATH = "/api/2.0/postgres/synced_tables"
+
+    def _pg_call(self, label: str, fn: Callable[[], Any]) -> Any:
+        return _call_with_timeout(fn, _API_CALL_TIMEOUT_S, f"{label} (postgres)")
+
+    def get_synced_database_table(self, *, name: str) -> Any:
+        try:
+            data = self._pg_call(
+                f"GET synced_tables/{name}",
+                lambda: self._do("GET", f"{self._PG_PATH}/{name}"),
+            )
+        except InfrastructureError:
+            raise
+        except Exception as exc:  # noqa: BLE001 - classified below
+            if not SyncedTableManager._is_not_found(exc):
+                raise
+            return super().get_synced_database_table(name=name)
+        return self._as_legacy(data or {})
+
+    def create_synced_database_table(self, *, synced_table: Any) -> Any:
+        body = _to_dict(synced_table)
+        name = body.get("name", "")
+        spec = dict(body.get("spec") or {})
+        project, branch = body.get("database_instance_name"), body.get("database_branch")
+        if project and branch:
+            spec["branch"] = f"projects/{project}/branches/{branch}"
+        if body.get("logical_database_name"):
+            spec["postgres_database"] = body["logical_database_name"]
+        logger.info("Creating synced table via Postgres API: %s (%s)", name, spec.get("branch"))
+        try:
+            data = self._pg_call(
+                f"POST synced_tables/{name}",
+                lambda: self._do(
+                    "POST", self._PG_PATH, query={"synced_table_id": name}, body={"spec": spec}
+                ),
+            )
+        except InfrastructureError:
+            raise
+        except Exception as exc:  # noqa: BLE001 - classified below
+            if not SyncedTableManager._is_not_found(exc):
+                raise
+            logger.info(
+                "Postgres synced-table API rejected %s (%s); retrying with the database API",
+                name,
+                exc,
+            )
+            return super().create_synced_database_table(synced_table=body)
+        return self._as_legacy((data or {}).get("response") or {"name": name})
+
+    def delete_synced_database_table(self, *, name: str, purge_data: bool = True) -> None:
+        try:
+            self._pg_call(
+                f"DELETE synced_tables/{name}",
+                lambda: self._do("DELETE", f"{self._PG_PATH}/{name}"),
+            )
+        except InfrastructureError:
+            raise
+        except Exception as exc:  # noqa: BLE001 - classified below
+            if not SyncedTableManager._is_not_found(exc):
+                raise
+        super().delete_synced_database_table(name=name, purge_data=purge_data)
+
+    @staticmethod
+    def _as_legacy(data: dict) -> Any:
+        out = dict(data)
+        out["name"] = out.get("synced_table_id") or str(out.get("name") or "").removeprefix(
+            "synced_tables/"
+        )
+        if "status" in out and "data_synchronization_status" not in out:
+            out["data_synchronization_status"] = out["status"]
+        return _DictNamespace(out)
+
+
 class _CompatWorkspaceClient:
     """Thin wrapper that injects a REST-based ``.database`` when the SDK lacks one."""
 
     def __init__(self, workspace_client: Any) -> None:
         self._wc = workspace_client
-        self.database = _RestDatabaseAPI(workspace_client)
+        self.database = _RoutedSyncedTablesAPI(workspace_client)
 
     def __getattr__(self, name: str) -> Any:
         return getattr(self._wc, name)
