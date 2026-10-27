@@ -301,6 +301,41 @@ class TestGetTableColumns:
         ]
         mock_cursor.execute.assert_called_once_with("DESCRIBE `cat`.`sch`.`tbl`")
 
+    @patch("databricks.sql.connect")
+    def test_ignores_clustering_section_rows(self, mock_connect, auth_with_warehouse):
+        # Auto liquid clustering appends a "# Clustering Information" section
+        # that repeats column names; those rows are not columns.
+        _make_sql_mocks(
+            mock_connect,
+            fetchall=[
+                ["boxid", "string", "box id"],
+                ["prodid", "string", "product id"],
+                ["# Clustering Information", "", ""],
+                ["# col_name", "data_type", "comment"],
+                ["boxid", "string", ""],
+            ],
+        )
+        uc = UnityCatalog(auth_with_warehouse)
+        cols = uc.get_table_columns("cat", "sch", "tbl")
+        assert [c["name"] for c in cols] == ["boxid", "prodid"]
+
+    @patch("databricks.sql.connect")
+    def test_ignores_partition_section_rows(self, mock_connect, auth_with_warehouse):
+        _make_sql_mocks(
+            mock_connect,
+            fetchall=[
+                ["id", "bigint", "pk"],
+                ["day", "date", "partition key"],
+                ["", "", ""],
+                ["# Partition Information", "", ""],
+                ["# col_name", "data_type", "comment"],
+                ["day", "date", ""],
+            ],
+        )
+        uc = UnityCatalog(auth_with_warehouse)
+        cols = uc.get_table_columns("cat", "sch", "tbl")
+        assert [c["name"] for c in cols] == ["id", "day"]
+
     @patch(
         "databricks.sql.connect",
         side_effect=Exception("no table"),

@@ -1,0 +1,36 @@
+================================================================================
+## Table metadata counts DESCRIBE section rows as columns
+================================================================================
+
+Context:
+On workspaces with automatic liquid clustering, DESCRIBE <table> appends a
+"# Clustering Information" section that repeats the clustering columns
+("# col_name | data_type | comment" header, then one row per column).
+Partitioned tables do the same with a blank row and "# Partition
+Information". UnityCatalog.get_table_columns() returned every row, so the
+Data Assets page showed two phantom columns per table (463 columns instead
+of 373 on a 45-table schema) and reported 45 columns "missing
+descriptions" even though every real column had a comment. The phantom rows
+also reached mapping and ontology generation as if they were columns.
+
+Changes:
+
+1. src/back/core/databricks/uc/UnityCatalog.py
+   get_table_columns() stops at the first DESCRIBE row whose name is empty
+   or starts with "#", i.e. where a metadata section begins.
+2. tests/units/core/test_unity_catalog.py
+   New tests: clustering section rows and partition section rows (with the
+   blank separator) are not returned as columns.
+
+Modified files:
+- src/back/core/databricks/uc/UnityCatalog.py
+- tests/units/core/test_unity_catalog.py
+- changelogs/v0.9.0/simyung-yang_lgit_2026-10-27.log
+
+Test result:
+uv run --frozen pytest -q -m "not scenario" --deselect
+tests/units/settings/test_deploy_instance_id.py
+-> 9774 passed, 338 skipped, 16 deselected, 1 xfailed.
+The deselected file asserts the committed default INSTANCE_ID and fails only
+because this worktree carries uncommitted lgit deploy values in
+scripts/deploy.config.sh (not part of this change).

@@ -447,6 +447,11 @@ class UnityCatalog:
                     cur.execute(f"DESCRIBE {fqn}")
                     columns = []
                     for row in cur.fetchall():
+                        # Columns end where DESCRIBE starts a metadata section
+                        # ("# Partition Information", "# Clustering Information"),
+                        # optionally preceded by a blank separator row.
+                        if not row[0] or str(row[0]).startswith("#"):
+                            break
                         columns.append(
                             {
                                 "name": row[0],
