@@ -803,8 +803,8 @@ def test_create_triple_table_migrates_legacy_before_indexes():
     from back.core.graphdb.lakebase._companion_ddl import _create_triple_table
 
     cur = MagicMock()
-    # table exists, missing object_hash, then digest() present after ensure_pgcrypto
-    cur.fetchone.side_effect = [(1,), None, (1,)]
+    # schema writable, table exists, missing object_hash, then digest() present
+    cur.fetchone.side_effect = [(True,), (1,), None, (1,)]
 
     _create_triple_table(cur, "ontobricks_graph", "g_v1__app")
 

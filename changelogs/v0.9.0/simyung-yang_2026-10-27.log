@@ -247,3 +247,44 @@ uv run --frozen pytest -q tests/units/agents/test_agent_dtwin_chat_engine.py
 tests/eval -> 84 passed. Prompt wording changed: the Graph Chat eval
 (agent-evaluation gate) still has to be re-run against a built domain before
 release; not run in this change.
+
+================================================================================
+## Lakebase companion table: fail fast when the graph schema is not writable
+================================================================================
+
+Context:
+A managed-synced Build failed at "Creating companion table" with
+"permission denied for schema public". The Postgres graph schema existed but
+was owned by another role (the Lakebase project owner), and the app service
+principal had no USAGE/CREATE on it. Postgres silently drops such a schema
+from the search_path, so the unqualified CREATE TABLE fell through to public
+and the error named the wrong schema. The Build now checks access to the graph
+schema first and reports the real cause with the fix.
+
+Changes:
+
+1. src/back/core/graphdb/lakebase/_companion_ddl.py
+   New ensure_schema_writable(cur, schema): checks has_schema_privilege USAGE
+   and CREATE on the graph schema and raises InfrastructureError naming the
+   schema and the remediation (scripts/bootstrap/lakebase-perms.sh -s <schema>
+   or make bootstrap-lakebase). Called by _create_triple_table right after
+   CREATE SCHEMA IF NOT EXISTS, so both the companion (managed_synced) and the
+   _sync table (app_managed) paths are covered.
+2. tests/units/core/test_companion_ddl_schema_access.py
+   New tests: privilege query shape, error text, and no CREATE TABLE when the
+   schema is not writable.
+3. tests/units/core/test_lakebase_flat_store.py
+   Legacy-migration fixture answers the new schema-access query first.
+
+Modified files:
+- src/back/core/graphdb/lakebase/_companion_ddl.py
+- tests/units/core/test_companion_ddl_schema_access.py (new)
+- tests/units/core/test_lakebase_flat_store.py
+- changelogs/v0.9.0/simyung-yang_2026-10-27.log
+
+Test result:
+uv run --frozen pytest -q tests/units/core tests/units/graphdb
+tests/units/architecture -> 1652 passed.
+uv run --frozen pytest -q -m "not scenario" (deselecting
+tests/units/settings/test_deploy_instance_id.py, which reads local deploy
+values) -> 9833 passed, 338 skipped.

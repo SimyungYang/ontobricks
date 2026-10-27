@@ -272,8 +272,31 @@ def ensure_graph_indexes(cur: Any, table_ref: str) -> None:
         )
 
 
+def ensure_schema_writable(cur: Any, schema: str) -> None:
+    """Fail fast when the session cannot use and create in the graph *schema*.
+
+    Postgres drops a schema without ``USAGE`` from the ``search_path``, so an
+    unqualified ``CREATE TABLE`` falls through to ``public`` and fails with a
+    misleading ``permission denied for schema public``. This happens when the
+    schema was created by another role (a local run, or the project owner).
+    """
+    cur.execute(
+        "SELECT has_schema_privilege(%s, 'USAGE') AND has_schema_privilege(%s, 'CREATE')",
+        (schema, schema),
+    )
+    row = cur.fetchone()
+    if row is None or not row[0]:
+        raise InfrastructureError(
+            f"Postgres schema {schema!r} exists but this app's role lacks USAGE/CREATE "
+            "on it (the schema is owned by another role). Run "
+            f"`scripts/bootstrap/lakebase-perms.sh -s {schema}` (or `make "
+            "bootstrap-lakebase`) as the Lakebase project owner, then retry the Build."
+        )
+
+
 def _create_triple_table(cur: Any, schema: str, table: str) -> None:
     cur.execute(f'CREATE SCHEMA IF NOT EXISTS "{schema}"')
+    ensure_schema_writable(cur, schema)
     cur.execute(
         f"""
         CREATE TABLE IF NOT EXISTS {table} (
