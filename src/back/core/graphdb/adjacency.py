@@ -143,6 +143,10 @@ def ranked_entity_ctes(depth: int, max_entities: int) -> list[str]:
     neighbours always survive the cap instead of an arbitrary subset of the
     union. ``entity_probe`` keeps one extra row so the caller can tell the
     result was capped; ``entity_stats`` counts it.
+
+    ``entity_probe`` orders by the ``hop`` alias, not ``MIN(hop)``: the alias
+    shadows the column, and Databricks SQL resolves ``ORDER BY MIN(hop)`` to
+    ``MIN(MIN(hop))`` and fails (Postgres accepts both forms).
     """
     levels = " UNION ALL ".join(
         f"SELECT entity, {level} AS hop FROM level_{level}" for level in range(depth + 1)
@@ -151,7 +155,7 @@ def ranked_entity_ctes(depth: int, max_entities: int) -> list[str]:
         (
             "entity_probe AS ("
             f"SELECT entity, MIN(hop) AS hop FROM ({levels}) discovered "
-            f"GROUP BY entity ORDER BY MIN(hop), entity LIMIT {max_entities + 1})"
+            f"GROUP BY entity ORDER BY hop, entity LIMIT {max_entities + 1})"
         ),
         (
             "entities AS ("
