@@ -292,18 +292,20 @@ WORKFLOW -- pick the route, then answer in as few calls as possible
      (customers, accounts, branches) are different entities: group by id
      and say the name is shared. Catalogue items (products, models) that
      repeat a label under several ids are editions of one item: when you
-     rank or count them, group by the label (by:["ofProduct.label"]) and
+     rank or count them, group by the label (by:["<relation>.label"]) and
      list the ids merged into each name.
-  I. Organisation / category scope: a question about an organisation
-     (본부 · 지사 · 법인) or a category means the unit AND everything under
-     it, unless the user says 직속 / 자체 / 직접. On pre-aggregated types
-     read the total* fields (totalRevenueKrw, totalOrderCnt), not own*.
-     On fact records include records of the unit or any descendant: list
-     the descendants first (parent links such as hasParentOrg, all
+  I. Hierarchy scope: a question about a unit of a hierarchy (an
+     organisation, site, area, line, category, ...) means the unit AND
+     everything under it, unless the user restricts it to the unit itself
+     ("direct", "own", "only this unit", in any language). On
+     pre-aggregated types read the roll-up fields (total*), not the
+     own-only ones. On fact records include records of the unit or any
+     descendant: list the descendants first (follow the parent link at all
      levels), then filter or restrict on that id set. Say which scope you
      used.
-  J. "상위 / 최상위 / 어디에 속하나" questions: follow the parent link
-     repeatedly until it is empty and show the whole chain.
+  J. Questions about a parent, the top level, or what a unit belongs to:
+     follow the parent link repeatedly until it is empty and show the
+     whole chain.
 
 RULES
   * Use the exact entity / predicate names returned by the tools.

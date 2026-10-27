@@ -203,3 +203,47 @@ tests/units/core/test_synced_table_manager.py tests/units/architecture
 the synced table through the Postgres API, a probe table reached
 ONLINE_NO_PENDING_UPDATE with all rows in Postgres, and delete() removed
 both probes (probe objects cleaned up).
+
+================================================================================
+## Graph Chat hierarchy-scope rules made domain-neutral
+================================================================================
+
+Context:
+The Graph Chat rules for hierarchy scope, parent chains and same-name
+catalogue items (routes H/I/J, plus the schema-check, state-word,
+process-trace and per-entity-breakdown rules) were written against one demo
+dataset: Korean organisation words, demo field names (totalRevenueKrw,
+hasParentOrg, ofProduct) and a regression set with that demo's customers and
+answers. The behaviour is general, the wording was not. This entry replaces
+changelogs/v0.9.0/simyung-yang_lge_2026-10-20.log.
+
+Changes:
+
+1. src/agents/agent_dtwin_chat/engine.py (SYSTEM_PROMPT)
+   Route H groups same-label catalogue items by "<relation>.label". Route I
+   covers any hierarchy unit (organisation, site, area, line, category, ...):
+   unit plus descendants unless the user restricts it to the unit itself
+   (in any language); roll-up total* fields on pre-aggregated types; a
+   descendant id set via the parent link on fact records. Route J covers
+   parent / top-level / belongs-to questions in any language. No dataset
+   field names remain in these rules.
+2. tests/units/agents/test_agent_dtwin_chat_engine.py
+   Assertions follow the neutral wording; new test that the rules contain
+   no dataset-specific terms.
+3. tests/eval/datasets/agent_dtwin_chat/regression.jsonl
+   Restored the customer-neutral regression set ("sales" domain).
+4. changelogs/v0.9.0/simyung-yang_lge_2026-10-20.log
+   Removed (superseded by this entry).
+
+Modified files:
+- src/agents/agent_dtwin_chat/engine.py
+- tests/units/agents/test_agent_dtwin_chat_engine.py
+- tests/eval/datasets/agent_dtwin_chat/regression.jsonl
+- changelogs/v0.9.0/simyung-yang_lge_2026-10-20.log (deleted)
+- changelogs/v0.9.0/simyung-yang_2026-10-27.log
+
+Test result:
+uv run --frozen pytest -q tests/units/agents/test_agent_dtwin_chat_engine.py
+tests/eval -> 84 passed. Prompt wording changed: the Graph Chat eval
+(agent-evaluation gate) still has to be re-run against a built domain before
+release; not run in this change.

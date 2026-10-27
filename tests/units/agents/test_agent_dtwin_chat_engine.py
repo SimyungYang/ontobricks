@@ -473,9 +473,16 @@ def test_drop_unresolvable_links_leaves_other_links():
 def test_prompt_covers_hierarchy_scope_and_same_name_items():
     from agents.agent_dtwin_chat.engine import SYSTEM_PROMPT
 
-    assert "everything under" in SYSTEM_PROMPT and "total* fields" in SYSTEM_PROMPT
+    assert "everything under" in SYSTEM_PROMPT and "roll-up fields (total*)" in SYSTEM_PROMPT
     assert "follow the parent link" in SYSTEM_PROMPT
-    assert 'group by the label (by:["ofProduct.label"])' in SYSTEM_PROMPT
+    assert 'group by the label (by:["<relation>.label"])' in SYSTEM_PROMPT
+
+
+def test_prompt_rules_are_domain_neutral():
+    from agents.agent_dtwin_chat.engine import SYSTEM_PROMPT
+
+    for customer_term in ("본부", "지사", "법인", "직속", "hasParentOrg", "totalRevenueKrw", "ofProduct"):
+        assert customer_term not in SYSTEM_PROMPT
 
 
 def test_prompt_requires_schema_check_before_claiming_absence():
