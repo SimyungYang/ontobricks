@@ -17,7 +17,6 @@ Only the small result table is returned to the LLM.
 
 from __future__ import annotations
 
-import copy
 import dataclasses
 import itertools
 import math
@@ -123,21 +122,26 @@ def _page_query(
     limit: int,
     offset: int,
 ) -> str:
-    """Return a query containing only *field* with ``limit`` / ``offset`` set."""
-    page_field = copy.deepcopy(field)
-    args = [a for a in (page_field.arguments or ()) if a.name.value not in ("limit", "offset")]
+    """Return a query containing only *field* with ``limit`` / ``offset`` set.
+
+    AST nodes are frozen dataclasses in graphql-core 3.3, so the page
+    field and operation are built with ``dataclasses.replace``.
+    """
+    args = [a for a in (field.arguments or ()) if a.name.value not in ("limit", "offset")]
     for name, value in (("limit", limit), ("offset", offset)):
         args.append(ArgumentNode(name=NameNode(value=name), value=IntValueNode(value=str(value))))
-    page_field.arguments = tuple(args)
+    page_field = dataclasses.replace(field, arguments=tuple(args))
 
     used = _VariableCollector()
     visit(page_field, used)
     for frag in fragments:
         visit(frag, used)
-    page_op = copy.deepcopy(op)
-    page_op.selection_set = SelectionSetNode(selections=(page_field,))
-    page_op.variable_definitions = tuple(
-        v for v in (op.variable_definitions or ()) if v.variable.name.value in used.names
+    page_op = dataclasses.replace(
+        op,
+        selection_set=SelectionSetNode(selections=(page_field,)),
+        variable_definitions=tuple(
+            v for v in (op.variable_definitions or ()) if v.variable.name.value in used.names
+        ),
     )
     return print_ast(DocumentNode(definitions=(page_op, *fragments)))
 
