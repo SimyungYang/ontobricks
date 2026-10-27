@@ -40,7 +40,10 @@ class GraphEngineLakebaseSettings:
 
         from back.core.databricks import get_lakebase_auth
         from back.core.databricks.lakebase import BranchLakebaseAuth
-        from back.core.graphdb.engine_config import lakebase_section
+        from back.core.graphdb.engine_config import (
+            lakebase_section,
+            resolve_lakebase_branch_path,
+        )
         from back.core.graphdb.lakebase.LakebaseBase import (
             default_schema,
             resolve_postgres_database_override,
@@ -70,7 +73,7 @@ class GraphEngineLakebaseSettings:
         if isinstance(gcfg, dict):
             db_override = resolve_postgres_database_override(gcfg)
             schema_raw = (gcfg.get("schema") or "").strip()
-            branch_path = (gcfg.get("lakebase_branch") or "").strip()
+            branch_path = resolve_lakebase_branch_path(gcfg)
 
         # Use the same auth selection as GraphDBFactory: BranchLakebaseAuth
         # when lakebase_branch is configured, else the bound auth.
@@ -529,13 +532,17 @@ class GraphEngineLakebaseSettings:
         from back.core.databricks import get_lakebase_auth
         from back.core.databricks.lakebase import BranchLakebaseAuth
 
+        from back.core.graphdb.engine_config import (
+            lakebase_section,
+            resolve_lakebase_branch_path,
+        )
+
         branch_path = form_branch_path.strip()
         database = form_database.strip()
 
         # Load saved config to fill gaps not supplied by the form.
+        ge: Dict[str, Any] = {}
         try:
-            from back.core.graphdb.engine_config import lakebase_section
-
             domain = _ss.get_domain(session_mgr)
             host, token = _ss.get_databricks_host_and_token(domain, settings)
             registry_cfg = _ss.RegistryCfg.from_domain(domain, settings).as_dict()
@@ -548,6 +555,10 @@ class GraphEngineLakebaseSettings:
                 database = (ge.get("database") or "").strip()
         except Exception:  # noqa: BLE001
             pass  # fall through to bound auth
+        # A bare branch name (form or saved) is joined with the saved project.
+        branch_path = resolve_lakebase_branch_path(
+            {"lakebase_branch": branch_path, "lakebase_project": ge.get("lakebase_project")}
+        )
 
         if branch_path:
             return BranchLakebaseAuth(branch_path, database), database

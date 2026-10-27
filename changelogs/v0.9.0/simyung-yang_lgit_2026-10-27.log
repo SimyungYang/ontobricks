@@ -34,3 +34,48 @@ tests/units/settings/test_deploy_instance_id.py
 The deselected file asserts the committed default INSTANCE_ID and fails only
 because this worktree carries uncommitted lgit deploy values in
 scripts/deploy.config.sh (not part of this change).
+
+================================================================================
+## Lakebase graph engine rejects a bare branch name ("production")
+================================================================================
+
+Context:
+The deployment docs and deploy.config.sh configure LAKEBASE_BRANCH as a bare
+branch id ("production"). The Settings > Lakebase Connection tab pre-fills an
+empty branch field from that env var, so saving before the branch picker
+loads (or saving through the Advanced JSON) stores
+graph_engine_config.lakebase.lakebase_branch = "production" next to
+lakebase_project = "projects/<p>". GraphDBFactory, the Lakebase health check
+and the graph DB setup path passed that value straight to
+BranchLakebaseAuth, which expects "projects/<p>/branches/<b>", so the health
+check showed "Health check failed" and the graph backend was unavailable.
+Seen on two fresh deployments; the same code exists in 0.8.1.
+
+Changes:
+
+1. src/back/core/graphdb/engine_config.py
+   New resolve_lakebase_branch_path(): returns a full branch path; a bare
+   branch is joined with lakebase_project ("projects/" prefix added when the
+   project is a bare id); unchanged when no project is set.
+2. src/back/core/graphdb/GraphDBFactory.py
+   Lakebase backend resolves the branch through resolve_lakebase_branch_path.
+3. src/back/objects/domain/settings/graphengine/GraphEngineLakebaseSettings.py
+   Health check and the graph DB setup / objects / permissions auth path
+   resolve the branch (form value or saved value) the same way.
+4. tests/units/graphdb/test_graph_engine_config_keys.py
+   Tests for full path, bare branch + project path, bare branch + bare
+   project id, bare branch without project, and unset branch.
+
+Modified files:
+- src/back/core/graphdb/engine_config.py
+- src/back/core/graphdb/GraphDBFactory.py
+- src/back/objects/domain/settings/graphengine/GraphEngineLakebaseSettings.py
+- tests/units/graphdb/test_graph_engine_config_keys.py
+- changelogs/v0.9.0/simyung-yang_lgit_2026-10-27.log
+
+Test result:
+uv run --frozen pytest -q tests/units -k "lakebase or graph_engine or settings"
+-> 1741 passed; the only 2 failures are tests/units/settings/
+test_deploy_instance_id.py, which depend on the uncommitted lgit
+deploy.config.sh values. Deployed before the full-suite run finished at the
+user's request; the full-suite result is reported separately.

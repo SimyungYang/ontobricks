@@ -305,6 +305,26 @@ def resolve_neo4j_connection(
     return {}
 
 
+def resolve_lakebase_branch_path(lakebase_cfg: Optional[Mapping[str, Any]]) -> str:
+    """Return ``lakebase_branch`` as a full ``projects/<p>/branches/<b>`` path.
+
+    The Settings UI pre-fills the branch from ``LAKEBASE_BRANCH`` (a bare name
+    such as ``production``) next to a full ``lakebase_project`` path, so a saved
+    config can hold a bare branch. A bare branch is joined with the project;
+    without a project it is returned unchanged. Empty when no branch is set.
+    """
+    cfg = lakebase_cfg or {}
+    branch = str(cfg.get("lakebase_branch") or "").strip()
+    if not branch or "/" in branch:
+        return branch
+    project = str(cfg.get("lakebase_project") or "").strip().strip("/")
+    if not project:
+        return branch
+    if not project.startswith("projects/"):
+        project = f"projects/{project}"
+    return f"{project}/branches/{branch}"
+
+
 def lakehouse_section(cfg: Optional[Mapping[str, Any]]) -> Dict[str, Any]:
     """Return the Lakehouse (Delta) connection dict from any stored shape."""
     return dict(normalize_graph_engine_config(cfg).get("lakehouse") or {})

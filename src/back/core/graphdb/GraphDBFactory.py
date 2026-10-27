@@ -462,7 +462,9 @@ class GraphDBFactory:
         #      schema where all other graph tables live.
         sync_uc_schema = sync_uc_schema_override or schema
 
-        branch_path = str(cfg.get("lakebase_branch") or "").strip()
+        from back.core.graphdb.engine_config import resolve_lakebase_branch_path
+
+        branch_path = resolve_lakebase_branch_path(cfg)
         try:
             if branch_path:
                 from back.core.databricks.lakebase import BranchLakebaseAuth

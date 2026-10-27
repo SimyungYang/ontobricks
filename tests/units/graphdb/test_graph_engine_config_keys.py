@@ -11,6 +11,7 @@ from back.core.graphdb.engine_config import (
     list_neo4j_connections,
     neo4j_section,
     normalize_graph_engine_config,
+    resolve_lakebase_branch_path,
     resolve_lakehouse_use_sea,
     resolve_lakehouse_warehouse_id,
     resolve_neo4j_connection,
@@ -217,6 +218,29 @@ class TestNeo4jNamedConnections:
         out = normalize_graph_engine_config(raw)
         assert out["neo4j"]["connections"][0]["name"] == "X"
         assert out["neo4j"]["connections"][0]["database"] == "db1"
+
+
+class TestResolveLakebaseBranchPath:
+    def test_full_path_is_kept(self):
+        cfg = {"lakebase_branch": "projects/onto/branches/production"}
+        assert resolve_lakebase_branch_path(cfg) == "projects/onto/branches/production"
+
+    def test_short_branch_is_joined_with_project_path(self):
+        # The Settings UI pre-fills LAKEBASE_BRANCH (a bare name) next to a
+        # full lakebase_project path; saving stores both as-is.
+        cfg = {"lakebase_branch": "production", "lakebase_project": "projects/onto"}
+        assert resolve_lakebase_branch_path(cfg) == "projects/onto/branches/production"
+
+    def test_short_branch_is_joined_with_bare_project_id(self):
+        cfg = {"lakebase_branch": " production ", "lakebase_project": "onto"}
+        assert resolve_lakebase_branch_path(cfg) == "projects/onto/branches/production"
+
+    def test_short_branch_without_project_is_returned_unchanged(self):
+        assert resolve_lakebase_branch_path({"lakebase_branch": "production"}) == "production"
+
+    def test_unset_branch_is_empty(self):
+        assert resolve_lakebase_branch_path({"lakebase_project": "projects/onto"}) == ""
+        assert resolve_lakebase_branch_path(None) == ""
 
 
 class TestNormalizeSyncTableMode:
