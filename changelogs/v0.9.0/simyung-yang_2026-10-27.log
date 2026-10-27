@@ -366,3 +366,88 @@ Test result:
 uv run --frozen pytest -q tests/units/core tests/units/graphdb
 tests/units/architecture -> 1656 passed. The SQL was run on the lgit
 Lakebase branch (returns a row for a role holding USAGE and CREATE).
+
+================================================================================
+## Global config: a failed read is no longer cached or saved as the config
+================================================================================
+
+Context:
+Graph Chat answered "graph does not exist yet" for a built graph, the chat
+header showed "not built", and the branding fell back to the default title.
+One global-config read failed (Lakebase compute waking from scale-to-zero).
+The service cached the empty template for the full 5-minute TTL. A later
+failure then served that template as the last good config for up to
+30 minutes. Without graph_engine_config.schema, the Lakebase store fell back
+to the registry schema name and queried a schema with no graph tables. A save
+in that window would also have written the template over the stored config.
+
+Changes:
+
+1. src/back/objects/session/GlobalConfigService.py
+   - Track whether the cache came from a successful read (_cache_ok).
+   - After a failed read, keep the empty template for
+     _FAILED_LOAD_RETRY_S (10 s) only, then read again.
+   - Serve a stale cache on failure only when it came from a successful read.
+     A failure past the stale window is marked as failed.
+   - _save refuses to write when the current config could not be read.
+     A first save on an empty registry is still allowed.
+   - set_ui_branding only reuses the cache when it came from a successful
+     read.
+2. tests/units/settings/test_graph_engine_config.py
+   New TestGlobalConfigFailedLoad: retry after a failed read, no promotion
+   to stale, failure past the stale window, refused save, first save allowed.
+3. tests/units/settings/test_ui_branding.py
+   The patched load marks the read as successful (new save contract).
+
+Modified files:
+- src/back/objects/session/GlobalConfigService.py
+- tests/units/settings/test_graph_engine_config.py
+- tests/units/settings/test_ui_branding.py
+- changelogs/v0.9.0/simyung-yang_2026-10-27.log
+
+Test result:
+uv run --frozen pytest -q tests/units/settings tests/units/front
+tests/units/architecture -> 2797 passed.
+
+================================================================================
+## Auto-mapping: subclasses are narrowed to their own rows
+================================================================================
+
+Context:
+Auto-mapping sent the agent only each entity's URI, label and attributes.
+A subclass (e.g. "equipment unit" under Equipment, or "defect code" under
+Reason) was then often mapped to every row of its parent's table. Nothing
+told the agent that it was a subset, and the class description, which states
+the selection criterion, was not sent. Subclasses whose label implied a
+filter were mapped correctly; the others were not.
+
+Changes:
+
+1. src/front/static/mapping/js/mapping-autoassign.js,
+   src/front/static/mapping/js/mapping-design.js
+   The three agent entity payloads (bulk, partial-attribute and single-item
+   auto-map) now include parent and description (the class comment). The
+   route, service and get_ontology tool already pass entity dicts through.
+2. src/agents/agent_auto_assignment/engine.py (SYSTEM_PROMPT)
+   New SUBCLASSES rules:
+   - Read each entity's description.
+   - A subclass query returns only the subclass rows, using the criterion
+     stated in the description or a type / level / category column, and the
+     split is checked with execute_sql.
+   - If no column separates the subclass, report that in the summary.
+3. tests/units/mapping/test_auto_assign_subclass_context.py
+   New contract tests for the payloads and the prompt rules.
+
+Modified files:
+- src/front/static/mapping/js/mapping-autoassign.js
+- src/front/static/mapping/js/mapping-design.js
+- src/agents/agent_auto_assignment/engine.py
+- tests/units/mapping/test_auto_assign_subclass_context.py (new)
+- changelogs/v0.9.0/simyung-yang_2026-10-27.log
+
+Test result:
+uv run --frozen pytest -q tests/units/mapping tests/units/front
+tests/units/agents tests/units/architecture -> 2426 passed. Prompt change:
+there is no mapping-quality eval runner for this agent yet. It is verified
+live by re-running auto-mapping for the affected subclasses on a deployed
+app; an eval delta is still owed for the AI-feature gate.

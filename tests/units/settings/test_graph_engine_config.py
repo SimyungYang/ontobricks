@@ -5,6 +5,7 @@ SettingsService orchestration, and GraphDBFactory engine resolution.
 """
 
 import importlib
+import time
 
 import pytest
 from unittest.mock import patch, MagicMock
@@ -15,6 +16,7 @@ from back.objects.registry import RegistryCfg, RegistryService
 from back.objects.domain.settings.SettingsService import SettingsService
 
 _svc_module = importlib.import_module("back.objects.domain.settings.SettingsService")
+_svc_mod = importlib.import_module("back.objects.session.GlobalConfigService")
 _db_auth_mod = importlib.import_module("back.core.databricks.DatabricksAuth")
 _uc_pkg = importlib.import_module("back.core.databricks.uc")
 
@@ -113,6 +115,80 @@ class TestGlobalConfigStaleWhileRevalidate:
             data = svc.load("h", "t", REGISTRY_CFG, force=True)
 
         assert data == GlobalConfigService._empty()
+
+
+class TestGlobalConfigFailedLoad:
+    """A failed read must not be cached or saved as if it were the config.
+
+    Regression: a Lakebase cold start made one read fail; the empty template
+    was then served as the config for the full cache TTL (graph schema and
+    branding gone, Graph Chat read the wrong schema), and a save in that
+    window would have written the template over the stored config.
+    """
+
+    @staticmethod
+    def _stores():
+        good = {"warehouse_id": "wh", "graph_engine_config": {"lakebase": {"schema": "g"}}}
+        ok = MagicMock(backend="lakebase")
+        ok.load_global_config.return_value = good
+        fail = MagicMock(backend="lakebase")
+        fail.load_global_config.side_effect = RuntimeError("connection refused")
+        fail.save_global_config.return_value = (True, "")  # writes would succeed
+        return good, ok, fail
+
+    def test_failed_read_is_retried_on_the_next_load(self):
+        svc = GlobalConfigService()
+        good, ok, fail = self._stores()
+        with patch.object(svc, "_store_for", return_value=fail):
+            assert svc.load("h", "t", REGISTRY_CFG) == GlobalConfigService._empty()
+        with patch.object(svc, "_store_for", return_value=ok), patch(
+            "back.objects.session.GlobalConfigService.time.time",
+            return_value=time.time() + _svc_mod._FAILED_LOAD_RETRY_S + 1,
+        ):
+            assert svc.load("h", "t", REGISTRY_CFG) == good
+
+    def test_failed_read_is_not_promoted_to_a_stale_config(self):
+        svc = GlobalConfigService()
+        _, _, fail = self._stores()
+        with patch.object(svc, "_store_for", return_value=fail):
+            svc.load("h", "t", REGISTRY_CFG)
+            # A second failure must not serve the template as last-good config.
+            svc.load("h", "t", REGISTRY_CFG, force=True)
+            ok, _ = svc._save("h", "t", REGISTRY_CFG, {"warehouse_id": "new"})
+        assert ok is False
+
+    def test_failure_after_the_stale_window_is_not_cached_as_good(self):
+        svc = GlobalConfigService()
+        good, ok, fail = self._stores()
+        with patch.object(svc, "_store_for", return_value=ok):
+            svc.load("h", "t", REGISTRY_CFG)
+        later = time.time() + _svc_mod._STALE_CACHE_TTL + 1
+        with patch.object(svc, "_store_for", return_value=fail), patch(
+            "back.objects.session.GlobalConfigService.time.time", return_value=later
+        ):
+            assert svc.load("h", "t", REGISTRY_CFG) == GlobalConfigService._empty()
+        with patch.object(svc, "_store_for", return_value=ok), patch(
+            "back.objects.session.GlobalConfigService.time.time",
+            return_value=later + _svc_mod._FAILED_LOAD_RETRY_S + 1,
+        ):
+            assert svc.load("h", "t", REGISTRY_CFG) == good
+
+    def test_save_is_refused_when_the_current_config_cannot_be_read(self):
+        svc = GlobalConfigService()
+        _, _, fail = self._stores()
+        with patch.object(svc, "_store_for", return_value=fail):
+            ok, msg = svc._save("h", "t", REGISTRY_CFG, {"warehouse_id": "new"})
+        assert ok is False
+        fail.save_global_config.assert_not_called()
+
+    def test_first_save_on_an_empty_registry_is_allowed(self):
+        svc = GlobalConfigService()
+        store = MagicMock(backend="lakebase")
+        store.load_global_config.return_value = {}
+        store.save_global_config.return_value = (True, "")
+        with patch.object(svc, "_store_for", return_value=store):
+            ok, _ = svc._save("h", "t", REGISTRY_CFG, {"warehouse_id": "new"})
+        assert ok is True
 
 
 # ---------------------------------------------------------------

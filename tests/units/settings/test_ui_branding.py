@@ -158,7 +158,12 @@ class TestGlobalConfigUiBranding:
 
     def test_global_save_force_refreshes_before_merge(self):
         svc = GlobalConfigService()
-        with patch.object(svc, "load", return_value=GlobalConfigService._empty()) as loader, patch.object(
+
+        def _loaded(*_a, **_k):
+            svc._cache_ok = True  # a successful (empty) read
+            return GlobalConfigService._empty()
+
+        with patch.object(svc, "load", side_effect=_loaded) as loader, patch.object(
             svc, "_store_for"
         ) as store_for:
             store = MagicMock()

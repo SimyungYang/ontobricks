@@ -42,6 +42,10 @@ _CACHE_TTL = 300  # seconds — admin-only settings rarely change
 # request hangs across every endpoint that resolves the graph engine.
 _STALE_CACHE_TTL = 30 * 60  # 30 minutes
 
+# After a failed read the empty template is cached only this long, so a
+# Lakebase cold start does not hide the stored config for the full TTL.
+_FAILED_LOAD_RETRY_S = 10
+
 
 class GlobalConfigService:
     """Read/write instance-wide configuration via the active store."""
@@ -49,6 +53,8 @@ class GlobalConfigService:
     def __init__(self):
         self._cache: Optional[Dict[str, Any]] = None
         self._cache_ts: float = 0.0
+        # False while ``_cache`` is the template from a failed read.
+        self._cache_ok: bool = False
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -84,11 +90,8 @@ class GlobalConfigService:
     ) -> Dict[str, Any]:
         """Load and cache the global config from the active store."""
         now = time.time()
-        if (
-            not force
-            and self._cache is not None
-            and (now - self._cache_ts) < _CACHE_TTL
-        ):
+        ttl = _CACHE_TTL if self._cache_ok else _FAILED_LOAD_RETRY_S
+        if not force and self._cache is not None and (now - self._cache_ts) < ttl:
             return self._cache
 
         if not registry_cfg.get("catalog") or not registry_cfg.get("schema"):
@@ -97,6 +100,7 @@ class GlobalConfigService:
         try:
             store = self._store_for(host, token, registry_cfg)
             data = store.load_global_config()
+            self._cache_ok = True
             if data:
                 self._cache = data
                 self._cache_ts = now
@@ -124,7 +128,8 @@ class GlobalConfigService:
             # falling back to ``_empty()`` and forcing every downstream
             # endpoint to re-hit the backend on the next request.
             if (
-                self._cache
+                self._cache_ok
+                and self._cache
                 and (now - self._cache_ts) < _STALE_CACHE_TTL
             ):
                 logger.info(
@@ -132,6 +137,7 @@ class GlobalConfigService:
                     now - self._cache_ts,
                 )
                 return self._cache
+            self._cache_ok = False
 
         empty = self._empty()
         self._cache = empty
@@ -251,6 +257,8 @@ class GlobalConfigService:
             )
 
         data = dict(self.load(host, token, registry_cfg, force=True))
+        if not self._cache_ok:
+            return False, "Could not read the current global config — not saved, retry shortly"
         data["version"] = data.get("version", 1)
         data.update(updates)
 
@@ -359,7 +367,7 @@ class GlobalConfigService:
         prev_cache_ts = self._cache_ts
         source = (
             self._cache
-            if isinstance(self._cache, dict)
+            if isinstance(self._cache, dict) and self._cache_ok
             else self.load(host, token, registry_cfg, force=True)
         )
         data = dict(source)

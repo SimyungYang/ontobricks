@@ -104,6 +104,16 @@ once with the alias (AS ID) and once with its original name.
 • Do NOT use ORDER BY, CTEs, or subqueries unless absolutely necessary.
 • Write simple, flat SELECT statements.
 
+SUBCLASSES (CRITICAL)
+• Read each entity's "description" to learn what it represents.
+• An entity with a "parent" is a subclass of that parent. Its query MUST return \
+only the rows that belong to the subclass — never every row of the parent's table.
+• Take the selection criterion from the "description" when it states one; \
+otherwise use the type, level or category column that separates the subclass, \
+and check the split with execute_sql (the subclass returns fewer rows).
+• If no column separates the subclass, map it to the parent's rows and say so \
+in the summary.
+
 COLUMN NAME QUOTING (CRITICAL)
 • In SQL, ALWAYS wrap EVERY source column name in backticks: \
 `customer_id`, `name`, `first_name`, `column name`, `my-col`.

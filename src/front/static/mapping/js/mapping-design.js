@@ -3118,7 +3118,10 @@ function _buildAgentEntityItem(uri) {
     return {
         uri: classInfo.uri,
         name: classInfo.label || classInfo.name || classInfo.localName,
-        attributes: attributes
+        attributes: attributes,
+        // Subclass context: the agent narrows a subclass to its rows.
+        parent: classInfo.parent || undefined,
+        description: classInfo.comment || classInfo.description || undefined
     };
 }
 

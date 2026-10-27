@@ -551,7 +551,10 @@ window.AutoAssignModule = {
             return {
                 uri: entity.uri,
                 name: entity.label || entity.name || entity.localName,
-                attributes: attributes
+                attributes: attributes,
+                // Subclass context: the agent narrows a subclass to its rows.
+                parent: entity.parent || undefined,
+                description: entity.comment || entity.description || undefined
             };
         });
         
@@ -661,7 +664,10 @@ window.AutoAssignModule = {
             return {
                 uri: entity.uri,
                 name: entity.label || entity.name || entity.localName,
-                attributes: attributes
+                attributes: attributes,
+                // Subclass context: the agent narrows a subclass to its rows.
+                parent: entity.parent || undefined,
+                description: entity.comment || entity.description || undefined
             };
         });
         
