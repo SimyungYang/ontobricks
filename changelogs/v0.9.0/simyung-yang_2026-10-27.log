@@ -1,0 +1,39 @@
+================================================================================
+## Explorer expand fails on Databricks SQL (ORDER BY MIN(hop))
+================================================================================
+
+Context:
+On a Delta (Lakehouse) graph backend every Graph Explorer expand failed in
+under a second, at any depth, with MISSING_ATTRIBUTES.RESOLVED_ATTRIBUTE_
+APPEAR_IN_OPERATION ("hop" missing). The route maps the error to HTTP 502,
+which the explorer shows as "Graph expansion exceeded gateway time limit",
+so it looked like a timeout. Cause: ranked_entity_ctes() (added on
+2026-10-20) wrote "SELECT entity, MIN(hop) AS hop ... GROUP BY entity
+ORDER BY MIN(hop)". The alias shadows the column, so Databricks SQL resolves
+the ORDER BY to MIN(MIN(hop)) and rejects it. Postgres (Lakebase) and the
+SQLite test accept the same SQL, which is why it was not caught.
+
+Changes:
+
+1. src/back/core/graphdb/adjacency.py
+   entity_probe orders by the hop alias (ORDER BY hop, entity) instead of
+   ORDER BY MIN(hop). Same order, valid on Databricks SQL, Postgres and
+   SQLite. Docstring notes why.
+2. tests/units/graphdb/test_adjacency_sql.py
+   The hop-ordering shape test expects ORDER BY hop; new test asserts the
+   generated SQL never orders by MIN(hop).
+
+Modified files:
+- src/back/core/graphdb/adjacency.py
+- tests/units/graphdb/test_adjacency_sql.py
+- changelogs/v0.9.0/simyung-yang_2026-10-27.log
+
+Tests:
+- tests/units/graphdb/test_adjacency_sql.py + delta/test_delta_flat_store.py:
+  49 passed (the two hop tests failed before the fix).
+- Live check on a SQL warehouse: the old entity_probe CTE fails with the
+  same error; the generated expand SQL now succeeds against a real Delta
+  graph (depth 1: 17 entities / 209 triples; depth 2: 50 entities capped /
+  468 triples).
+- Full suite: uv run --frozen pytest -q -m "not scenario" -> 9651 passed,
+  338 skipped, 7 deselected, 1 xfailed, 0 failed (14m45s).

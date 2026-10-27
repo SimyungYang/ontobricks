@@ -289,4 +289,24 @@ def test_capped_expansion_orders_entities_by_hop():
         escape=lambda s: s,
     )
     assert "SELECT entity, 0 AS hop FROM level_0" in sql
-    assert "ORDER BY MIN(hop), entity LIMIT 11" in sql
+    assert "ORDER BY hop, entity LIMIT 11" in sql
+
+
+def test_capped_expansion_does_not_order_by_aggregate_shadowed_by_alias():
+    """Databricks SQL rejects ``MIN(hop) AS hop ... ORDER BY MIN(hop)``.
+
+    The alias shadows the column, so the analyzer resolves the ORDER BY to
+    ``MIN(MIN(hop))`` and fails with MISSING_ATTRIBUTES; Postgres accepts it.
+    """
+    sql = expand_and_fetch_sql(
+        flavor="spark",
+        adj_out="o",
+        adj_in="i",
+        spo="g",
+        selected_uris=["http://ex/a"],
+        depth=1,
+        max_entities=10,
+        max_triples=100,
+        escape=lambda s: s,
+    )
+    assert "ORDER BY MIN(hop)" not in sql
