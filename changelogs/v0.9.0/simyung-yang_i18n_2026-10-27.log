@@ -1,0 +1,24 @@
+================================================================================
+## Korean strings for the help text changed by the v0.9.0 release merge
+================================================================================
+
+Context:
+Merging upstream master (v0.9.0 release, PR #204) into the i18n port added
+or reworded three Help modal passages (load-to-General note, FAQ "saved
+domain" answer, Knowledge Store bullet). Their text nodes had no Korean
+entry, so they stayed in English in the Korean UI.
+
+Changes:
+
+1. src/front/static/global/js/i18n-ko.js
+   Four entries for the new text nodes: "Loading a domain (...) always
+   opens", ". Create/load a domain from the Registry (a load always opens",
+   "), then save it (", and the Knowledge Store bullet. Inserted next to
+   the related existing keys.
+
+Modified files:
+- src/front/static/global/js/i18n-ko.js
+- changelogs/v0.9.0/simyung-yang_i18n_2026-10-27.log
+
+Tests: tests/units/front/test_i18n.py + test_entity_panel_sections.py ->
+156 passed.
