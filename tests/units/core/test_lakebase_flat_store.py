@@ -804,7 +804,7 @@ def test_create_triple_table_migrates_legacy_before_indexes():
 
     cur = MagicMock()
     # schema writable, table exists, missing object_hash, then digest() present
-    cur.fetchone.side_effect = [(True,), (1,), None, (1,)]
+    cur.fetchone.side_effect = [(1,), (1,), None, (1,)]
 
     _create_triple_table(cur, "ontobricks_graph", "g_v1__app")
 

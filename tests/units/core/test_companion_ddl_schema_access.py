@@ -28,7 +28,7 @@ def _statements(cur: MagicMock) -> list[str]:
 class TestEnsureSchemaWritable:
     def test_checks_usage_and_create_on_the_graph_schema(self) -> None:
         cur = MagicMock()
-        cur.fetchone.return_value = (True,)
+        cur.fetchone.return_value = {"?column?": 1}  # dict_row cursor
 
         ensure_schema_writable(cur, "graph_schema")
 
@@ -39,7 +39,7 @@ class TestEnsureSchemaWritable:
 
     def test_raises_with_schema_name_and_fix_when_access_is_missing(self) -> None:
         cur = MagicMock()
-        cur.fetchone.return_value = (False,)
+        cur.fetchone.return_value = None
 
         with pytest.raises(InfrastructureError, match="graph_schema") as exc:
             ensure_schema_writable(cur, "graph_schema")
@@ -54,7 +54,7 @@ class TestEnsureSchemaWritable:
 def test_companion_is_not_created_when_schema_is_not_writable() -> None:
     cur = MagicMock()
     # pgcrypto digest() resolves, then the schema access check fails.
-    cur.fetchone.side_effect = [(1,), (False,)]
+    cur.fetchone.side_effect = [(1,), None]
 
     with pytest.raises(InfrastructureError):
         ensure_companion(cur, "graph_schema", "domain_v1__app")

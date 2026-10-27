@@ -280,12 +280,12 @@ def ensure_schema_writable(cur: Any, schema: str) -> None:
     misleading ``permission denied for schema public``. This happens when the
     schema was created by another role (a local run, or the project owner).
     """
+    # Row presence only: graph cursors may return dict rows or tuples.
     cur.execute(
-        "SELECT has_schema_privilege(%s, 'USAGE') AND has_schema_privilege(%s, 'CREATE')",
+        "SELECT 1 WHERE has_schema_privilege(%s, 'USAGE') AND has_schema_privilege(%s, 'CREATE')",
         (schema, schema),
     )
-    row = cur.fetchone()
-    if row is None or not row[0]:
+    if cur.fetchone() is None:
         raise InfrastructureError(
             f"Postgres schema {schema!r} exists but this app's role lacks USAGE/CREATE "
             "on it (the schema is owned by another role). As the Lakebase project owner run "
