@@ -79,3 +79,11 @@ uv run --frozen pytest -q tests/units -k "lakebase or graph_engine or settings"
 test_deploy_instance_id.py, which depend on the uncommitted lgit
 deploy.config.sh values. Deployed before the full-suite run finished at the
 user's request; the full-suite result is reported separately.
+
+Follow-up: the first full-suite run flagged tests/units/architecture/
+test_size_budget.py (GraphEngineLakebaseSettings and two already-oversized
+functions grew by a few lines). The resolver import moved to module level in
+GraphDBFactory.py and GraphEngineLakebaseSettings.py and the call sites were
+rewritten without adding lines, so the frozen size baselines hold.
+uv run --frozen pytest -q tests/units -k "architecture or lakebase or
+graph_engine or settings" (deploy_instance_id deselected) -> 1751 passed.

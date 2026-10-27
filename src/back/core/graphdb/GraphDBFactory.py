@@ -18,6 +18,7 @@ The *engine_config* JSON is engine-specific (admin: Settings → Graph DB).
 
 from typing import Any, Dict, Optional, Tuple
 
+from back.core.graphdb.engine_config import resolve_lakebase_branch_path
 from back.core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -461,8 +462,6 @@ class GraphDBFactory:
         #      Postgres schema that matches this UC segment, so it must equal the graph
         #      schema where all other graph tables live.
         sync_uc_schema = sync_uc_schema_override or schema
-
-        from back.core.graphdb.engine_config import resolve_lakebase_branch_path
 
         branch_path = resolve_lakebase_branch_path(cfg)
         try:
