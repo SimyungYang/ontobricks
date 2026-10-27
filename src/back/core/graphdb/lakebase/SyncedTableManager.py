@@ -339,8 +339,9 @@ class _RoutedSyncedTablesAPI(_RestDatabaseAPI):
         name = body.get("name", "")
         spec = dict(body.get("spec") or {})
         project, branch = body.get("database_instance_name"), body.get("database_branch")
-        if project and branch:
-            spec["branch"] = f"projects/{project}/branches/{branch}"
+        if not (project and branch):  # a database instance: no Postgres branch to target
+            return super().create_synced_database_table(synced_table=body)
+        spec["branch"] = f"projects/{project}/branches/{branch}"
         if body.get("logical_database_name"):
             spec["postgres_database"] = body["logical_database_name"]
         logger.info("Creating synced table via Postgres API: %s (%s)", name, spec.get("branch"))

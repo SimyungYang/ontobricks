@@ -592,3 +592,33 @@ class TestAdminReadinessRoute:
             assert not spy.called
             assert self._client("admin").get("/settings/diagnostics").status_code == 200
             assert spy.called
+
+
+# ---------------------------------------------------------------------------
+# Graph DB probes — bare ``lakebase_branch``
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "probe",
+    ["_check_graphdb_lakebase", "_check_graphdb_tables", "_check_graphdb_permissions"],
+)
+def test_graphdb_probes_join_a_bare_branch_with_the_project(probe):
+    """A bare branch saved next to the project must target that project's branch."""
+    engine_cfg = {
+        "lakebase": {
+            "lakebase_project": "projects/onto",
+            "lakebase_branch": "production",
+            "database": "databricks_postgres",
+            "schema": "graph",
+        }
+    }
+    store = MagicMock()
+    store.load_global_config.return_value = {"graph_engine_config": engine_cfg}
+    unbound = SimpleNamespace(is_available=False)
+    with patch.object(health, "_resolve_registry_cfg", return_value={}), patch(
+        "back.objects.registry.store.RegistryFactory.from_cfg", return_value=store
+    ), patch.object(_LBA_MOD, "BranchLakebaseAuth", return_value=unbound) as auth:
+        getattr(health, probe)(SimpleNamespace())
+    auth.assert_called_once_with("projects/onto/branches/production", "databricks_postgres")

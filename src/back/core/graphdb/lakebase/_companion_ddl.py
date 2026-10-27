@@ -288,9 +288,9 @@ def ensure_schema_writable(cur: Any, schema: str) -> None:
     if row is None or not row[0]:
         raise InfrastructureError(
             f"Postgres schema {schema!r} exists but this app's role lacks USAGE/CREATE "
-            "on it (the schema is owned by another role). Run "
-            f"`scripts/bootstrap/lakebase-perms.sh -s {schema}` (or `make "
-            "bootstrap-lakebase`) as the Lakebase project owner, then retry the Build."
+            "on it (the schema is owned by another role). As the Lakebase project owner run "
+            "`scripts/bootstrap/lakebase-perms.sh -i <project> -b <branch> -d <database> "
+            f"-s {schema} -a <app> -a <mcp-app>`, then retry the Build."
         )
 
 

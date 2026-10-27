@@ -288,3 +288,49 @@ tests/units/architecture -> 1652 passed.
 uv run --frozen pytest -q -m "not scenario" (deselecting
 tests/units/settings/test_deploy_instance_id.py, which reads local deploy
 values) -> 9833 passed, 338 skipped.
+
+================================================================================
+## Review follow-ups: health probes, remediation hint, branchless instances
+================================================================================
+
+Context:
+A review of today's Lakebase fixes found three gaps. The bare-branch fix did
+not reach the readiness probes, the new schema-access error pointed at a make
+target that grants on the registry schema, and the routed synced-table client
+sent database-instance payloads (no branch) to the Postgres API.
+
+Changes:
+
+1. src/shared/fastapi/health.py
+   _check_graphdb_lakebase, _check_graphdb_tables and
+   _check_graphdb_permissions resolve lakebase_branch with
+   resolve_lakebase_branch_path, so a bare branch saved next to the project
+   probes the same branch as the build engine.
+2. src/back/core/graphdb/lakebase/_companion_ddl.py
+   The schema-access error names the full lakebase-perms.sh call
+   (-i/-b/-d/-s/-a) and no longer suggests make bootstrap-lakebase, which
+   targets the registry schema.
+3. src/back/core/graphdb/lakebase/SyncedTableManager.py
+   _RoutedSyncedTablesAPI.create_synced_database_table sends payloads without
+   a project branch (database instances) straight to the database API.
+4. tests/units/core/test_health.py,
+   tests/units/core/test_companion_ddl_schema_access.py,
+   tests/units/core/test_synced_tables_rest_api.py
+   Tests for each change (written first, failing before the fix).
+
+Known limitation (not changed): the Postgres synced-table DELETE has no purge
+option, so the Postgres _sync table stays after a delete. A rebuild under the
+same name then goes through the existing ghost-state fallback (suffixed name).
+
+Modified files:
+- src/shared/fastapi/health.py
+- src/back/core/graphdb/lakebase/_companion_ddl.py
+- src/back/core/graphdb/lakebase/SyncedTableManager.py
+- tests/units/core/test_health.py
+- tests/units/core/test_companion_ddl_schema_access.py
+- tests/units/core/test_synced_tables_rest_api.py
+- changelogs/v0.9.0/simyung-yang_2026-10-27.log
+
+Test result:
+uv run --frozen pytest -q tests/units/core tests/units/graphdb
+tests/units/settings tests/units/architecture -> 2660 passed.

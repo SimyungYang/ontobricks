@@ -105,6 +105,20 @@ class TestCreate:
             "/api/2.0/database/synced_tables",
         ]
 
+    def test_instance_without_branch_uses_database_api_directly(self):
+        db, api = _database({("POST", "/api/2.0/database/synced_tables"): {"name": FQN}})
+        payload = SyncedTableManager(
+            project_name="legacy-instance", logical_db="databricks_postgres"
+        )._build_synced_table_dict(
+            name=FQN,
+            source_table_full_name="cat.src.triplestore_v1",
+            primary_key_columns=["subject", "predicate", "object_hash"],
+            sync_mode="snapshot",
+            create_database_objects_if_missing=True,
+        )
+        db.create_synced_database_table(synced_table=payload)
+        assert [c[1] for c in api.calls] == ["/api/2.0/database/synced_tables"]
+
     def test_already_exists_from_postgres_api_is_not_retried_on_database_api(self):
         db, api = _database({
             ("POST", "/api/2.0/postgres/synced_tables"): ValueError("Synced table already exists"),

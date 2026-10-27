@@ -43,7 +43,11 @@ class TestEnsureSchemaWritable:
 
         with pytest.raises(InfrastructureError, match="graph_schema") as exc:
             ensure_schema_writable(cur, "graph_schema")
-        assert "lakebase-perms.sh" in str(exc.value)
+        assert "lakebase-perms.sh -i <project> -b <branch> -d <database> -s graph_schema" in str(
+            exc.value
+        )
+        # make bootstrap-lakebase grants on the registry schema, not the graph schema.
+        assert "bootstrap-lakebase" not in str(exc.value)
 
 
 @pytest.mark.unit

@@ -341,7 +341,10 @@ def _check_graphdb_lakebase(settings: Settings) -> Tuple[str, str]:
 
         store = RegistryFactory.from_cfg(cfg)
         global_cfg = store.load_global_config()
-        from back.core.graphdb.engine_config import lakebase_section
+        from back.core.graphdb.engine_config import (
+            lakebase_section,
+            resolve_lakebase_branch_path,
+        )
 
         engine_cfg = lakebase_section(global_cfg.get("graph_engine_config") or {})
     except Exception as exc:  # noqa: BLE001
@@ -349,7 +352,7 @@ def _check_graphdb_lakebase(settings: Settings) -> Tuple[str, str]:
 
     database = (engine_cfg.get("database") or "").strip()
     schema = (engine_cfg.get("schema") or engine_cfg.get("graph_schema") or "ontobricks_graph").strip()
-    branch_path = (engine_cfg.get("lakebase_branch") or "").strip()
+    branch_path = resolve_lakebase_branch_path(engine_cfg)
 
     if not schema:
         return _WARNING, "Graph DB schema not configured — set it in Settings → Graph DB"
@@ -1007,7 +1010,10 @@ def _check_graphdb_tables(settings: Settings) -> Tuple[str, str]:
 
         store = RegistryFactory.from_cfg(cfg)
         global_cfg = store.load_global_config()
-        from back.core.graphdb.engine_config import lakebase_section
+        from back.core.graphdb.engine_config import (
+            lakebase_section,
+            resolve_lakebase_branch_path,
+        )
 
         engine_cfg = lakebase_section(global_cfg.get("graph_engine_config") or {})
     except Exception as exc:
@@ -1017,7 +1023,7 @@ def _check_graphdb_tables(settings: Settings) -> Tuple[str, str]:
     schema = (
         engine_cfg.get("schema") or engine_cfg.get("graph_schema") or "ontobricks_graph"
     ).strip()
-    branch_path = (engine_cfg.get("lakebase_branch") or "").strip()
+    branch_path = resolve_lakebase_branch_path(engine_cfg)
 
     auth = BranchLakebaseAuth(branch_path, database) if branch_path else get_lakebase_auth()
     if not auth.is_available:
@@ -1069,7 +1075,10 @@ def _check_graphdb_permissions(settings: Settings) -> Tuple[str, str]:
 
         store = RegistryFactory.from_cfg(cfg)
         global_cfg = store.load_global_config()
-        from back.core.graphdb.engine_config import lakebase_section
+        from back.core.graphdb.engine_config import (
+            lakebase_section,
+            resolve_lakebase_branch_path,
+        )
 
         engine_cfg = lakebase_section(global_cfg.get("graph_engine_config") or {})
     except Exception as exc:
@@ -1079,7 +1088,7 @@ def _check_graphdb_permissions(settings: Settings) -> Tuple[str, str]:
     schema = (
         engine_cfg.get("schema") or engine_cfg.get("graph_schema") or "ontobricks_graph"
     ).strip()
-    branch_path = (engine_cfg.get("lakebase_branch") or "").strip()
+    branch_path = resolve_lakebase_branch_path(engine_cfg)
 
     auth = BranchLakebaseAuth(branch_path, database) if branch_path else get_lakebase_auth()
     if not auth.is_available:
