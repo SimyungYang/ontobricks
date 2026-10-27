@@ -410,7 +410,7 @@ A **production-ready, source-available Databricks App** under the [Databricks Li
 
 - Deploys in minutes via `databricks apps deploy`
 - Requires only a SQL Warehouse and (optionally) an AI Gateway model or Model Serving endpoint
-- Stores all domain data in Unity Catalog Volumes (no external dependencies)
+- Stores domain data in the Lakebase registry (optional GitHub mirror; Unity Catalog Volume for export bundles only)
 - Supports the full lifecycle: design → map → materialize → explore → validate
 
 #### Expected Impact

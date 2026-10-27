@@ -1,0 +1,55 @@
+## Cite GitHub #186 in the 0.8.1 release notes
+
+Context: Issue #186 (Data Quality IF-condition property dropdown blanks on
+selection) was verified as already fixed on 0.8.1 (`69ced25e`) and closed as
+status: Solved. The release notes already described the fix but did not link
+the GitHub issue. User-guide and product docs already document the IF block as
+current behaviour, so they were left unchanged.
+
+Changes:
+
+1. releases/ReleaseNotes_V0.8.1.md
+   Link [#186](https://github.com/databrickslabs/ontobricks/issues/186) in the
+   highlights, Data Quality conditions section, and selected bug-fix list.
+2. changelogs/v0.8.1/benoitcayladbx_2026-10-01.log
+   Record the documentation-only release-note citation.
+
+Modified files:
+- releases/ReleaseNotes_V0.8.1.md
+- changelogs/v0.8.1/benoitcayladbx_2026-10-01.log
+
+Tests: uv run --frozen pytest -q -m "not scenario" → 5939 passed, 304 skipped, 6 deselected, 32 warnings in 55.02s
+
+## Raise Dependabot security floors
+
+Context: GitHub Dependabot listed open alerts on `uv.lock` and
+`src/mcp-server/uv.lock` for PyJWT, GitPython, urllib3, anyio,
+cryptography, MLflow, sentence-transformers, oauthlib, and NLTK.
+Patched releases were available for all except oauthlib 4.x (blocked by
+`databricks-sql-connector` `oauthlib<4`) and NLTK GHSA-8mgp-746c-j5xp
+(no upstream patch; latest is 3.10.3).
+
+Changes:
+
+1. pyproject.toml
+   Raise MLflow to ≥3.16.1, sentence-transformers to ≥5.6.0, and uv
+   constraint floors for gitpython, urllib3, anyio, pyjwt, cryptography.
+2. src/mcp-server/pyproject.toml
+   Add PyJWT, urllib3, and anyio floors next to the existing cryptography 50 floor.
+3. uv.lock / src/mcp-server/uv.lock
+   Relock; rewrite proxy URLs back to files.pythonhosted.org.
+4. docs/development.md
+   Document the new floors and the two blocked advisories.
+5. releases/ReleaseNotes_V0.8.1.md
+   Add a Dependabot security section.
+
+Modified files:
+- pyproject.toml
+- src/mcp-server/pyproject.toml
+- uv.lock
+- src/mcp-server/uv.lock
+- docs/development.md
+- releases/ReleaseNotes_V0.8.1.md
+- changelogs/v0.8.1/benoitcayladbx_2026-10-01.log
+
+Tests: uv run --frozen pytest -q -m "not scenario" → 5939 passed, 304 skipped, 6 deselected, 32 warnings in 47.99s

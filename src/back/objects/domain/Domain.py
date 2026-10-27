@@ -1161,7 +1161,7 @@ class Domain:
                                 "to make changes."
                             )
             # Guarantee a well-formed base URI at persist time even if Domain
-            # Information was never saved (auto-generate from the domain name),
+            # → General was never saved (auto-generate from the domain name),
             # so the Registry Browse "URI" column is never empty/"Unknown".
             if not (self._s.ontology.get("base_uri") or "").strip():
                 self._s.ontology["base_uri"] = self._resolve_base_uri(

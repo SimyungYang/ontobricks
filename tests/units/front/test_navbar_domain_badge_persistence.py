@@ -44,18 +44,43 @@ def test_remembered_domain_is_restored_before_async_navbar_refresh():
 
 def test_domain_load_refreshes_badge_before_reload():
     """After loading a new domain the navbar badge must be refreshed from the
-    server session *before* the page reload, so the badge never keeps showing
-    the previous domain during the reload delay."""
+    server session *before* navigation, so the badge never keeps showing
+    the previous domain during the delay."""
     js = _navbar_js()
     match = re.search(r"async function doDomainLoad\([^)]*\) \{(.*?)\n\}", js, re.DOTALL)
 
     assert match is not None
     body = match.group(1)
     # Stale remembered info is dropped, then the fresh state is fetched and
-    # applied to the badge before the reload runs.
+    # applied to the badge before Domain → General navigation runs.
     assert "clearRememberedDomainInfo();" in body
     assert "await loadNavbarState();" in body
-    assert body.index("await loadNavbarState();") < body.index("location.reload()")
+    assert "navigateToDomainGeneral()" in body
+    assert body.index("await loadNavbarState();") < body.index(
+        "navigateToDomainGeneral()"
+    )
     assert body.index("clearRememberedDomainInfo();") < body.index(
         "await loadNavbarState();"
     )
+    assert "location.reload()" not in body
+
+
+def test_domain_load_navigates_to_general():
+    """Loading a domain must open Domain → General, not reload the current page."""
+    js = _navbar_js()
+    match = re.search(
+        r"function navigateToDomainGeneral\(\) \{(.*?)\n\}", js, re.DOTALL
+    )
+
+    assert match is not None
+    body = match.group(1)
+    assert "DOMAIN_GENERAL_HREF" in js
+    assert "/domain/?section=information" in js
+    assert "window.location.href = DOMAIN_GENERAL_HREF;" in body
+    assert "path === '/domain'" in body
+    assert "handleImportResponse" in js
+    import_match = re.search(
+        r"function handleImportResponse\(data\) \{(.*?)\n\}", js, re.DOTALL
+    )
+    assert import_match is not None
+    assert "navigateToDomainGeneral()" in import_match.group(1)

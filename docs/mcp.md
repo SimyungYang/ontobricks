@@ -83,7 +83,7 @@ A domain published with an ontology but no Knowledge Graph build exposes only
 No arguments. Always call this first.
 
 > **Note**: Only domains with the **API / MCP** flag enabled (in Domain
-> Information → Global tab) are listed. Domains without this flag are hidden
+> → General → Global tab) are listed. Domains without this flag are hidden
 > from both the REST API and MCP tools.
 
 Returns formatted text:

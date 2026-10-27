@@ -11,14 +11,14 @@ afterwards.
 
 It therefore runs against an **already-running OntoBricks instance** — by
 default the local dev server on ``http://localhost:8000`` (``scripts/start.sh``)
-so the persisted ``TestScenario1`` domain lands in the *same* registry the
+so the persisted ``ZzTestScenario1`` domain lands in the *same* registry the
 local app reads, and shows up immediately when you open the app and browse the
 registry. Point it elsewhere with ``ONTOBRICKS_LIVE_BASE``.
 
 The journey:
 
     1. prime the session (sets the CSRF cookie)
-    2. reset to a clean slate, then create domain ``TestScenario1`` with the
+    2. reset to a clean slate, then create domain ``ZzTestScenario1`` with the
        Claude serving endpoint attached (so the wizard has an LLM)
     3. import the data sources (``benoit_cayla.customer`` tables) — *beforehand*,
        so the Generate page can see them
@@ -36,7 +36,7 @@ The journey:
     8. re-save to capture the build metadata, then verify it is listed
 
 The domain is intentionally **NOT** reset/deleted at the end — that is the
-whole point: open the app afterwards and load ``TestScenario1``.
+whole point: open the app afterwards and load ``ZzTestScenario1``.
 
 Gated behind ``ONTOBRICKS_SCENARIO_LIVE=1`` so it never runs in the default
 matrix (it costs warehouse + LLM time and mutates the registry).
@@ -67,6 +67,7 @@ import time
 import pytest
 
 from tests.e2e.scenarios._harness import (
+    CAMPAIGN_DOMAIN_NAME,
     chain_marker,
     csrf_headers,
     json_body,
@@ -84,14 +85,14 @@ pytestmark = [
         reason="live scenario — set ONTOBRICKS_SCENARIO_LIVE=1 to run "
         "(needs a running app + warehouse + LLM; writes a durable domain)",
     ),
-    *chain_marker("scenario_1"),
+    *chain_marker("scenario_1", depends=("scenario_0",)),
 ]
 
 
 # Domain names must be CamelCase alphanumeric (``is_valid_domain_name``); the
 # registry folder is the sanitized lowercase form, and it is the folder that
 # appears in registry listings and REST paths.
-_DOMAIN_NAME = "TestScenario1"
+_DOMAIN_NAME = CAMPAIGN_DOMAIN_NAME
 _DOMAIN_FOLDER = _DOMAIN_NAME.lower()
 _CATALOG = os.environ.get("ONTOBRICKS_SCENARIO_CATALOG", "benoit_cayla")
 _SCHEMA = os.environ.get("ONTOBRICKS_SCENARIO_SCHEMA", "customer")
@@ -162,7 +163,7 @@ class TestScenario1GenerateLive:
         page.wait_for_load_state("domcontentloaded")
         headers = _csrf_headers(page.context)
 
-        # ── 2. Clean slate: delete any prior 'TestScenario1', then create it ─
+        # ── 2. Clean slate: delete any prior campaign domain, then create it ─
         # Deleting an existing copy makes every run re-exercise the full
         # generate → Auto-Map → build pipeline and keeps the final save a clean
         # create (no name conflict). The domain is recreated below and persists
@@ -188,7 +189,7 @@ class TestScenario1GenerateLive:
             )
             assert resp.status in (200, 204), resp.text()
 
-        _step("resetting session for a fresh 'TestScenario1'")
+        _step(f"resetting session for a fresh '{_DOMAIN_NAME}'")
         resp = page.context.request.post(f"{base}/domain/reset", headers=headers)
         assert resp.status == 200, resp.text()
 

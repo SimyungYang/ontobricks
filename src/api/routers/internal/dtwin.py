@@ -1063,7 +1063,7 @@ async def triplestore_status(
 
 
 # ===========================================
-# Consolidated Information Endpoint
+# Consolidated Knowledge Graph Overview endpoint
 # ===========================================
 
 
@@ -1072,7 +1072,7 @@ async def sync_info(
     session_mgr: SessionManager = Depends(get_session_manager),
     settings: Settings = Depends(get_settings),
 ):
-    """Return all data the Knowledge Graph Information page needs in one shot.
+    """Return all data the Knowledge Graph Overview page needs in one shot.
 
     Graph status and artefact existence are served from the session cache
     when available (populated after each successful build).  On a cache miss

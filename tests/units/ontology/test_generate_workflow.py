@@ -894,13 +894,13 @@ class TestSubClassOfAndDisjointAxiomMerge:
         # Only the first application counts; the exact repeat is a no-op.
         assert result["merge"]["axioms_added"] == 1
 
-    def test_conflicting_subclassof_is_rejected_explicitly(
+    def test_conflicting_subclassof_keeps_first_parent(
         self, domain_session, monkeypatch
     ):
         """A *different* parent than the one already set is multi-parent
         inheritance the ontology model cannot represent (only a single
-        `parent` field per class) — it must be rejected explicitly, never
-        silently dropped (task 4 review finding #5)."""
+        `parent` field per class) — keep the first parent and drop the extra
+        axiom so Generate still succeeds."""
         monkeypatch.setattr(
             wf.owl_staged,
             "detect_entities",
@@ -945,10 +945,72 @@ class TestSubClassOfAndDisjointAxiomMerge:
             ),
         )
 
-        with pytest.raises(DraftValidationError, match="multiple parent"):
-            wf.run_completion(
-                domain_session, _settings(), host="h", token="t", endpoint_name="e"
-            )
+        result = wf.run_completion(
+            domain_session, _settings(), host="h", token="t", endpoint_name="e"
+        )
+
+        truck = next(c for c in domain_session.get_classes() if c["label"] == "Truck")
+        assert truck["parent"] == "Vehicle"
+        assert result["merge"]["axioms_added"] == 1
+
+    def test_existing_parent_is_not_replaced(
+        self, domain_session, monkeypatch
+    ):
+        """An existing class that already inherits must not gain a second
+        parent when Generate proposes another subClassOf."""
+        domain_session.ontology["classes"] = [
+            {"name": "Party", "label": "Party"},
+            {"name": "Customer", "label": "Customer", "parent": "Party"},
+        ]
+        monkeypatch.setattr(
+            wf.owl_staged,
+            "detect_entities",
+            lambda **kw: _detection_result(["Agent"]),
+        )
+        draft = wf.run_detection(
+            domain_session, _settings(), host="h", token="t", endpoint_name="e"
+        )
+        assert [a.parent for a in draft.existing_anchors if a.id == "Customer"] == [
+            "Party"
+        ]
+        agent_id = draft.candidate_entities[0].id
+
+        monkeypatch.setattr(
+            wf.owl_staged,
+            "infer_relations",
+            lambda **kw: _completion_ok("relations", {"relations": []}),
+        )
+        monkeypatch.setattr(
+            wf.owl_staged,
+            "infer_attributes",
+            lambda **kw: _completion_ok("attributes", {"attributes": []}),
+        )
+        monkeypatch.setattr(
+            wf.owl_staged,
+            "infer_axioms",
+            lambda **kw: _completion_ok(
+                "axioms",
+                {
+                    "axioms": [
+                        {
+                            "kind": "subClassOf",
+                            "subject": "Customer",
+                            "object": agent_id,
+                        }
+                    ]
+                },
+            ),
+        )
+
+        result = wf.run_completion(
+            domain_session, _settings(), host="h", token="t", endpoint_name="e"
+        )
+
+        customer = next(
+            c for c in domain_session.get_classes() if c["name"] == "Customer"
+        )
+        assert customer["parent"] == "Party"
+        assert result["merge"]["axioms_added"] == 0
 
     def test_disjoint_with_axiom_deduped_on_exact_repeat(
         self, domain_session, monkeypatch

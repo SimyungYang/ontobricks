@@ -641,8 +641,8 @@ Open **Studio** and click **Export** (top right) to download the generated OWL i
 ### Save Your Ontology
 
 - **Validate**: Click to check for issues
-- **Save**: Store to Unity Catalog Volume
-- **Load**: Load an existing ontology from UC
+- **Save**: Write the domain to the Lakebase registry
+- **Load**: Load an existing domain (opens **Domain → General**)
 
 ---
 
@@ -656,7 +656,7 @@ Users with an **Editor** or **Builder** role on the current domain can browse
 Unity Catalog and import, update, or remove data sources. `CAN_MANAGE` is only
 required for shared application configuration such as SQL Warehouse selection.
 
-### Information (Sidebar)
+### General (Sidebar)
 
 Click **General** in the sidebar to view the current mapping status:
 - Summary of mapped vs unmapped entities
@@ -1188,14 +1188,15 @@ source triples safely.
 
 ## Domain Management & Version Control
 
-OntoBricks stores domains in **Unity Catalog Volumes** with built-in version control. Navigate to the **Domain** page by clicking "Domain" in the navigation bar.
+OntoBricks stores domains in the **Lakebase registry** (Postgres) with built-in version control. Navigate to the **Domain** page by clicking "Domain" in the navigation bar.
 
 ### Domain Structure
 
-Each domain is stored as a separate Unity Catalog Volume:
-- **Volume Name**: Same as the domain name (sanitized: lowercase, underscores)
-- **File Names**: Version numbers (e.g., `v1.json`, `v2.json`, `v3.json`)
-- **Contents**: Ontology, mappings, design layout, and domain metadata
+Each domain is a named row family in the Lakebase registry (not a Unity Catalog Volume):
+- **Name**: CamelCase identifier (sanitized for catalog objects)
+- **Versions**: Integer versions (`v1`, `v2`, …) with Draft / In Review / Published lifecycle
+- **Contents**: Ontology, mappings, design layout, Knowledge Store parsed documents, and domain metadata
+- **Optional GitHub mirror**: reviewable commits of the same documents; Lakebase stays the source of truth
 
 **What is Saved:**
 - ✅ Ontology (classes, properties, constraints, rules, axioms)
@@ -1566,10 +1567,13 @@ the API/MCP **Active** selection managed in **Registry → Browse**.
 
 #### Loading a Domain from Registry
 
-1. Use **Load Domain** in the top navbar (or **Registry → Browse** → **Load** on a version row).
+1. Use **Load Domain** in the top navbar (or **Registry → Browse** → **Load** on a version row, **Home → Open**, or Domain → Versions load/reload).
 2. Pick a domain and version in the dialog. Editability follows lifecycle
    status: Draft versions are editable, while In Review and Published versions
    are read-only, whether or not they are the latest.
+3. OntoBricks always opens **Domain → General** (`/domain/?section=information`).
+   It does not stay on Home or reload Registry Browse. Publication and
+   Validation entry points that already jump to `?section=review` are unchanged.
 
 When the Registry popup opens, OntoBricks briefly reuses a recently loaded
 Browse list and starts loading Bridges in the background. This avoids duplicate
@@ -1589,7 +1593,7 @@ Four related ideas:
 
 ### Domain Save/Load
 
-Domains are saved in a versioned JSON format and can be stored in Unity Catalog Volumes. Use the **Save** button (in the domain sub-navigation) and the **Load Domain** option in the top menu to persist and restore your work; the **Versions** button reloads the current domain or loads another of its versions from the Registry, and the **Close** button releases the edit lock and returns you to the Home page.
+Domains are saved as versioned documents in the Lakebase registry. Use the **Save** button (in the domain sub-navigation) and the **Load Domain** option in the top menu to persist and restore your work; after a generic load the app opens **Domain → General**. The **Versions** button reloads the current domain or loads another of its versions from the Registry (that also lands on General), and the **Close** button releases the edit lock and returns you to the Home page.
 
 ### Best Practices for Version Control
 
@@ -1752,7 +1756,7 @@ Domains must have the **API / MCP** flag enabled to be visible through the MCP s
 ### Tailoring what a domain publishes
 
 Exposure is all-or-nothing; what happens next is not. Open **Domain >
-Information > MCP** to choose which of the seven domain-scoped tools the
+General > MCP** to choose which of the seven domain-scoped tools the
 domain publishes, and whether datasets, bridges and actions are **Preferred**,
 **Normal** or **Disabled**. The tool list is recomputed when the client calls
 `select_domain`, so changes land without restarting the MCP server, and a tool
@@ -2520,7 +2524,7 @@ After the initial one-time configuration (steps 1–2), the entire pipeline from
 - **Start with a template**: Use one of the Wizard quick-templates (CRM, IoT, etc.) if your domain matches — it provides better guidelines for the LLM.
 - **Review before syncing**: After auto-map, quickly review the Studio view. Fix any red or orange nodes before synchronizing.
 - **Iterate**: The pipeline is not a one-shot process. You can re-generate the ontology, re-run auto-map, or manually adjust individual mappings at any time.
-- **Save your domain**: After achieving a good result, save the domain to Unity Catalog (**Save** in the domain sub-navigation) so you can reload it later.
+- **Save your domain**: After achieving a good result, save the domain to the Lakebase registry (**Save** in the domain sub-navigation) so you can reload it later.
 
 ---
 
@@ -2891,15 +2895,16 @@ After import you can:
 - **Violation Details**: View quality check violations in a detailed modal with entity information.
 
 ### Project Management
-- **Unity Catalog Storage**: Save and load projects from Databricks Unity Catalog Volumes.
+- **Lakebase registry**: Save and load domains from the Postgres registry (optional GitHub mirror; Unity Catalog Volume is for ad-hoc export bundles only).
 - **Version Control**: Domain → Versions presents newest-first cards with Loaded and Latest badges, metadata, and inline lifecycle actions that immediately synchronize global badges and read-only state. App administrators can permanently delete only older, unloaded Draft versions; loaded, latest, In Review, and Published versions are protected, and the destructive Lakebase statement atomically rechecks Draft status before Knowledge Store cleanup. Registry-row deletion and Knowledge Store cleanup cannot share one transaction; a cleanup failure therefore returns a truthful 5xx partial-deletion error rather than success. Lifecycle status (Draft / In Review / Published) is separate from the **Active** version exposed through API/MCP, which is selected in **Registry → Browse**.
 - **Single-editor concurrency**: A DRAFT domain version can only be **edited by one user at a time**. The first opener edits; anyone else opening the same version is automatically **read-only** with a banner naming the current editor. The lock uses a **renew-only lease** — the editor's browser keeps it alive while the domain is open, so an active session never expires, but a lock left behind (crashed/abandoned tab) auto-releases once its lease lapses (configurable in **Settings → Global → Edit Lock Lease**, or via `ONTOBRICKS_EDIT_LOCK_TTL_S`; default 10 min; `0` disables). It is also released immediately when the editor clicks **Close** (which prompts *Save before closing?* and returns to Home) or an **app-admin takes over**. The **Save** and **Close** buttons sit together in the domain sub-navigation.
 - **Domain Cockpit (Validation)**: Readiness tiles including **Active Version** — the version currently exposed via API/MCP (from the registry), with a *(not loaded)* hint when it differs from the version open in the session. Distinct from “latest on disk” vs read-only UI gating (still driven by whether the loaded version is the latest).
 - **Audit Trail**: Domain → Audit trail splits ontology vs mapping into tabs (plus Status, Builds, and GitHub). Change rows are compact: the icon is the action, and the line names the asset with previous → new values on edits. Events are buffered in the working session and flushed to the registry (`domain_change_events`) on **Save to registry**. A version dropdown scopes the timeline. GitHub pushes that produced a commit or warning appear on the GitHub tab.
 - **New-domain loading**: After **New Domain** from the navbar, a full-page spinner runs until Domain → General has finished its initial fetches (LLM endpoints, version status, domain info).
+- **Load lands on Domain → General**: Home → Open, navbar **Load Domain**, Registry → Browse → Load, Domain → Versions load/reload, and domain import navigate to `/domain/?section=information` instead of reloading the current page. Publication / Validation jumps keep `?section=review`.
 - **CamelCase domain names**: New domains must use alphanumeric CamelCase names (no spaces or special characters); the creation UI sanitizes as you type and the backend rejects invalid names.
 - **Domain → General — Knowledge Graph fields**: Triple-store FQN and Graph DB table name (e.g. Lakebase `g_<domain>_v<version>`) refresh when the domain name is **committed** (blur / `change`) or the version changes, so previews match naming rules before save. When the backend is Neo4j, a required **Neo4j connection** dropdown lists Settings profiles (no per-domain database override).
-- **Duplicate domain names**: Save to registry is blocked when the sanitized name already exists (`/domain/check-name` + guard on **Save to UC**); inline validation clears when the name is cleared or the check errors.
+- **Duplicate domain names**: Save to registry is blocked when the sanitized name already exists (`/domain/check-name` + guard on **Save**); inline validation clears when the name is cleared or the check errors.
 - **Navbar domain identity**: Top bar name/version invalidate cached `/navbar/state` (and related caches) after domain mutations so reloads and navigations do not show stale labels for up to 15 seconds.
 - **Import/Export**: Import OWL and RDFS ontologies, import industry-standard ontologies (FIBO, CDISC, IOF, HL7 FHIR R4/R4B/R5), import/export R2RML mappings, and export OWL files.
 - **Registry OBX Export/Import**: Export one or more registry domains to a portable `.obx` file directly from **Registry → Browse** with per-domain version-mode selection (Latest / Active / All / Choose). Import with per-domain selection checkboxes plus conflict resolution (Skip / Overwrite / Rename). An integer `format_version` field ensures backward compatibility as the format evolves.

@@ -312,12 +312,23 @@ class DatabricksAuth:
         if self.use_kernel:
             params["use_kernel"] = True
         if self.is_app_mode and self.client_id and self.client_secret:
-            params["access_token"] = self.get_oauth_token()
+            params["credentials_provider"] = self._oauth_credentials_provider
         elif self.token:
             params["access_token"] = self.token
         elif self._cli_config is not None:
             params["credentials_provider"] = lambda: self._cli_config.authenticate
         return params
+
+    def _oauth_credentials_provider(self):
+        """``credentials_provider`` for ``databricks.sql.connect`` in app mode.
+
+        The connector calls this once per connection, then calls the returned
+        header factory on every HTTP request, status polls of a running
+        statement included. Reading the token through :meth:`get_oauth_token`
+        there picks up its refresh; a static ``access_token`` captured at
+        connect time expired one hour into long statements and lost them.
+        """
+        return lambda: {"Authorization": f"Bearer {self.get_oauth_token()}"}
 
     @staticmethod
     def _env_true(name: str) -> bool:

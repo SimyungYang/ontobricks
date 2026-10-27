@@ -1,7 +1,7 @@
 # OntoBricks — Release Notes V0.9.0
 
 **Release window:** September–October 2026<br>
-**Test status:** all changes shipped with the non-scenario suite green: 9400 passed, 326 skipped, 6 deselected, 1 xfailed, 40 warnings.
+**Test status:** all changes shipped with the non-scenario suite green: 9478 passed, 326 skipped, 7 deselected, 1 xfailed.
 
 ---
 
@@ -10,13 +10,16 @@
 - **Lakehouse//RT graph queries** — administrators can point Knowledge Graph reads at a serverless Lakehouse//RT warehouse over the Statement Execution API, while builds keep a classic or serverless warehouse that still accepts `CREATE VIEW`, CTAS, and writes.
 - **Three-stage Ontology Generate** — detect entities, review and lock the catalog, then complete relations, attributes, and axioms with checkpoints. The merge **appends** to the existing ontology instead of replacing it.
 - **Knowledge Store** — parsed documents live in Lakebase Postgres, not a Unity Catalog Volume. Generate and Mapping share the same corpus; no `READ VOLUME` / `WRITE VOLUME` grant is required.
+- **Unity Catalog Metric Views** — Metric Views load and map as data assets next to tables and views. Columns carry dimension/measure roles; Auto-Map emits `MEASURE(...)` SQL instead of `SELECT *`.
 - **GitHub domain mirror** — each instance can push domain configuration (OWL, R2RML, SHACL, layouts, rules) to one GitHub repository. Lakebase stays the source of truth; Load from GitHub restores domains through the OBX import flow.
+- **OBX Import as** — Registry import can rename every incoming domain (CamelCase target) and safely resets graph runtime on a renamed copy.
 - **Faster Explorer first paint** — graph status no longer blocks the Knowledge Graph page on full `COUNT(*)` scans; adjacency and entity-search indexes, paged BFS, and server-side seed limits cut preview and expansion time. The canvas reports Preview, Expansion, Display, and Total duration.
 - **SPARQL playground** — run SPARQL against the graph in the Knowledge Graph UI and inspect the generated SQL after execution.
 - **Entity business rules** — attach SWRL rules (including aggregate rules and decision tables) to a class in Studio; run them scoped to one entity from Explorer or MCP.
 - **Entity Data Quality Checks** — right-click a node in Explorer (or call MCP `check_entity_shacl_facets`) to check that one entity against every SHACL shape on its class, its parent classes, and the global ones. A popup shows per-dimension gauges and the pass/fail detail with the values found; checked nodes get a quality ring on the canvas.
-- **Class actions include Databricks Jobs** — Studio Actions bind Unity Catalog functions **and** workspace Jobs that declare `entity_id`. Triggering one from Explorer opens a popup that verifies the run started (Running / Queued) and follows it; the run is tracked in navbar Background Tasks with a link to the Databricks run. MCP `invoke_entity_action` accepts `job:<id>`.
-- **Ontology Studio** — Designer is renamed Studio. Multi-select, group move, selected-only Business Views, import entity from another domain, inherited outgoing relations on subclasses, and OWL/R2RML export on the canvas.
+- **Class actions include Databricks Jobs** — the Studio entity panel's **Behaviour** tab binds Unity Catalog functions **and** workspace Jobs that declare `entity_id`. Triggering one from Explorer opens a popup that verifies the run started (Running / Queued) and follows it; the run is tracked in navbar Background Tasks with a link to the Databricks run. MCP `invoke_entity_action` accepts `job:<id>`.
+- **Ontology Studio** — Designer is renamed Studio. Multi-select, group move, selected-only Business Views, import entity from another domain, inherited outgoing relations on subclasses, and OWL/R2RML export on the canvas. The entity panel is regrouped into General / Attrs. / Model / Behaviour / Links tabs with one consistent section layout.
+- **Load opens Domain → General** — Home Open, navbar Load Domain, Registry Load, Versions load/reload, and domain import all navigate to Domain → General. Publication and Validation jumps stay on their own sections.
 - **OBO and MCP Team gate** — per-backend on-behalf-of identity, MCP Team gate fail-closed on public graph reads, and admin-only domain creation.
 - **AI Gateway and No LLM** — domain LLM target comes from the AI Gateway picker; a global No-LLM gate turns off ontology, mapping, and Graph AI routes.
 - **Safer Databricks Apps result download** — CloudFetch can be turned off globally when Apps cannot reach the CloudFetch storage host.
@@ -99,7 +102,7 @@ The final merge is append-only and idempotent. Inverse relations collapse to one
 
 Domain document management no longer copies binaries or `_parsed` sidecars into a Unity Catalog Volume. `ai_parse_document` runs on inline base64; only parsed text is stored in Lakebase (`domain_documents`). Users can view parsed content, upload files (hard 10 MB per-file cap), and purge one or several documents. The registry UC Volume is removed from settings, DAB, health probes, and the MCP server. Generate and Mapping agents read the same store.
 
-Data Sources UI labels are renamed **Data Assets**. Asset imports are capped (default 40).
+Data Sources UI labels are renamed **Data Assets**. Asset imports are capped (default 40). Unity Catalog **Metric Views** are first-class assets (`object_kind`: table / view / metric_view). Measure columns must be queried with `MEASURE(col) AS col` and `GROUP BY` dimensions; the mapping agent is evaluated against that contract, and the picker shows a Metric View badge.
 
 ---
 
@@ -112,6 +115,8 @@ Designer is **Studio**. OWL and R2RML export live on the canvas.
 - Subclasses show inherited outgoing relations.
 - Metadata saves (label, icon, reference, relationship direction) update visible D3 elements in place; topology changes still rebuild the map.
 - Entity right pane tabs: **General / Attrs. / Model / Behaviour / Links**. Attrs. holds mapped attributes, then virtual attributes (computed when viewed). Model holds inheritance, equivalent/disjoint axioms, and bridges. Behaviour holds what the Knowledge Graph can run on one entity, each tagged with its effect: functions (return a result), jobs (run in background), and inference rules (SWRL, write to the graph). Links holds dashboard and dataset. Entity SWRL triggers are called **Inference rules** in the Studio and the Graph Explorer.
+- Every section in those tabs shares one layout: a header with an item count, the effect chip, and **+ Add** (a *From data assets* / *Manually* menu on mapped attributes; **Change** on Dashboard and Dataset once linked), a one-line explanation with the longer help behind an ⓘ button, flat item rows, and a dashed empty state with a direct "Add …" link. Descriptions are edited in place (borderless until hovered or focused). **Equivalent to** and **Disjoint with** are chip pickers instead of Ctrl/Cmd-click multi-selects. Icon and name share one row on General.
+- The first item of the **Domain**, **Ontology**, and **Mapping** menus is renamed **Information → General**; URLs (`?section=information`) are unchanged.
 - OWL import and save preserve labels, language tags, resource IRIs, leftover RDF annotations, non-OWL triples, and session extras. Invalid IRIs are percent-encoded instead of failing generation. Renames stay graph-consistent.
 - Mapping Diagnostics lists issues only and skips excluded relationship columns.
 
@@ -125,7 +130,7 @@ Ontology authors attach SWRL business rules to a class (including parent-class l
 
 ### Jobs as class actions
 
-Studio Actions already bound Unity Catalog functions (section renamed **UC functions**). Authors can also bind existing workspace Jobs that declare `entity_id`. OntoBricks only calls `run_now`, tracks the run in navbar Background Tasks, and allow-lists `job:<job_id>` from Explorer and MCP. Lakehouse App mode triggers OBO with the forwarded user token.
+The Studio entity panel's **Behaviour** tab already bound Unity Catalog functions (section **Functions**). Authors can also bind existing workspace Jobs that declare `entity_id`. OntoBricks only calls `run_now`, tracks the run in navbar Background Tasks, and allow-lists `job:<job_id>` from Explorer and MCP. Lakehouse App mode triggers OBO with the forwarded user token.
 
 ---
 
@@ -135,11 +140,14 @@ Studio Actions already bound Unity Catalog functions (section renamed **UC funct
 
 Administrators can enable a per-instance GitHub repository. Each registry write queues an async, coalesced push. A GitHub failure never fails the registry write. Pushes appear in the domain Audit trail. Each domain folder stores split JSON plus generated OWL, R2RML, and SHACL Turtle; PUBLISHED versions are tagged `<Folder>/V<n>`. **Load from GitHub** in the Registry import modal lists domains from the Git tree and restores them through OBX preview/import. Deleting a registry domain can optionally delete the GitHub domain. Test connection, spinner, and “enable mirror before configure” UX are in Settings.
 
+OBX import exposes an **Import as** name for every domain, not only on folder conflicts. A renamed copy resets graph runtime so the new identity does not reuse the previous warehouse objects.
+
 ### Versions
 
 - **New Version** from the navbar Versions popup (same ungated create-version workflow as Domain → Versions). After confirmation the popup closes and the branded loading overlay stays until the new version loads.
 - Domain Versions is an action-card workspace with server-computed capabilities and guarded deletion (including last-version delete when policy allows).
 - Navbar Save shows a spinner while the domain is being saved.
+- **Loading a domain always opens Domain → General** (`/domain/?section=information`) instead of reloading the current page. That covers Home → Open, navbar **Load Domain**, **Registry → Browse → Load**, Domain → Versions load/reload, and domain import. Intentional Publication / Validation navigations (`?section=review`) are unchanged. Reloading while already on General still refreshes that page.
 
 The navbar domain badge restores the last confirmed loaded domain on page start and keeps it across transient `/navbar/state` failures. Navigating to Settings no longer flashes an empty badge. Closing the domain still clears it. Unloaded workspace pages redirect to Home. Domain creation is restricted to administrators.
 
@@ -175,20 +183,21 @@ Data Quality `suggest_from_ontology` now uses parsed OWL characteristics (`owl:F
 - Knowledge Store listing failures are distinguished during version deletion.
 - Large route and settings modules are split into topic packages and class-per-file collaborators (graph engine, registry mixins, DigitalTwin, Generate). This is an internal layout change; public HTTP and MCP contracts stay.
 - Compact Domain audit trail with before → after values, including SWRL, SHACL, relationships, and axioms.
+- Live scenario campaigns (`tests/e2e/scenarios/`) can run against a deployed Databricks App (the Apps gateway bearer is forwarded). New **scenario 5** covers a Lakehouse zero-copy domain end to end: virtual attributes, a Unity Catalog function action, and an entity SWRL inference rule.
 
 ---
 
 ## Documentation
 
-Operator guides now describe the Build / Query split, Lakehouse//RT, CloudFetch, Explorer timing, Versions-popup creation, staged Generate, Knowledge Store, GitHub mirror, Studio, business rules, Job actions, entity Data Quality Checks, SPARQL playground, OBO, and No LLM:
+Operator guides now describe the Build / Query split, Lakehouse//RT, CloudFetch, Explorer timing, Versions-popup creation, staged Generate, Knowledge Store, Metric Views, GitHub mirror, OBX Import as, Studio, business rules, Job actions, entity Data Quality Checks, SPARQL playground, OBO, No LLM, and load navigation to Domain → General:
 
-- `docs/get-started.md`
+- `docs/getting-started.md`
 - `docs/deployment.md`
 - `docs/architecture.md`
-- `docs/features.md`
-- `docs/user-guide.md`
+- `docs/user-guide.md` (feature inventory)
 - `docs/mcp.md`
 - `docs/api.md`
+- `docs/README.md` (documentation hub)
 - `README.md`
 
 The documentation hub and Help Center were recategorized; small guides fold into Graph backends / Advanced features with per-guide TOCs.
@@ -209,9 +218,15 @@ The documentation hub and Help Center were recategorized; small guides fold into
 - Fixed GitHub import listing only registry folders instead of the Git tree.
 - Fixed last-version domain delete being blocked when policy should allow it.
 - Fixed Apps graph writes for SWRL apply and inference purge.
+- Fixed entity inference rules and build-time inferred triples failing on Lakehouse (`DELTA_CLUSTERING_NOT_SUPPORTED`) because they wrote through the read-only Query warehouse; they now use the Build warehouse.
+- Fixed Lakehouse zero-copy status probes failing with `DESCRIBE DETAIL` on the `…_data` VIEW; views are treated as existing.
+- Fixed a domain loaded with `version: 1` (JSON number) falling through to the latest version, and Overview / status timing out on `COUNT(*)` over the pass-through `…_graph` VIEW; they now read the companion tables.
+- Fixed Graph Explorer right-click menus opening partly off-screen near the viewport edges.
+- Fixed attribute names and inherited relationship labels being rendered unescaped in the Studio entity panel.
 - Fixed an entity quality check on a domain whose graph is not built returning a bare 500; it now returns a readable 502 ("Could not read the knowledge graph — is it built?").
 - Fixed `suggest_from_ontology` inventing cardinality and calling a missing `domain.get_constraints()`.
 - Fixed Generate Stage-1 false rejection when every selected entity is already a locked anchor, and Stage-3 id-bracketing / JSON double-encoding under `response_format`.
+- Fixed loading a domain from Home (or the navbar Load dialog) leaving the user on the homepage with only the top menus updated. Generic loads now open Domain → General.
 
 ---
 
@@ -263,6 +278,14 @@ Knowledge Store uses a new Lakebase `domain_documents` table created by the stan
 - **Scripts posting to web routes:** non-browser clients must use `/api/v1/` or `/graphql/`; internal routes now reject requests without the CSRF cookie and header.
 - **SHACL `sh:pattern`:** backslashes now reach Spark `RLIKE` as written. Before, `\d+` was silently read as `d+`, so pattern rules may report different (correct) violation counts after the upgrade.
 - **Unity Catalog errors:** a failed table or column listing now surfaces as an error (502) instead of an empty list.
+
+### Menu rename
+
+The **Information** menu item is now **General** in Domain, Ontology, and Mapping. Section ids and URLs are unchanged. The No-LLM guidance now reads `No LLM selected. Select one in Domain → General → AI.` — clients matching the old `Domain Information → AI` text must update.
+
+### Load navigation
+
+Scripts or bookmarks that assumed **Load Domain** would `location.reload()` the current page (Home, Registry Browse, Versions) must follow the redirect to `/domain/?section=information`. Publication and Validation entry points that already set `?section=review` are unchanged.
 
 ### Enabling Lakehouse//RT reads
 

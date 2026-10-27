@@ -60,6 +60,35 @@ class TestZeroCopyDataView:
 
         assert store.table_exists(DATA) is True
 
+    def test_data_view_exists_when_sea_hides_marker_in_detail(self):
+        from back.core.errors import InfrastructureError
+        from back.core.graphdb.delta.health import probe_table_status
+
+        sea_view_error = InfrastructureError(
+            "Databricks SQL statement failed",
+            detail=(
+                '{"error_code":"BAD_REQUEST","message":'
+                f'"{_VIEW_ERROR}"}}'
+            ),
+        )
+
+        def _query(sql):
+            if sql == f"DESCRIBE DETAIL {DATA}":
+                raise sea_view_error
+            if sql == f"SELECT 1 FROM {DATA} LIMIT 1":
+                return [{"1": 1}]
+            raise AssertionError(f"unexpected SQL: {sql}")
+
+        client = MagicMock()
+        client.execute_query.side_effect = _query
+        store = DeltaFlatStore(client, domain=_domain())
+
+        assert store.table_exists(DATA) is True
+        probed = probe_table_status(store, DATA)
+        assert probed["exists"] is True
+        assert probed["has_data"] is True
+        assert probed["error"] is None
+
     def test_data_view_status_has_no_delta_detail_and_no_full_count(self):
         client = MagicMock()
 

@@ -366,7 +366,12 @@ async function loadVersionFromList(version, triggerButton = null) {
         if (data.success) {
             showNotification(data.message || 'Version loaded!', 'success');
             if (typeof invalidateDomainCaches === 'function') invalidateDomainCaches();
-            window.location.reload();
+            // Version load opens Domain → General rather than staying on Versions.
+            if (typeof navigateToDomainGeneral === 'function') {
+                navigateToDomainGeneral();
+            } else {
+                window.location.href = '/domain/?section=information';
+            }
         } else {
             showNotification('Error: ' + data.message, 'error');
         }
@@ -412,7 +417,11 @@ async function reloadLastSavedVersion() {
         if (data.success) {
             showNotification('Version ' + currentVersion + ' reloaded!', 'success');
             if (typeof invalidateDomainCaches === 'function') invalidateDomainCaches();
-            window.location.reload();
+            if (typeof navigateToDomainGeneral === 'function') {
+                navigateToDomainGeneral();
+            } else {
+                window.location.href = '/domain/?section=information';
+            }
         } else {
             showNotification('Error: ' + data.message, 'error');
         }

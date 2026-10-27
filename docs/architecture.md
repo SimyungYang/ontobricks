@@ -99,7 +99,7 @@ The stack shows how each layer builds upon the previous:
 **What it is**: A knowledge representation language for creating ontologies. Extends RDFS with richer semantics.
 
 **How OntoBricks uses it**:
-- **Visual Designer (OntoViz)** creates ontologies visually
+- **Ontology Studio (OntoViz)** creates ontologies visually
 - **Form-based interface** for detailed class/property definition
 - Classes defined as `owl:Class`
 - Properties defined as `owl:ObjectProperty` (relationships) or `owl:DatatypeProperty` (attributes)
@@ -1010,7 +1010,7 @@ OntoBricks separates two concerns:
 
 The active Graph DB engine is chosen **per domain** via `graph_backend`
 (`none` | `lakebase` | `databricks` | `neo4j`), set under **Domain →
-Information → Knowledge Graph**; connection settings live under **Settings →
+General → Knowledge Graph**; connection settings live under **Settings →
 Back end**. `none` is the ontology-only mode: no graph is built and the MCP
 surface exposes ontology information only.
 
@@ -2015,7 +2015,7 @@ In addition to the UI-driven agents, OntoBricks provides an **MCP server** (`mcp
 
 **Tools used**: `get_ontology`, plus ontology mutation functions built into the engine
 
-**Invoked by**: `POST /ontology/assistant/chat` (Designer UI) and
+**Invoked by**: `POST /ontology/assistant/chat` (Studio UI) and
 `POST /ontology/assistant/invoke` (ResponsesAgent). Both routes inject the
 saved domain `endpoint_name` and `endpoint_kind` via `require_domain_llm`
 before the agent runs.
