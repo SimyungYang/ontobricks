@@ -1,0 +1,38 @@
+================================================================================
+## Explorer: search results are marked with a visible halo
+================================================================================
+
+Context:
+After an Explorer search, the entity that matched the search value looked
+like every other node. The seed highlight set borderColor / borderSize, but
+Sigma's default circle program ignores per-node borders, so only a small size
+bump was visible.
+
+Changes:
+
+1. src/front/static/query/js/query-sigmagraph.js
+   - New _drawSeedHalos(): a DOM layer over the canvases with one pulsing
+     ring per highlighted seed.
+   - Ring position and size come from getNodeDisplayData,
+     framedGraphToViewport and scaleSize, and are redrawn on every
+     afterRender, so they follow pan and zoom.
+   - Seed nodes are drawn at twice their size; the label is forced and
+     boxed (highlighted).
+2. src/front/static/query/css/query-sigmagraph.css
+   .sg-seed-halo-layer (no pointer events) and .sg-seed-halo (brand-red ring
+   with a pulse; static under prefers-reduced-motion).
+3. tests/units/front/test_explorer_seed_halo.py
+   New contract tests for the render hook, the positioning inputs and the
+   styles.
+
+Checked in headless Chrome with Sigma 3.0.2: the ring stays centred on the
+seed after a camera move.
+
+Modified files:
+- src/front/static/query/js/query-sigmagraph.js
+- src/front/static/query/css/query-sigmagraph.css
+- tests/units/front/test_explorer_seed_halo.py (new)
+- changelogs/v0.9.0/simyung-yang_2026-10-28.log
+
+Test result:
+uv run --frozen pytest -q tests/units/front -> 1783 passed.

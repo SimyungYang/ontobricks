@@ -958,6 +958,8 @@ var SigmaGraph = (function () {
             return;
         }
 
+        _renderer.on('afterRender', _drawSeedHalos);
+
         _renderer.on('clickNode', function (e) {
             _searchMatched = null;
             _searchNeighbors = null;
@@ -1277,8 +1279,10 @@ var SigmaGraph = (function () {
         }
 
         if (_highlightedSeeds && _highlightedSeeds.has(node)) {
+            // The circle program ignores border attributes; the visible ring
+            // is the DOM halo drawn by _drawSeedHalos().
             res.highlighted = true;
-            res.size = (data.size || 6) * 1.5;
+            res.size = (data.size || 6) * 2;
             res.borderColor = '#FF3621';
             res.borderSize = 3;
             res.labelSize = 16;
@@ -2913,6 +2917,37 @@ var SigmaGraph = (function () {
         }
         _switchToTab('sgTabFilter');
         _populateFilterEntityTypes();
+    }
+
+    /**
+     * Draw a pulsing ring over each search seed. Sigma's default node program
+     * cannot draw borders, so the ring is a DOM layer over the canvases,
+     * re-positioned from the display data after every render (pan / zoom).
+     */
+    function _drawSeedHalos() {
+        var container = document.getElementById('sgContainer');
+        if (!container) return;
+        var layer = container.querySelector('.sg-seed-halo-layer');
+        if (!layer) {
+            layer = document.createElement('div');
+            layer.className = 'sg-seed-halo-layer';
+            container.appendChild(layer);
+        }
+        layer.textContent = '';
+        if (!_renderer || !_highlightedSeeds || _highlightedSeeds.size === 0) return;
+        _highlightedSeeds.forEach(function (nodeId) {
+            var d = _renderer.getNodeDisplayData(nodeId);
+            if (!d || d.hidden) return;
+            var vp = _renderer.framedGraphToViewport({ x: d.x, y: d.y });
+            var diameter = Math.max(28, _renderer.scaleSize(d.size) * 2 + 16);
+            var halo = document.createElement('div');
+            halo.className = 'sg-seed-halo';
+            halo.style.left = vp.x + 'px';
+            halo.style.top = vp.y + 'px';
+            halo.style.width = diameter + 'px';
+            halo.style.height = diameter + 'px';
+            layer.appendChild(halo);
+        });
     }
 
     function _applyPendingHighlight() {
