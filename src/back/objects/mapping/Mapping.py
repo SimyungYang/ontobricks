@@ -24,6 +24,7 @@ from back.core.logging import get_logger
 from back.core.w3c.rdf_utils import uri_local_name
 from back.core.errors import InfrastructureError, ValidationError
 from back.objects.session import is_valid_session_id
+from back.objects.mapping.ChunkMappingCollector import ChunkMappingCollector
 
 logger = get_logger(__name__)
 
@@ -329,14 +330,10 @@ class Mapping:
                     chunk_errors.append(f"Chunk {chunk_num}: {agent_result.error}")
                     continue
 
-                for em in agent_result.entity_mappings:
-                    uri = em.get("ontology_class") or em.get("class_uri", "")
-                    if uri and uri in chunk_entity_uris:
-                        entity_mapping_by_uri[uri] = em
-                for rm in agent_result.relationship_mappings:
-                    uri = rm.get("property", "")
-                    if uri and uri in chunk_rel_uris:
-                        rel_mapping_by_uri[uri] = rm
+                ChunkMappingCollector.collect(agent_result.entity_mappings, ("ontology_class", "class_uri"),
+                                              chunk_entity_uris, entity_mapping_by_uri)
+                ChunkMappingCollector.collect(agent_result.relationship_mappings, ("property",),
+                                              chunk_rel_uris, rel_mapping_by_uri)
 
                 all_steps.extend(agent_result.steps)
                 total_iterations += agent_result.iterations
