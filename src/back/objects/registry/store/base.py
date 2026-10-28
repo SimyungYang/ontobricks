@@ -774,7 +774,7 @@ class RegistryStore(ABC):
 
     @abstractmethod
     def load_global_config(self) -> Dict[str, Any]:
-        """Return the merged global-config blob. Empty dict when unset."""
+        """Return the merged global-config blob. Empty dict when unset; raises on read errors."""
 
     @abstractmethod
     def save_global_config(self, updates: Dict[str, Any]) -> Tuple[bool, str]:

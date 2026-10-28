@@ -36,3 +36,42 @@ Modified files:
 
 Test result:
 uv run --frozen pytest -q tests/units/front -> 1783 passed.
+
+================================================================================
+## Lakebase registry store: global-config read errors are raised, not hidden
+================================================================================
+
+Context:
+After yesterday's GlobalConfigService fix the build page still showed the
+graph DB under the registry schema, and the branding still fell back to the
+default title. The Lakebase compute suspends after 300 s idle. While it woke,
+LakebaseRegistryStore.load_global_config caught the read error, logged it at
+DEBUG and returned {}. GlobalConfigService therefore saw "no config stored"
+instead of a failure, and cached the empty blob for the full TTL; the
+failed-read retry and stale-cache paths never ran.
+save_global_config merged its updates into that {} too, so a save during
+the window could have replaced the stored config.
+
+Changes:
+
+1. src/back/objects/registry/store/lakebase/GlobalConfig.py
+   - load_global_config logs read errors at WARNING and re-raises them.
+   - It returns {} only when no row exists for the registry.
+   - save_global_config now fails (False, error) when that read fails,
+     instead of writing updates merged into {}.
+2. src/back/objects/registry/store/base.py
+   The abstract contract states that read errors raise. Other callers
+   (GitHubConfig, GitHubMirror, health probes) already catch exceptions.
+3. tests/units/registry/test_registry_store.py
+   New TestLakebaseGlobalConfigReadErrors: the read error is raised, a save
+   whose read fails does not write, and a missing row is {}.
+
+Modified files:
+- src/back/objects/registry/store/lakebase/GlobalConfig.py
+- src/back/objects/registry/store/base.py
+- tests/units/registry/test_registry_store.py
+- changelogs/v0.9.0/simyung-yang_2026-10-28.log
+
+Test result:
+uv run --frozen pytest -q tests/units/registry tests/units/settings
+tests/units/core/test_health.py tests/units/architecture -> 1794 passed.

@@ -31,8 +31,14 @@ class GlobalConfig:
     """Warehouse and engine JSON blob; strips legacy schedule keys."""
 
     def load_global_config(self) -> Dict[str, Any]:
+        """Return the stored config, ``{}`` when no row exists.
+
+        Read errors are raised, not turned into ``{}``: callers must not
+        mistake an unreachable database (e.g. a compute waking from
+        scale-to-zero) for "no config", or cache / merge-save the empty blob.
+        """
+        psycopg, dict_row = _require_psycopg()
         try:
-            psycopg, dict_row = _require_psycopg()
             with self._connect() as conn, conn.cursor(row_factory=dict_row) as cur:
                 cur.execute(
                     f"""
@@ -42,19 +48,19 @@ class GlobalConfig:
                     (self._registry(),),
                 )
                 row = cur.fetchone()
-            if not row:
-                return {}
-            data = dict(row["config"] or {})
-            # Schedules live in their own table on Lakebase (``schedules``),
-            # their history in ``schedule_runs``. Strip every legacy schedule
-            # key so the JSONB blob is the single source of truth only for
-            # instance-wide settings.
-            for legacy in _legacy_schedule_keys():
-                data.pop(legacy, None)
-            return data
-        except Exception as exc:  # noqa: BLE001
-            logger.debug("load_global_config failed: %s", exc)
+        except Exception as exc:
+            logger.warning("load_global_config failed: %s", exc)
+            raise
+        if not row:
             return {}
+        data = dict(row["config"] or {})
+        # Schedules live in their own table on Lakebase (``schedules``),
+        # their history in ``schedule_runs``. Strip every legacy schedule
+        # key so the JSONB blob is the single source of truth only for
+        # instance-wide settings.
+        for legacy in _legacy_schedule_keys():
+            data.pop(legacy, None)
+        return data
 
     def save_global_config(self, updates: Dict[str, Any]) -> Tuple[bool, str]:
         try:

@@ -2048,3 +2048,68 @@ class TestLakebaseAllAnalyticsRunsSql:
         )
 
         assert store.load_all_graph_analytics_runs() == ([], 0)
+
+
+class TestLakebaseGlobalConfigReadErrors:
+    """A failed global-config read must surface, not look like "no config".
+
+    Regression: while the Lakebase compute woke from scale-to-zero the read
+    failed, ``load_global_config`` returned ``{}``, and GlobalConfigService
+    cached that as a valid empty config — graph schema and branding vanished
+    for minutes, and a save would have merged updates into ``{}``.
+    """
+
+    @staticmethod
+    def _failing(monkeypatch):
+        from contextlib import contextmanager
+
+        store = _make_lakebase_store(monkeypatch)
+        monkeypatch.setattr(store, "_registry", lambda: "rid-1")
+
+        @contextmanager
+        def broken_connect():
+            raise RuntimeError("connection refused (compute waking)")
+            yield  # pragma: no cover
+
+        monkeypatch.setattr(store, "_connect", broken_connect)
+        return store
+
+    def test_read_error_is_raised(self, monkeypatch):
+        store = self._failing(monkeypatch)
+        with pytest.raises(RuntimeError, match="connection refused"):
+            store.load_global_config()
+
+    def test_save_does_not_write_when_the_read_fails(self, monkeypatch):
+        from contextlib import contextmanager
+
+        store = _make_lakebase_store(monkeypatch)
+        monkeypatch.setattr(store, "_registry", lambda: "rid-1")
+        writes = _ScriptedCursor([])
+        calls = {"n": 0}
+
+        @contextmanager
+        def flaky_connect():
+            calls["n"] += 1
+            if calls["n"] == 1:  # the read hits the waking compute
+                raise RuntimeError("connection refused (compute waking)")
+            yield _ScriptedConn(writes)  # a later write would succeed
+
+        monkeypatch.setattr(store, "_connect", flaky_connect)
+        ok, msg = store.save_global_config({"warehouse_id": "new"})
+        assert ok is False
+        assert "connection refused" in msg
+        assert not any("INSERT" in sql for sql, _ in writes.executed)
+
+    def test_missing_row_is_an_empty_config(self, monkeypatch):
+        from contextlib import contextmanager
+
+        store = _make_lakebase_store(monkeypatch)
+        monkeypatch.setattr(store, "_registry", lambda: "rid-1")
+        cur = _ScriptedCursor([{"contains": "global_config", "fetchone": None}])
+
+        @contextmanager
+        def fake_connect():
+            yield _ScriptedConn(cur)
+
+        monkeypatch.setattr(store, "_connect", fake_connect)
+        assert store.load_global_config() == {}
