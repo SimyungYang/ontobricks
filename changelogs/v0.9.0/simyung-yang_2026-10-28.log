@@ -102,3 +102,34 @@ Modified files:
 
 Test result:
 uv run --frozen pytest -q tests/units/front -> 1786 passed.
+
+## Share the M2M OAuth token across DatabricksAuth instances
+
+Context:
+Routes build a new DatabricksAuth per request, and the M2M token was cached
+only on the instance. In Databricks Apps almost every request therefore made
+its own round trip to /oidc/v1/token (21 token requests for 14 HTTP requests
+in a live log sample), adding latency in front of fast Lakebase reads.
+
+Changes:
+1. src/back/core/databricks/DatabricksAuth.py
+   - New class-level _oauth_token_cache keyed by (host, client_id), guarded
+     by _oauth_token_lock so concurrent requests fetch one token, not many.
+   - get_oauth_token checks the instance cache, then the shared cache, and
+     only then calls the new _request_oauth_token (the former request body).
+2. tests/units/auth/test_auth.py
+   - New: a second instance reuses the first instance's token; an expired
+     shared token is refetched; tokens stay separate per client_id.
+   - The refreshed-token SQL test now advances the clock instead of editing
+     the instance timestamp, so it also covers the shared cache.
+3. tests/conftest.py
+   New autouse fixture clears the shared token cache around every test.
+
+Modified files:
+- src/back/core/databricks/DatabricksAuth.py
+- tests/units/auth/test_auth.py
+- tests/conftest.py
+- changelogs/v0.9.0/simyung-yang_2026-10-28.log
+
+Test result:
+uv run --frozen pytest -q tests/units/auth/test_auth.py tests/units/test_user_agent.py -> 63 passed.

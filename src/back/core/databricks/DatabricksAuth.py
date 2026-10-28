@@ -43,6 +43,12 @@ class DatabricksAuth:
     _cloud_fetch_resolve_lock = threading.RLock()
     _resolving_cloud_fetch: bool = False
 
+    # Process-wide M2M token cache: { (host, client_id): (token, ts) }.
+    # Instances are built per request, so an instance-only cache would
+    # fetch a new token from the OIDC endpoint on almost every request.
+    _oauth_token_cache: Dict[Tuple[str, str], Tuple[str, float]] = {}
+    _oauth_token_lock = threading.Lock()
+
     @staticmethod
     def is_databricks_app() -> bool:
         """Return *True* when running inside a Databricks App.
@@ -234,18 +240,31 @@ class DatabricksAuth:
     def get_oauth_token(self) -> str:
         """Obtain (or return cached) M2M OAuth access token.
 
-        The token is cached for ``_OAUTH_TOKEN_TTL`` seconds.
+        The token is cached for ``_OAUTH_TOKEN_TTL`` seconds, on the instance
+        and process-wide per ``(host, client_id)``.
         """
         now = time.time()
         if self._oauth_token and (now - self._oauth_token_ts) < _OAUTH_TOKEN_TTL:
             return self._oauth_token
 
-        import requests
-
         if not self.host:
             raise ValidationError("DATABRICKS_HOST is not configured")
 
         host = DatabricksAuth.normalize_host(self.host)
+        key = (host, self.client_id)
+        with DatabricksAuth._oauth_token_lock:
+            cached = DatabricksAuth._oauth_token_cache.get(key)
+            if cached and (time.time() - cached[1]) < _OAUTH_TOKEN_TTL:
+                self._oauth_token, self._oauth_token_ts = cached
+                return self._oauth_token
+            token = self._request_oauth_token(host)
+            DatabricksAuth._oauth_token_cache[key] = (token, self._oauth_token_ts)
+            return token
+
+    def _request_oauth_token(self, host: str) -> str:
+        """Fetch a fresh M2M token from the workspace OIDC endpoint."""
+        import requests
+
         token_url = f"{host}/oidc/v1/token"
         logger.info("Requesting OAuth token from: %s", token_url)
 

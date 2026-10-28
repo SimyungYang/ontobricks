@@ -139,6 +139,55 @@ class TestGetOauthToken:
 
         assert auth.get_oauth_token() == "cached-token"
 
+    @staticmethod
+    def _app_auth(client_id="cid"):
+        auth = DatabricksAuth(host="https://ws.databricks.com", token="")
+        auth.client_id = client_id
+        auth.client_secret = "csec"
+        return auth
+
+    @staticmethod
+    def _token_response(token):
+        response = MagicMock()
+        response.json.return_value = {"access_token": token}
+        response.raise_for_status = MagicMock()
+        return response
+
+    @patch("requests.post")
+    def test_new_instance_reuses_token_from_earlier_instance(
+        self, mock_post, monkeypatch
+    ):
+        _clear_databricks_env(monkeypatch)
+        mock_post.return_value = self._token_response("shared-token")
+
+        assert self._app_auth().get_oauth_token() == "shared-token"
+        assert self._app_auth().get_oauth_token() == "shared-token"
+        mock_post.assert_called_once()
+
+    @patch("requests.post")
+    def test_refetches_when_shared_token_expired(self, mock_post, monkeypatch):
+        _clear_databricks_env(monkeypatch)
+        mock_post.side_effect = [
+            self._token_response("old-token"),
+            self._token_response("new-token"),
+        ]
+        self._app_auth().get_oauth_token()
+        key = ("https://ws.databricks.com", "cid")
+        DatabricksAuth._oauth_token_cache[key] = ("old-token", 0.0)
+
+        assert self._app_auth().get_oauth_token() == "new-token"
+
+    @patch("requests.post")
+    def test_keeps_tokens_separate_per_client_id(self, mock_post, monkeypatch):
+        _clear_databricks_env(monkeypatch)
+        mock_post.side_effect = [
+            self._token_response("token-a"),
+            self._token_response("token-b"),
+        ]
+
+        assert self._app_auth("cid-a").get_oauth_token() == "token-a"
+        assert self._app_auth("cid-b").get_oauth_token() == "token-b"
+
     def test_raises_when_host_missing(self, monkeypatch):
         _clear_databricks_env(monkeypatch)
         auth = DatabricksAuth(host="https://ws.databricks.com", token="")
@@ -249,8 +298,9 @@ class TestGetSqlConnectionParams:
         headers = auth.get_sql_connection_params()["credentials_provider"]()
         assert headers() == {"Authorization": "Bearer tok-1"}
 
-        auth._oauth_token_ts -= 55 * 60  # the statement has now run 55 minutes
-        assert headers() == {"Authorization": "Bearer tok-2"}
+        later = time.time() + 55 * 60  # the statement has now run 55 minutes
+        with patch("back.core.databricks.DatabricksAuth.time.time", return_value=later):
+            assert headers() == {"Authorization": "Bearer tok-2"}
 
     @patch.object(DatabricksAuth, "can_use_cloud_fetch", return_value=False)
     def test_legacy_use_sea_flag_selects_kernel_backend(self, _mock_cf, monkeypatch):

@@ -65,6 +65,16 @@ def isolate_databricks_cli_auth(request):
         yield
 
 
+@pytest.fixture(autouse=True)
+def clear_shared_oauth_token_cache():
+    """Keep the process-wide M2M token cache from leaking between tests."""
+    from back.core.databricks.DatabricksAuth import DatabricksAuth
+
+    DatabricksAuth._oauth_token_cache.clear()
+    yield
+    DatabricksAuth._oauth_token_cache.clear()
+
+
 @pytest.fixture
 def client():
     """Create FastAPI test client."""
