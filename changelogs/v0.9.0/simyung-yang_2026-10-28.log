@@ -75,3 +75,30 @@ Modified files:
 Test result:
 uv run --frozen pytest -q tests/units/registry tests/units/settings
 tests/units/core/test_health.py tests/units/architecture -> 1794 passed.
+
+## Read-only checkboxes keep their checked state
+
+Context:
+On a PUBLISHED / IN-REVIEW version (or for viewers / lock-blocked editors)
+the generic read-only rule forced background-color #e9ecef on every input.
+Bootstrap paints a checked .form-check-input as a white tick on the primary
+background-color, so the override left a white tick on light grey and checked
+boxes (Mapping > Information entity list, MCP tool policy) read as unchecked.
+
+Changes:
+1. src/front/static/global/css/permissions.css
+   - The grey-fill input rule now skips checkbox and radio inputs.
+   - A new rule freezes checkbox / radio inputs with pointer-events and
+     opacity only, using the same exemptions as the generic rule.
+   - The MCP policy controls (.js-mcp-tool, .js-mcp-context,
+     #mcpToolsSelectAll) drop the grey fill for the same reason.
+2. tests/units/front/test_read_only_checkbox_state.py
+   New: grey fill never targets check inputs, and check inputs stay frozen.
+
+Modified files:
+- src/front/static/global/css/permissions.css
+- tests/units/front/test_read_only_checkbox_state.py
+- changelogs/v0.9.0/simyung-yang_2026-10-28.log
+
+Test result:
+uv run --frozen pytest -q tests/units/front -> 1786 passed.
