@@ -27,6 +27,18 @@ def _strip_backticks(value: str) -> str:
     return value
 
 
+def _missing_attributes(declared: set, mapping: dict) -> List[str]:
+    """Ontology attributes the agent neither mapped nor declared unmapped (user exclusions excepted).
+
+    The submit contract says every attribute lands in ``attribute_mappings`` or
+    ``unmapped_attributes``. Without this check a silently skipped attribute was
+    reported back as "0 unmapped", so the agent never fixed it.
+    """
+    unmapped = {u.get("name", "") if isinstance(u, dict) else str(u) for u in mapping["unmapped_attributes"]}
+    covered = set(mapping["attribute_mappings"]) | unmapped | set(mapping.get("excluded_attributes", []))
+    return sorted(declared - covered)
+
+
 def tool_submit_entity_mapping(
     ctx: ToolContext,
     *,
@@ -144,16 +156,6 @@ def tool_submit_entity_mapping(
     if existing_excl:
         mapping["excluded_attributes"] = existing_excl
 
-    logger.debug(
-        "tool_submit_entity_mapping: '%s' — ID=%s, Label=%s, attrs=%d, excl=%d, unmapped=%d",
-        class_name,
-        id_column,
-        label_column,
-        len(mapping["attribute_mappings"]),
-        len(existing_excl),
-        len(normalised_unmapped),
-    )
-
     if existing_idx >= 0:
         ctx.entity_mappings[existing_idx] = mapping
         logger.debug(
@@ -166,6 +168,9 @@ def tool_submit_entity_mapping(
 
     mapped_attrs = len(mapping["attribute_mappings"])
     unmapped_count = len(mapping["unmapped_attributes"])
+    missing = _missing_attributes(declared_attrs, mapping)
+    if missing:
+        logger.warning("tool_submit_entity_mapping: '%s' — %d attribute(s) left out: %s", class_name, len(missing), missing)
     logger.info(
         "tool_submit_entity_mapping: '%s' recorded — ID=%s, Label=%s, %d attr(s) mapped, %d unmapped",
         class_name,
@@ -183,6 +188,10 @@ def tool_submit_entity_mapping(
             "attributes_mapped": mapped_attrs,
             "attributes_unmapped": unmapped_count,
             "total_entity_mappings": len(ctx.entity_mappings),
+            **({"missing_attributes": missing, "action_required": (
+                "These ontology attributes are in neither attribute_mappings nor unmapped_attributes. "
+                "Add their columns to the SELECT and resubmit, or list them in unmapped_attributes.")}
+               if missing else {}),
         }
     )
 

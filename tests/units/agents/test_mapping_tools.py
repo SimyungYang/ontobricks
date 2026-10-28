@@ -93,3 +93,41 @@ class TestRelationshipMappingDedup:
         stored_sql = ctx.relationships[0]["sql_query"]
         assert "AS source_id" in stored_sql
         assert "AS target_id" in stored_sql
+
+
+@pytest.mark.unit
+class TestEntityMappingMissingAttributes:
+    """A silently skipped ontology attribute is reported back to the agent."""
+
+    URI = "http://test.org/ontology#Claim"
+
+    def _submit(self, ctx, **kwargs):
+        import json
+
+        ctx.ontology = {"entities": [{"uri": self.URI, "name": "Claim",
+                                      "attributes": ["reportNo", "grade", "market"]}]}
+        return json.loads(tool_submit_entity_mapping(
+            ctx, class_uri=self.URI, class_name="Claim", id_column="ID", label_column="Label",
+            sql_query="SELECT claim_id AS ID, claim_id AS Label, grade, market FROM c.s.claim", **kwargs))
+
+    def test_skipped_attribute_is_listed(self, ctx):
+        result = self._submit(ctx, attribute_mappings={"grade": "grade", "market": "market"})
+        assert result["missing_attributes"] == ["reportNo"]
+
+    def test_skipped_attribute_asks_for_a_resubmit(self, ctx):
+        result = self._submit(ctx, attribute_mappings={"grade": "grade", "market": "market"})
+        assert "resubmit" in result["action_required"]
+
+    def test_declared_unmapped_attribute_is_not_missing(self, ctx):
+        result = self._submit(ctx, attribute_mappings={"grade": "grade", "market": "market"},
+                              unmapped_attributes=[{"name": "reportNo", "reason": "no column"}])
+        assert "missing_attributes" not in result
+
+    def test_user_excluded_attribute_is_not_missing(self, ctx):
+        ctx.entity_mappings = [{"ontology_class": self.URI, "excluded_attributes": ["reportNo"]}]
+        result = self._submit(ctx, attribute_mappings={"grade": "grade", "market": "market"})
+        assert "missing_attributes" not in result
+
+    def test_complete_mapping_has_no_missing_list(self, ctx):
+        result = self._submit(ctx, attribute_mappings={"reportNo": "report_no", "grade": "grade", "market": "market"})
+        assert "missing_attributes" not in result

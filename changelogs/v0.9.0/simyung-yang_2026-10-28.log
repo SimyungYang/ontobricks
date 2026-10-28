@@ -162,6 +162,31 @@ tests/units/mapping/test_chunk_mapping_collector.py
 
 Tests: `uv run --frozen pytest -q tests/units/mapping tests/units/architecture` — 204 passed.
 
+## fix(agents): report ontology attributes the agent left out of an entity mapping
+
+Context: Auto-Map mapped two subclasses with 30 of 31 attributes (both skipped
+`reportDocumentNo` while writing a 31-column SELECT). `submit_entity_mapping`
+answered "attributes_unmapped: 0" because it only counted what the agent itself
+declared unmapped, so the agent stopped, and every re-run reproduced the gap.
+
+Changes:
+1. `src/agents/tools/mapping.py` — new `_missing_attributes` helper: declared
+   attributes minus mapped, declared-unmapped and user-excluded ones.
+   `tool_submit_entity_mapping` returns `missing_attributes` plus an
+   `action_required` hint (resubmit with the columns, or list them as
+   unmapped) and logs a warning; the redundant DEBUG log line is removed
+   (the same facts are logged at INFO), so the function stays under its
+   size baseline.
+2. `tests/units/agents/test_mapping_tools.py` — `TestEntityMappingMissingAttributes`:
+   skipped attribute listed, resubmit hint present, declared-unmapped and
+   user-excluded attributes not reported, complete mapping has no list.
+
+Modified files: src/agents/tools/mapping.py, tests/units/agents/test_mapping_tools.py
+
+Tests: `uv run --frozen pytest -q tests/units/agents/test_mapping_tools.py tests/units/mapping tests/units/architecture` — 212 passed.
+No eval delta: the change only adds feedback to a tool result (no prompt edit);
+there is no auto-assign eval runner in the repo yet.
+
 Full suite: `uv run --frozen pytest -q -m "not scenario"` — 9875 passed, 2 failed
 (`tests/units/settings/test_deploy_instance_id.py`, caused by the worktree's local
 DEFAULT_INSTANCE_ID; both pass with the committed deploy.config.sh).
