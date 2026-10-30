@@ -84,6 +84,18 @@ class TestCallLlmWithRetry:
         resp = call_llm_with_retry("http://llm/api", {}, {}, timeout=10)
         assert resp.status_code == 200
 
+    @pytest.mark.parametrize("status", [500, 502, 504])
+    @patch("agents.llm_utils.time.sleep")
+    @patch("agents.llm_utils.requests.post")
+    def test_retry_on_transient_gateway_error(self, mock_post, mock_sleep, status):
+        mock_post.side_effect = [
+            _make_resp(status, b"gateway hiccup"),
+            _make_resp(200, b"ok"),
+        ]
+
+        resp = call_llm_with_retry("http://llm/api", {}, {}, timeout=10)
+        assert resp.status_code == 200
+
     @patch("agents.llm_utils.time.sleep")
     @patch("agents.llm_utils.requests.post")
     def test_timeout_retry(self, mock_post, mock_sleep):

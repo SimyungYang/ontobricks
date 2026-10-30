@@ -93,10 +93,10 @@ _REQUIRED_STAGED_CONSTRAINT_KINDS = {
     "stage_no_rewrite_after_reject",
     "stage_no_one_shot_default",
     "empty_candidates_when_fully_anchored",
-    # Live id-bracketing bug fix (this revision): a bracketed id (the exact
-    # live-bug shape, e.g. `[cand-6]`) must always be rejected reject-only —
-    # locked in so this coverage cannot silently disappear from the dataset.
-    "rejects_bracketed_id_reference",
+    # Live id-bracketing bug: a bracketed id (the exact live-bug shape, e.g.
+    # `[cand-6]`) must resolve to its bare closed id — locked in so this
+    # coverage cannot silently disappear from the dataset.
+    "resolves_bracketed_id_reference",
     "drops_inverse_relations",
     "collapses_passive_paraphrase",
     "collapses_inverse_paraphrase",

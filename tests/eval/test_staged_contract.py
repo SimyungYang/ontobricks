@@ -202,7 +202,7 @@ class TestZeroNewCandidatesWhenFullyAnchoredCheck:
         )
 
 
-class TestRejectsBracketedIdReferenceCheck:
+class TestResolvesBracketedIdReferenceCheck:
     """Live bug regression (id-bracketing): the old catalog rendered ids in
     brackets (``[cand-6]``) and the model copied the bracketed token
     verbatim as domain/range, which ``validate_references`` (comparing
@@ -211,29 +211,28 @@ class TestRejectsBracketedIdReferenceCheck:
     never fall through the "unmapped constraint kind" neutral-1.0 default."""
 
     def test_kind_is_mapped_to_a_real_behavioural_check(self):
-        assert "rejects_bracketed_id_reference" in staged_contract._CHECKS
+        assert "resolves_bracketed_id_reference" in staged_contract._CHECKS
 
     def test_check_passes_for_the_real_completion_run(self):
         example = _load_example("staged-bracketed-id-rejection-001")
-        constraint = _constraint(example, "rejects_bracketed_id_reference")
-        check = staged_contract._CHECKS["rejects_bracketed_id_reference"]
+        constraint = _constraint(example, "resolves_bracketed_id_reference")
+        check = staged_contract._CHECKS["resolves_bracketed_id_reference"]
         with patch.object(
             staged, "infer_relations", wraps=staged.infer_relations
         ) as spy:
             assert check(example, constraint) is True
         assert spy.call_count == 1
 
-    def test_check_fails_when_the_bracketed_id_is_silently_accepted(self):
-        """Pins that the check actually inspects the rejection — a
-        regression that silently strips brackets (masking the fix) or
-        otherwise stops rejecting must be caught, not masked by a neutral
-        pass."""
+    def test_check_fails_when_the_bracketed_reference_is_lost(self):
+        """Pins that the check inspects the resolved relation — a regression
+        that drops the bracketed reference instead of resolving it must be
+        caught, not masked by a neutral pass."""
         example = _load_example("staged-bracketed-id-rejection-001")
-        constraint = _constraint(example, "rejects_bracketed_id_reference")
+        constraint = _constraint(example, "resolves_bracketed_id_reference")
         fake_result = staged.CompletionResult(
             success=True, substage="relations", result={"relations": []}
         )
-        check = staged_contract._CHECKS["rejects_bracketed_id_reference"]
+        check = staged_contract._CHECKS["resolves_bracketed_id_reference"]
         with patch.object(staged, "infer_relations", return_value=fake_result):
             assert check(example, constraint) is False
 
@@ -241,6 +240,6 @@ class TestRejectsBracketedIdReferenceCheck:
         import run_agent_owl_generator as runner
 
         assert (
-            "rejects_bracketed_id_reference"
+            "resolves_bracketed_id_reference"
             in runner._REQUIRED_STAGED_CONSTRAINT_KINDS
         )

@@ -236,6 +236,17 @@ def build_continuation_user_prompt(substage: str, emitted_count: int) -> str:
     )
 
 
+def build_compact_detection_retry_prompt(max_candidates: int) -> str:
+    """Re-ask for the detection JSON in compact form after a length truncation."""
+    return (
+        "Your previous answer was cut off by the output limit. Re-emit the "
+        "COMPLETE candidate_entities JSON in compact form: at most "
+        f"{max_candidates} entities, a description of at most 12 words, at "
+        "most one evidence item per entity with an excerpt under 15 words, "
+        "and no alternate_labels unless they are true synonyms. JSON only."
+    )
+
+
 def build_truncated_page_retry_prompt(substage: str) -> str:
     """Re-ask for the SAME page with fewer items after a length truncation."""
     return (

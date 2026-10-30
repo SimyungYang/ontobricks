@@ -170,15 +170,35 @@ def _unwrap_double_encoded(value: Any, *, expected: type) -> Any:
     return decoded if isinstance(decoded, expected) else value
 
 
+def _embedded_json_object(text: str) -> Optional[Dict[str, Any]]:
+    """First JSON object embedded in *text*, or ``None``.
+
+    Endpoints that reject ``response_format`` (newer Anthropic models behind
+    the AI Gateway) answer in free text, often with a short preamble or a
+    fenced block after it. Only a complete, valid object is ever returned.
+    """
+    decoder = json.JSONDecoder()
+    for match in re.finditer(r"\{", text):
+        try:
+            value, _ = decoder.raw_decode(text, match.start())
+        except ValueError:
+            continue
+        if isinstance(value, dict):
+            return value
+    return None
+
+
 def parse_json_object(text: str) -> Dict[str, Any]:
-    """Parse *text* (fence-tolerant) into a JSON object or reject it."""
+    """Parse *text* (fence- and preamble-tolerant) into a JSON object or reject it."""
     stripped = _strip_fences(text).strip()
     if not stripped:
         raise SchemaValidationError("empty structured output")
     try:
         data = json.loads(stripped)
     except (ValueError, TypeError) as exc:
-        raise SchemaValidationError(f"output is not valid JSON: {exc}") from exc
+        data = _embedded_json_object(stripped)
+        if data is None:
+            raise SchemaValidationError(f"output is not valid JSON: {exc}") from exc
     if isinstance(data, str):
         # Whole-payload double-encoding quirk (see module note above): the
         # wire content was itself a JSON string whose value is the real
@@ -614,3 +634,71 @@ def axioms_referenced_ids(result: Dict[str, Any]) -> Set[str]:
             if value:
                 ids.add(str(value))
     return ids
+
+
+# ---------------------------------------------------------------------------
+# Entity closure filtering (per item, not per substage)
+# ---------------------------------------------------------------------------
+#
+# Without a transport-level enum the model sometimes writes a valid entity
+# as ``[id]``, ``"id"`` or by its label. Rejecting the whole substage for one
+# such item failed every large Generate run, so each reference is resolved
+# deterministically to a bare closed id (exact id, then the id with wrapping
+# brackets/quotes removed, then an exact normalized label), and an item that
+# still points outside the closure is dropped and reported. Nothing outside
+# the closed set can ever reach the merge.
+
+_REFERENCE_FIELDS = {
+    "relations": ("domain", "range"),
+    "attributes": ("domain",),
+    "axioms": ("subject", "object"),
+}
+_ID_WRAPPERS = "[]()<>\"'` "
+
+
+def _reference_lookup(entities: Iterable[GenerateEntity]) -> Dict[str, str]:
+    lookup: Dict[str, str] = {}
+    for entity in entities:
+        for label in entity.normalized_labels():
+            lookup.setdefault(label, entity.id)
+    for entity in entities:
+        lookup[entity.id] = entity.id
+    return lookup
+
+
+def _resolve_reference(value: Any, lookup: Mapping[str, str]) -> Optional[str]:
+    raw = str(value or "").strip()
+    for candidate in (raw, raw.strip(_ID_WRAPPERS)):
+        if candidate in lookup:
+            return lookup[candidate]
+        normalized = re.sub(r"\s+", " ", candidate).casefold()
+        if normalized in lookup:
+            return lookup[normalized]
+    return None
+
+
+def keep_closed_references(
+    result: Dict[str, Any],
+    substage: str,
+    entities: Sequence[GenerateEntity],
+) -> tuple[Dict[str, Any], List[str]]:
+    """Resolve every entity reference in *result*; drop items left outside.
+
+    Returns the cleaned result (same shape) and one warning per dropped item.
+    """
+    fields = _REFERENCE_FIELDS[substage]
+    lookup = _reference_lookup(entities)
+    kept: List[Dict[str, Any]] = []
+    warnings: List[str] = []
+    for item in result.get(substage, []):
+        resolved = {name: _resolve_reference(item.get(name), lookup) for name in fields}
+        unknown = [str(item.get(name)) for name, value in resolved.items() if value is None]
+        if unknown:
+            name = item.get("label") or item.get("kind") or "?"
+            warnings.append(
+                f"{substage}: dropped {name!s} (unknown entity {', '.join(unknown)})"
+            )
+            continue
+        kept.append({**item, **resolved})
+    return {**result, substage: kept}, warnings
+

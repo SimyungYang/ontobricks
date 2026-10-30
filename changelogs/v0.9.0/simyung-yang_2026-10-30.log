@@ -47,3 +47,97 @@ Test result:
 uv run --frozen pytest -q tests/units/front tests/units/architecture
 tests/units/api/test_ui_rendering.py -> 1921 passed.
 Local TestClient: all eight vendor files return 200 with JS/CSS content types.
+
+## Ontology Generate works across models and never fails the whole run for one bad page
+
+Context:
+On LGIT every Generate run failed (2026-10-27 and 2026-10-30, 4/4 traces in
+/Shared/ontobricks-agents). `system.ai.claude-sonnet-5-5` on the AI Gateway
+rejects `response_format` with "Structured output is not supported for this
+model because its translation requires forced tool use, which newer
+Anthropic models reject." That phrase was not recognised, so nothing was
+retried; once stripped, the endpoint then rejects `temperature`, and only one
+retry was allowed. Separately, upstream issue #173 (large table sets, wide
+tables and large documents overflow the ~8k completion cap) is addressed by
+upstream PR #206, which is still open.
+
+Upstream PR applied:
+- databrickslabs/ontobricks PR #206 "fix(agents): page stage-3 completion
+  output to fit the completion cap" (head 03694b4f, author CactusQuill),
+  cherry-picked unchanged as commit afa65589 (`git cherry-pick -x`). It adds
+  `has_more` paging to relations / attributes / axioms, a smaller-page retry
+  on truncation, a 16-page budget, SPEC/eval rows and its own changelog
+  (changelogs/v0.9.0/Cactusquill_2026-10-24.log). Applied first so this fork
+  stays aligned with upstream; the changes below sit on top of it.
+
+Changes (this fork, on top of PR #206):
+1. src/agents/engine_base.py
+   - The unsupported-param matcher knows the structured-output phrase.
+   - `call_serving_endpoint` strips and bans rejected params in a loop
+     (response_format, then temperature) until the request is accepted,
+     via the new `_strip_rejected_params` helper.
+2. src/agents/llm_utils.py
+   - `call_llm_with_retry` also retries HTTP 500/502/504 (was 429/503).
+3. src/agents/agent_owl_generator/schemas.py
+   - `parse_json_object` extracts the first complete JSON object from a
+     prose preamble or a fenced block when the answer is not pure JSON.
+   - New `keep_closed_references`: resolves each entity reference (exact id,
+     id without wrapping brackets/quotes, exact normalized label) within the
+     closed set and drops items still outside, with one warning each.
+4. src/agents/agent_owl_generator/staged.py
+   - Each completion page is closure-filtered instead of rejected; dropped
+     items are reported in `result["warnings"]`.
+   - New `_keep_partial`: a page failing after earlier pages produced items
+     (transport error, twice-truncated page, malformed page, page budget)
+     ends the substage with those items plus a warning. Only a substage that
+     produced nothing fails; malformed first-page output is still rejected.
+   - Stage-1 finalization moved to `_finalize_detection` and gets ONE compact
+     re-emission on `finish_reason=length`.
+5. src/agents/agent_owl_generator/prompts.py
+   - New `build_compact_detection_retry_prompt`.
+6. tests/units/agents/test_owl_generator_robust_completion.py (new, 23 tests),
+   tests/units/agents/test_agent_engine_base.py (+3),
+   tests/units/agents/test_llm_utils.py (+3)
+7. tests/units/agents/test_owl_generator_staged.py
+   - 8 tests moved to the new contract (dropped instead of rejected, bracketed
+     id resolved, page budget keeps items, detection compact retry).
+8. tests/eval/staged_contract.py, tests/eval/run_agent_owl_generator.py,
+   tests/eval/test_staged_contract.py, tests/eval/datasets/agent_owl_generator/baseline.jsonl,
+   .planning/agents/agent_owl_generator/eval/dataset.jsonl
+   - Kinds renamed: rejects_reference_to_excluded_entity -> drops_reference_to_excluded_entity,
+     rejects_bracketed_id_reference -> resolves_bracketed_id_reference.
+   - Rejection checks now use malformed output (the remaining rejection).
+   - Rows staged-paged-attributes-page-budget-006 / -ghost-ref-007 expect kept items.
+9. .planning/agents/agent_owl_generator/SPEC.md
+   - Two §6 failure-mode rows and a §10 sign-off entry; documents the
+     deliberate change from substage-level reject-only to item-level drop.
+10. tests/units/architecture/baseline.json
+   - Ratchet tightened (detect_entities 245 -> 191, _run_completion 119 -> 118,
+     plus entries that had already shrunk).
+
+Modified files:
+- src/agents/engine_base.py
+- src/agents/llm_utils.py
+- src/agents/agent_owl_generator/schemas.py
+- src/agents/agent_owl_generator/staged.py
+- src/agents/agent_owl_generator/prompts.py
+- tests/units/agents/test_owl_generator_robust_completion.py
+- tests/units/agents/test_agent_engine_base.py
+- tests/units/agents/test_llm_utils.py
+- tests/units/agents/test_owl_generator_staged.py
+- tests/eval/staged_contract.py
+- tests/eval/run_agent_owl_generator.py
+- tests/eval/test_staged_contract.py
+- tests/eval/datasets/agent_owl_generator/baseline.jsonl
+- .planning/agents/agent_owl_generator/eval/dataset.jsonl
+- .planning/agents/agent_owl_generator/SPEC.md
+- tests/units/architecture/baseline.json
+- changelogs/v0.9.0/simyung-yang_2026-10-30.log
+
+Test result:
+uv run --frozen pytest -q tests/units/agents tests/eval tests/units/architecture
+tests/units/ontology -> all passed.
+uv run --frozen python tests/eval/run_agent_owl_generator.py -> staged 41/41,
+aggregate 1.000 (threshold 0.950); parsed-corpus aggregate 1.000 (threshold 0.900).
+Live, LGIT system.ai.claude-sonnet-5-5: 40-entity draft -> relations 48,
+attributes 91, axioms 13, 39 s total (previously failed on the first call).

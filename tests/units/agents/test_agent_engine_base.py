@@ -216,6 +216,88 @@ class TestCallServingEndpoint:
         assert "response_format" not in seen_payloads[1]
 
     @patch("agents.engine_base.call_llm_with_retry")
+    def test_structured_output_rejection_strips_response_format(self, mock_retry):
+        # Live LGIT failure (2026-10-27/30, every Generate run): newer
+        # Anthropic models behind the AI Gateway reject json_schema output
+        # with a message that names neither "response_format" nor
+        # "unsupported", so the generic matcher missed it.
+        rejection = MagicMock()
+        rejection.status_code = 400
+        rejection.text = (
+            '{"error_code":"INVALID_PARAMETER_VALUE","message":"INVALID_PARAMETER_VALUE: '
+            "Structured output is not supported for this model because its "
+            'translation requires forced tool use, which newer Anthropic models reject."}'
+        )
+        success_resp = MagicMock()
+        success_resp.json.return_value = {"choices": [{"message": {"content": "{}"}}]}
+        seen_payloads = []
+
+        def _record(_url, _headers, payload, timeout=None):
+            seen_payloads.append(copy.deepcopy(payload))
+            if len(seen_payloads) == 1:
+                raise requests.exceptions.HTTPError(response=rejection)
+            return success_resp
+
+        mock_retry.side_effect = _record
+        response_format = {"type": "json_schema", "json_schema": {"name": "x", "schema": {}}}
+
+        call_serving_endpoint(
+            "https://host", "tok", "structured-output-ep", [],
+            response_format=response_format,
+        )
+
+        assert "response_format" in seen_payloads[0]
+        assert "response_format" not in seen_payloads[1]
+
+    @patch("agents.engine_base.call_llm_with_retry")
+    def test_params_rejected_one_after_another_are_all_stripped(self, mock_retry):
+        # Live LGIT (claude-sonnet-5-5 on the AI Gateway): the endpoint
+        # names one unsupported param per 400 — response_format first, then
+        # temperature on the retry. Each must be stripped in turn.
+        def _rejection(text):
+            resp = MagicMock()
+            resp.status_code = 400
+            resp.text = text
+            return requests.exceptions.HTTPError(response=resp)
+
+        success_resp = MagicMock()
+        success_resp.json.return_value = {"choices": [{"message": {"content": "{}"}}]}
+        seen_payloads = []
+        answers = [
+            _rejection("Structured output is not supported for this model"),
+            _rejection("Model x does not support the temperature parameter."),
+            success_resp,
+        ]
+
+        def _record(_url, _headers, payload, timeout=None):
+            seen_payloads.append(copy.deepcopy(payload))
+            answer = answers[len(seen_payloads) - 1]
+            if isinstance(answer, Exception):
+                raise answer
+            return answer
+
+        mock_retry.side_effect = _record
+        call_serving_endpoint(
+            "https://host", "tok", "two-bans-ep", [],
+            response_format={"type": "json_schema", "json_schema": {"name": "x", "schema": {}}},
+            temperature=0.0,
+        )
+
+        assert len(seen_payloads) == 3
+        assert "response_format" not in seen_payloads[2]
+        assert "temperature" not in seen_payloads[2]
+
+    @patch("agents.engine_base.call_llm_with_retry")
+    def test_a_400_naming_no_strippable_param_is_raised(self, mock_retry):
+        resp = MagicMock()
+        resp.status_code = 400
+        resp.text = "Input is too long for this model."
+        mock_retry.side_effect = requests.exceptions.HTTPError(response=resp)
+        with pytest.raises(requests.exceptions.HTTPError):
+            call_serving_endpoint("https://host", "tok", "too-long-ep", [], temperature=0.0)
+        assert mock_retry.call_count == 1
+
+    @patch("agents.engine_base.call_llm_with_retry")
     def test_response_format_ban_is_cached_for_the_endpoint(self, mock_retry):
         # After one endpoint discovers response_format is unsupported, a
         # later call to the SAME endpoint proactively omits it instead of

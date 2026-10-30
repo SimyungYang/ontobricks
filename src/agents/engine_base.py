@@ -34,10 +34,24 @@ def _unsupported_params(endpoint_name: str) -> set:
     return _UNSUPPORTED_PARAMS.setdefault(endpoint_name, set())
 
 
+# Newer Anthropic models behind the AI Gateway reject json_schema output with
+# "Structured output is not supported for this model ..." — no mention of the
+# parameter name, so it needs its own phrase.
+_PARAM_REJECTION_PHRASES = {
+    "response_format": ("structured output is not supported",),
+}
+
+
+# Optional request fields a model may reject; stripped and banned per endpoint.
+_STRIPPABLE_PARAMS = ("temperature", "response_format")
+
+
 def _looks_unsupported(body_text: str, param: str) -> bool:
     low = (body_text or "").lower()
-    return f"does not support the {param} parameter" in low or (
-        "unsupported" in low and param in low
+    return (
+        f"does not support the {param} parameter" in low
+        or ("unsupported" in low and param in low)
+        or any(phrase in low for phrase in _PARAM_REJECTION_PHRASES.get(param, ()))
     )
 
 
@@ -125,31 +139,39 @@ def call_serving_endpoint(
         payload.get("temperature", "<skipped>"),
     )
 
-    try:
-        resp = call_llm_with_retry(url, headers, payload, timeout=timeout)
-        return resp.json()
-    except requests.exceptions.HTTPError as exc:
-        response = exc.response
-        status = response.status_code if response is not None else None
-        if status != 400:
-            raise
-        body_text = response.text if response is not None else ""
-        # Detect and strip parameters the model rejects, then retry once.
-        dropped: List[str] = []
-        for param in ("temperature", "response_format"):
-            if param in payload and _looks_unsupported(body_text, param):
-                banned.add(param)
-                payload.pop(param, None)
-                dropped.append(param)
-        if not dropped:
-            raise
-        logger.warning(
-            "%s: endpoint rejected unsupported param(s) %s — retrying without them",
-            trace_name,
-            dropped,
-        )
-        resp = call_llm_with_retry(url, headers, payload, timeout=timeout)
-        return resp.json()
+    # Endpoints name one rejected param per 400 (e.g. response_format, then
+    # temperature on the retry), so strip and retry until none is left.
+    for _ in range(len(_STRIPPABLE_PARAMS) + 1):
+        try:
+            return call_llm_with_retry(url, headers, payload, timeout=timeout).json()
+        except requests.exceptions.HTTPError as exc:
+            dropped = _strip_rejected_params(exc, payload, banned)
+            if not dropped:
+                raise
+            logger.warning(
+                "%s: endpoint rejected unsupported param(s) %s — retrying without them",
+                trace_name,
+                dropped,
+            )
+    raise RuntimeError("call_serving_endpoint: unexpected exit")
+
+
+def _strip_rejected_params(
+    exc: requests.exceptions.HTTPError, payload: Dict[str, Any], banned: set
+) -> List[str]:
+    """Remove the params a 400 says the model rejects; return what was removed."""
+    response = exc.response
+    if response is None or response.status_code != 400:
+        return []
+    dropped = [
+        param
+        for param in _STRIPPABLE_PARAMS
+        if param in payload and _looks_unsupported(response.text, param)
+    ]
+    for param in dropped:
+        banned.add(param)
+        payload.pop(param, None)
+    return dropped
 
 
 # =====================================================

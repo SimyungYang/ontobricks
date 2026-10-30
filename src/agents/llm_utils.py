@@ -17,6 +17,8 @@ logger = get_logger(__name__)
 _RATE_LIMIT_RETRIES = 6
 _RATE_LIMIT_BASE_DELAY = 5  # seconds
 _RATE_LIMIT_MAX_DELAY = 60  # cap so we never sleep longer than this
+# Rate limits plus transient gateway / overload errors.
+_RETRYABLE_STATUS = (429, 500, 502, 503, 504)
 
 
 def _get_retry_delay(attempt: int, response: requests.Response = None) -> float:
@@ -38,7 +40,7 @@ def call_llm_with_retry(
     payload: Dict[str, Any],
     timeout: int = 180,
 ) -> requests.Response:
-    """POST to LLM endpoint with retry on 429/503.
+    """POST to LLM endpoint with retry on 429/500/502/503/504.
 
     Retries up to ``_RATE_LIMIT_RETRIES`` times with exponential backoff
     (5 s, 10 s, 20 s, 40 s, 60 s, 60 s) capped at ``_RATE_LIMIT_MAX_DELAY``.
@@ -59,9 +61,10 @@ def call_llm_with_retry(
                 attempt,
                 _RATE_LIMIT_RETRIES,
             )
-            if resp.status_code in (429, 503):
+            if resp.status_code in _RETRYABLE_STATUS:
                 last_exc = requests.exceptions.HTTPError(
-                    f"Rate limit or overload (HTTP {resp.status_code})", response=resp
+                    f"Rate limit, overload or gateway error (HTTP {resp.status_code})",
+                    response=resp,
                 )
                 if attempt < _RATE_LIMIT_RETRIES:
                     delay = _get_retry_delay(attempt, resp)
@@ -91,7 +94,7 @@ def call_llm_with_retry(
             return resp
         except requests.exceptions.HTTPError as exc:
             status = exc.response.status_code if exc.response is not None else None
-            if status in (429, 503) and attempt < _RATE_LIMIT_RETRIES:
+            if status in _RETRYABLE_STATUS and attempt < _RATE_LIMIT_RETRIES:
                 delay = _get_retry_delay(attempt, exc.response)
                 logger.warning(
                     "LLM: HTTP %s — waiting %.0fs before retry %d/%d",

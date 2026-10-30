@@ -165,17 +165,16 @@ class TestDetectEntities:
         assert "ai_parse_document" not in names
         assert "check_owl_pitfalls" not in names
 
-    def test_finalization_truncation_fails_without_reprompt(self):
-        # Reject-only, per this revision's transport-level fix: a
-        # length-truncated FINALIZATION answer fails clearly — it is never
-        # re-prompted for a concise re-emission (that "retry" behaviour was
-        # removed along with the single-phase loop it belonged to).
+    def test_finalization_truncated_twice_fails_clearly(self):
+        # A length-truncated FINALIZATION answer gets ONE compact
+        # re-emission (output-size retry, not a validation rewrite); a
+        # second truncation fails clearly.
         truncated = _answer('{"candidate_entities": [{"canonical', "length")
-        result, mock_llm = _detect([_answer(""), truncated])
+        result, mock_llm = _detect([_answer(""), truncated, truncated])
         assert result.success is False
         assert result.rejected is False
         assert "truncated" in result.error.lower()
-        assert mock_llm.call_count == 2  # gathering + ONE finalization, no re-prompt
+        assert mock_llm.call_count == 3  # gathering + finalization + compact retry
 
     def test_gathering_truncation_is_treated_as_a_gather_stop(self):
         # A truncated GATHERING turn's content is never parsed anyway (see
@@ -409,19 +408,19 @@ class TestInferRelations:
         _, mock_llm = self._run([_answer(payload)])
         assert mock_llm.call_args_list[0].kwargs["tools"] is None
 
-    def test_reference_outside_closure_rejected_no_rewrite(self):
+    def test_reference_outside_closure_is_dropped_no_rewrite(self):
         payload = (
             '{"relations": [{"label": "shipsTo", '
             '"domain": "cand-6", "range": "cls-Ghost-999"}]}'
         )
         result, mock_llm = self._run([_answer(payload)])
-        assert result.success is False
-        assert result.rejected is True
-        assert "cls-Ghost-999" in result.rejection_reason
-        # Reject-only: exactly one LLM call, no rewrite feedback loop.
+        assert result.success is True
+        assert result.result["relations"] == []
+        assert any("cls-Ghost-999" in w for w in result.result["warnings"])
+        # Exactly one LLM call, no rewrite feedback loop.
         assert mock_llm.call_count == 1
 
-    def test_excluded_candidate_reference_rejected(self):
+    def test_excluded_candidate_reference_dropped(self):
         draft = _draft(
             candidates=[
                 GenerateEntity.new_candidate("Carrier", entity_id="cand-6"),
@@ -435,8 +434,8 @@ class TestInferRelations:
             '"domain": "cand-6", "range": "cand-4"}]}'
         )
         result, mock_llm = self._run([_answer(payload)], draft=draft)
-        assert result.rejected is True
-        assert "cand-4" in result.rejection_reason
+        assert result.result["relations"] == []
+        assert any("cand-4" in w for w in result.result["warnings"])
         assert mock_llm.call_count == 1
 
     def test_existing_relations_are_shown_and_paraphrases_dropped(self):
@@ -501,19 +500,18 @@ class TestInferRelations:
         assert set(item["properties"]["domain"]["enum"]) == draft.closed_entity_ids()
         assert set(item["properties"]["range"]["enum"]) == draft.closed_entity_ids()
 
-    def test_bracketed_id_reference_still_rejected_reject_only(self):
-        # Even in the fallback path (no response_format enforcement, or an
-        # endpoint that ignores it), a bracketed id must still be rejected
-        # outright — never silently stripped/normalized and never
+    def test_bracketed_id_reference_resolves_to_the_bare_id(self):
+        # In the fallback path (endpoints that reject response_format, e.g.
+        # newer Anthropic models on the AI Gateway) a bracketed id that is a
+        # real closed id once unwrapped resolves to it — in one call, never
         # resubmitted for a rewrite.
         payload = (
             '{"relations": [{"label": "shipsTo", '
             '"domain": "[cand-6]", "range": "cls-Customer-a1"}]}'
         )
         result, mock_llm = self._run([_answer(payload)])
-        assert result.success is False
-        assert result.rejected is True
-        assert "[cand-6]" in result.rejection_reason
+        assert result.success is True
+        assert result.result["relations"][0]["domain"] == "cand-6"
         assert mock_llm.call_count == 1
 
 
@@ -549,14 +547,14 @@ class TestInferAttributes:
         assert result.success is True
         assert result.substage == "attributes"
 
-    def test_unknown_domain_rejected(self):
+    def test_unknown_domain_dropped(self):
         draft = _draft(relations_done=True)
         payload = (
             '{"attributes": [{"label": "x", '
             '"domain": "cand-nope", "datatype": "xsd:string"}]}'
         )
         result, mock_llm = self._run([_answer(payload)], draft)
-        assert result.rejected is True
+        assert result.result["attributes"] == []
         assert mock_llm.call_count == 1
 
     def test_trace_identity(self):
@@ -651,16 +649,15 @@ class TestInferAxioms:
         assert result.success is True
         assert result.substage == "axioms"
 
-    def test_orphan_reference_rejected_no_rewrite(self):
+    def test_orphan_reference_dropped_no_rewrite(self):
         draft = _draft(relations_done=True, attributes_done=True)
         payload = (
             '{"axioms": [{"kind": "disjointWith", '
             '"subject": "cand-6", "object": "cls-UnknownGhost"}]}'
         )
         result, mock_llm = self._run([_answer(payload)], draft)
-        assert result.success is False
-        assert result.rejected is True
-        assert "cls-UnknownGhost" in result.rejection_reason
+        assert result.result["axioms"] == []
+        assert any("cls-UnknownGhost" in w for w in result.result["warnings"])
         assert mock_llm.call_count == 1
 
     def test_drops_subclassof_for_anchor_that_already_has_parent(self):
@@ -789,15 +786,16 @@ class TestCompletionPagination:
         assert [a["label"] for a in result.result["attributes"]] == ["orderDate"]
         assert mock_llm.call_count == 2
 
-    def test_page_budget_exhausted_fails_clearly(self):
+    def test_page_budget_exhausted_keeps_collected_pages(self):
         page = (
             '{"attributes": [{"label": "a%d", "domain": "cand-6", '
             '"datatype": "xsd:string"}], "has_more": true}'
         )
         responses = [_answer(page % i) for i in range(40)]
         result, _ = self._run_attributes(responses)
-        assert result.success is False
-        assert "page" in result.error.lower()
+        assert result.success is True
+        assert len(result.result["attributes"]) == staged._MAX_COMPLETION_PAGES
+        assert any("page" in w for w in result.result["warnings"])
 
     def test_truncated_page_retries_with_a_smaller_page(self):
         # A page that ignores the bounded-page contract and still truncates
@@ -819,7 +817,7 @@ class TestCompletionPagination:
         assert result.success is False
         assert "truncated" in result.error.lower()
 
-    def test_page_with_out_of_closure_reference_is_rejected(self):
+    def test_page_with_out_of_closure_reference_drops_that_item(self):
         page1 = (
             '{"attributes": [{"label": "a", "domain": "cand-6", '
             '"datatype": "xsd:string"}], "has_more": true}'
@@ -829,9 +827,9 @@ class TestCompletionPagination:
             '"datatype": "xsd:string"}], "has_more": false}'
         )
         result, mock_llm = self._run_attributes([_answer(page1), _answer(page2)])
-        assert result.success is False
-        assert result.rejected is True
-        assert "cand-ghost" in result.rejection_reason
+        assert result.success is True
+        assert [a["label"] for a in result.result["attributes"]] == ["a"]
+        assert any("cand-ghost" in w for w in result.result["warnings"])
 
     def test_paged_relations_merge_and_dedupe_semantic_inverse(self):
         draft = _draft(

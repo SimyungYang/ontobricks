@@ -387,41 +387,72 @@ def detect_entities(
     # Reject-only: a malformed or truncated answer fails here, with no
     # second finalization attempt.
     # -----------------------------------------------------------------
+    return _finalize_detection(
+        host, token, endpoint_name, messages,
+        steps=steps, usage=usage, existing_anchors=existing_anchors,
+        max_candidates=max_candidates, on_step=on_step,
+    )
+
+
+def _finalize_detection(
+    host: str,
+    token: str,
+    endpoint_name: str,
+    messages: List[dict],
+    *,
+    steps: List[AgentStep],
+    usage: Dict[str, int],
+    existing_anchors: Sequence[GenerateEntity],
+    max_candidates: Optional[int],
+    on_step: Optional[Callable[[str], None]],
+) -> DetectionResult:
+    """Phase 2 of detection: the schema-enforced finalization call.
+
+    A length-truncated answer gets ONE compact re-emission (fewer, shorter
+    entries) — an output-size retry, never a validation rewrite. A malformed
+    answer is still rejected without a second call.
+    """
     _notify(on_step, "Finalizing detected entities…")
-    try:
-        resp = call_serving_endpoint(
-            host,
-            token,
-            endpoint_name,
-            messages,
-            tools=None,
-            response_format=schemas.DETECTION_RESPONSE_FORMAT,
-            max_tokens=_GEN_MAX_TOKENS,
-            temperature=_TEMPERATURE,
-            timeout=LLM_TIMEOUT,
-            trace_name="owl_generator.detect",
-        )
-    except requests.exceptions.HTTPError as exc:
-        return DetectionResult(success=False, steps=steps, usage=usage, error=str(exc))
-    except requests.exceptions.RequestException as exc:
-        return DetectionResult(success=False, steps=steps, usage=usage, error=str(exc))
+    content = ""
+    for attempt in range(_MAX_COMPLETION_ATTEMPTS):
+        try:
+            resp = call_serving_endpoint(
+                host,
+                token,
+                endpoint_name,
+                messages,
+                tools=None,
+                response_format=schemas.DETECTION_RESPONSE_FORMAT,
+                max_tokens=_GEN_MAX_TOKENS,
+                temperature=_TEMPERATURE,
+                timeout=LLM_TIMEOUT,
+                trace_name="owl_generator.detect",
+            )
+        except requests.exceptions.RequestException as exc:
+            return DetectionResult(success=False, steps=steps, usage=usage, error=str(exc))
 
-    accumulate_usage(usage, resp.get("usage", {}))
-    choice = resp.get("choices", [{}])[0]
-    finish_reason = choice.get("finish_reason", "?")
-    content = extract_message_content(resp)
-    steps.append(AgentStep(step_type="output", content=content[:200]))
-
-    # Truncation guard: a length-capped finalization answer is incomplete
-    # JSON. Fail clearly — never re-prompt for a concise re-emission (that
-    # would be a rewrite loop on a schema-enforced call).
-    if finish_reason == "length":
-        return DetectionResult(
-            success=False,
-            steps=steps,
-            usage=usage,
-            error="Detection output was truncated and could not be completed.",
-        )
+        accumulate_usage(usage, resp.get("usage", {}))
+        finish_reason = resp.get("choices", [{}])[0].get("finish_reason", "?")
+        content = extract_message_content(resp)
+        steps.append(AgentStep(step_type="output", content=content[:200]))
+        if finish_reason != "length":
+            break
+        if attempt == _MAX_COMPLETION_ATTEMPTS - 1:
+            return DetectionResult(
+                success=False,
+                steps=steps,
+                usage=usage,
+                error="Detection output was truncated and could not be completed.",
+            )
+        messages = messages + [
+            {"role": "assistant", "content": content},
+            {
+                "role": "user",
+                "content": prompts.build_compact_detection_retry_prompt(
+                    max_candidates or _DEFAULT_MAX_CANDIDATES
+                ),
+            },
+        ]
 
     try:
         candidates = schemas.parse_detection_payload(
@@ -495,25 +526,27 @@ def _accept_completion_page(
     refs_fn: Callable[[Dict[str, Any]], set],
     items: List[Dict[str, Any]],
     seen: set,
+    warnings: List[str],
 ) -> tuple[bool, str]:
-    """Parse, closure-check, and merge one completion page.
+    """Parse, closure-filter, and merge one completion page.
 
-    Returns ``(has_more, error)`` — a non-empty ``error`` is a reject-only
-    validation failure (malformed JSON or an out-of-closure entity id),
-    never a rewrite prompt. Otherwise the page's NEW items (by ``key_fn``)
-    are appended to ``items`` and recorded in ``seen``.
+    Returns ``(has_more, error)`` — a non-empty ``error`` means the page is
+    malformed JSON, never a rewrite prompt. Otherwise the page's NEW items
+    (by ``key_fn``) are appended to ``items`` and recorded in ``seen``.
     """
     try:
         page_result = parse_fn(content)
     except schemas.SchemaValidationError as exc:
         return False, str(exc)
 
-    page_items = page_result.get(items_key) or []
-
-    # Entity-closure check on every page (reject-only). A reference outside
-    # the locked anchors ∪ included candidates — including an excluded
-    # candidate id — is rejected outright; the output is never checkpointed,
-    # merged, or re-sent to the LLM for a rewrite.
+    # Entity closure on every page: references are resolved to bare closed
+    # ids and an item still outside the locked anchors ∪ included candidates
+    # is dropped and reported — never merged, never sent back for a rewrite.
+    cleaned, dropped = schemas.keep_closed_references(
+        {items_key: page_result.get(items_key) or []}, substage, _closed_entities(draft)
+    )
+    warnings.extend(dropped)
+    page_items = cleaned[items_key]
     try:
         draft.validate_references(
             refs_fn({items_key: page_items}), context=substage
@@ -526,6 +559,26 @@ def _accept_completion_page(
         seen.add(key_fn(it))
     items.extend(new_items)
     return bool(page_result.get("has_more")), ""
+
+
+def _closed_entities(draft: GenerateDraft) -> List[GenerateEntity]:
+    """Locked anchors plus included candidates — the ids completion may use."""
+    return [*draft.existing_anchors, *(c for c in draft.candidate_entities if c.included)]
+
+
+def _keep_partial(
+    items: List[Dict[str, Any]], warnings: List[str], substage: str, reason: str
+) -> bool:
+    """Record why paging stopped early; ``True`` when earlier pages are kept.
+
+    A later page failing (transport, truncation, malformed, page budget)
+    must not throw away the pages already merged — only a substage that
+    produced nothing fails.
+    """
+    if not items:
+        return False
+    warnings.append(f"{substage}: stopped after {len(items)} item(s) — {reason}")
+    return True
 
 
 def _call_completion_page(
@@ -602,6 +655,7 @@ def _run_completion(
     trace_name = f"owl_generator.{substage}"
     items: List[Dict[str, Any]] = []
     seen: set = set()
+    warnings: List[str] = []
 
     _notify(on_step, f"Inferring {substage}…")
 
@@ -612,6 +666,8 @@ def _run_completion(
                 host, token, endpoint_name, messages, response_format, trace_name
             )
         except requests.exceptions.RequestException as exc:
+            if _keep_partial(items, warnings, substage, str(exc)):
+                break
             return _completion_failure(substage, steps, usage, str(exc))
 
         accumulate_usage(usage, resp.get("usage", {}))
@@ -628,11 +684,11 @@ def _run_completion(
                 page_trunc_retries += 1
                 _queue_truncation_retry(messages, content, substage)
                 continue
-            return _completion_failure(
-                substage, steps, usage,
-                f"{substage} output page was truncated and could not be "
-                "completed; reduce the entity set or retry.",
-            )
+            reason = (f"{substage} output page was truncated and could not be "
+                      "completed; reduce the entity set or retry.")
+            if _keep_partial(items, warnings, substage, reason):
+                break
+            return _completion_failure(substage, steps, usage, reason)
         page_trunc_retries = 0
         count_before = len(items)
         has_more, error = _accept_completion_page(
@@ -645,31 +701,27 @@ def _run_completion(
             refs_fn=refs_fn,
             items=items,
             seen=seen,
+            warnings=warnings,
         )
         if error:
-            return _completion_failure(
-                substage, steps, usage, error, rejected=True
-            )
+            if _keep_partial(items, warnings, substage, error):
+                break
+            return _completion_failure(substage, steps, usage, error, rejected=True)
 
         if not has_more or len(items) == count_before:
             break
         page += 1
         if page >= max_pages:
-            return _completion_failure(
-                substage, steps, usage,
-                f"{substage} did not finish within the {max_pages}-page "
-                "completion budget; reduce the entity set or retry.",
-            )
+            _keep_partial(items, warnings, substage,
+                          f"{max_pages}-page completion budget reached")
+            break
         _notify(on_step, f"Inferring {substage}… ({len(items)} items so far)")
         _queue_next_page(messages, content, substage, len(items))
 
     merged = finalize_fn(items) if finalize_fn else items
+    result = {items_key: merged, **({"warnings": warnings} if warnings else {})}
     return CompletionResult(
-        success=True,
-        substage=substage,
-        result={items_key: merged},
-        steps=steps,
-        usage=usage,
+        success=True, substage=substage, result=result, steps=steps, usage=usage
     )
 
 

@@ -563,7 +563,7 @@ def _c_does_not_rerun(_e, constraint) -> bool:
     return draft.next_pending_substage() != done
 
 
-def _c_rejects_excluded_ref(_e, constraint) -> bool:
+def _c_drops_excluded_ref(_e, constraint) -> bool:
     excluded_id = str(constraint["value"])
     draft = GenerateDraft.new(
         source_fingerprint="s",
@@ -579,18 +579,23 @@ def _c_rejects_excluded_ref(_e, constraint) -> bool:
     with patch.object(staged, "call_serving_endpoint") as mock_llm:
         mock_llm.side_effect = [_answer(payload)]
         result = staged.infer_relations(host="h", token="t", endpoint_name="e", draft=draft)
-    return result.rejected and mock_llm.call_count == 1
+    # The excluded entity is never merged: the item is dropped and reported,
+    # the substage still succeeds, and the model is asked exactly once.
+    return (
+        result.success
+        and result.result["relations"] == []
+        and any(excluded_id in w for w in result.result.get("warnings", []))
+        and mock_llm.call_count == 1
+    )
 
 
-def _c_rejects_bracketed_id_ref(example, constraint) -> bool:
-    """Live bug regression (id-bracketing): the old catalog rendered ids in
-    brackets (``[cand-6]``) and the closure rule said "reference ids listed
-    above" — the model copied the bracketed token verbatim as domain/range,
-    and ``validate_references`` (comparing against the *bare* id) rejected
-    every such reference. This proves a bracketed id — even one that
-    exactly matches a real closed-set id once the brackets are stripped —
-    is still rejected reject-only, with no in-request rewrite, exercising
-    the real ``infer_relations`` orchestrator built from the example's own
+def _c_resolves_bracketed_id_ref(example, constraint) -> bool:
+    """Live bug regression (id-bracketing): the model copied ids as
+    ``[cand-6]``. Without a transport-level enum (endpoints that reject
+    ``response_format``) rejecting the substage failed every large Generate
+    run, so a wrapped id that is a real closed-set id once unwrapped is
+    resolved to the bare id — in one call, no rewrite — exercising the real
+    ``infer_relations`` orchestrator built from the example's own
     ``input.draft`` (never a hand-picked literal)."""
     bare_id = str(constraint["value"])
     bracketed_id = f"[{bare_id}]"
@@ -618,8 +623,8 @@ def _c_rejects_bracketed_id_ref(example, constraint) -> bool:
         mock_llm.side_effect = [_answer(payload)]
         result = staged.infer_relations(host="h", token="t", endpoint_name="e", draft=draft)
     return (
-        result.rejected
-        and bracketed_id in result.rejection_reason
+        result.success
+        and [r["domain"] for r in result.result["relations"]] == [bare_id]
         and mock_llm.call_count == 1
     )
 
@@ -681,9 +686,9 @@ def _c_does_not_merge_on_rejection(_e, _c) -> bool:
         candidate_entities=[_candidate("Invoice", "cand-4", included=False),
                             _candidate("Carrier", "cand-6")],
     )
-    payload = json.dumps(
-        {"relations": [{"label": "x", "domain": "cand-6", "range": "cand-4"}]}
-    )
+    # Malformed output is the remaining rejection (out-of-closure items are
+    # dropped, not rejected — see `_c_drops_excluded_ref`).
+    payload = '{"relations": [{"label": "x", "domain": "cand-6"'
     with patch.object(staged, "call_serving_endpoint") as mock_llm:
         mock_llm.side_effect = [_answer(payload)]
         result = staged.infer_relations(host="h", token="t", endpoint_name="e", draft=draft)
@@ -710,10 +715,9 @@ def _c_no_rewrite_after_reject(_e, _c) -> bool:
     draft = _closed_draft()
     draft = draft.with_checkpoint("relations", CHECKPOINT_DONE, result={"relations": []})
     draft = draft.with_checkpoint("attributes", CHECKPOINT_DONE, result={"attributes": []})
-    payload = json.dumps(
-        {"axioms": [{"kind": "disjointWith", "subject": "cand-6",
-                     "object": "cls-UnknownGhost"}]}
-    )
+    # Malformed output is the remaining rejection (out-of-closure items are
+    # dropped and reported instead).
+    payload = '{"axioms": [{"kind": "disjointWith", "subject": "cand-6"'
     with patch.object(staged, "call_serving_endpoint") as mock_llm:
         mock_llm.side_effect = [_answer(payload)]
         result = staged.infer_axioms(host="h", token="t", endpoint_name="e", draft=draft)
@@ -723,9 +727,7 @@ def _c_no_rewrite_after_reject(_e, _c) -> bool:
 
 def _c_reports_validation_failure(_e, _c) -> bool:
     draft = _closed_draft()
-    payload = json.dumps(
-        {"relations": [{"label": "x", "domain": "cand-6", "range": "cls-Ghost"}]}
-    )
+    payload = "The relations are: shipsTo and billedBy."
     with patch.object(staged, "call_serving_endpoint") as mock_llm:
         mock_llm.side_effect = [_answer(payload)]
         result = staged.infer_relations(host="h", token="t", endpoint_name="e", draft=draft)
@@ -901,8 +903,8 @@ _CHECKS: Dict[str, Callable[[dict, dict], bool]] = {
     "rejects_out_of_order_start": _c_rejects_out_of_order,
     "resume_starts_at": _c_resume_starts_at,
     "does_not_rerun": _c_does_not_rerun,
-    "rejects_reference_to_excluded_entity": _c_rejects_excluded_ref,
-    "rejects_bracketed_id_reference": _c_rejects_bracketed_id_ref,
+    "drops_reference_to_excluded_entity": _c_drops_excluded_ref,
+    "resolves_bracketed_id_reference": _c_resolves_bracketed_id_ref,
     "accepts_double_encoded_list_field": _c_accepts_double_encoded_list_field,
     "does_not_merge_on_rejection": _c_does_not_merge_on_rejection,
     "does_not_call_document_tools": _c_no_document_tools,
