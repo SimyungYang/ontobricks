@@ -34,12 +34,12 @@ const GraphQLPlayground = (() => {
 
         var css = document.createElement('link');
         css.rel = 'stylesheet';
-        css.href = 'https://unpkg.com/graphiql@3/graphiql.min.css';
+        css.href = '/static/global/vendor/graphiql-3.9.0/graphiql.min.css';
         document.head.appendChild(css);
 
-        await _loadScript('https://unpkg.com/react@18/umd/react.production.min.js');
-        await _loadScript('https://unpkg.com/react-dom@18/umd/react-dom.production.min.js');
-        await _loadScript('https://unpkg.com/graphiql@3/graphiql.min.js');
+        await _loadScript('/static/global/vendor/react-18.3.1/react.production.min.js');
+        await _loadScript('/static/global/vendor/react-dom-18.3.1/react-dom.production.min.js');
+        await _loadScript('/static/global/vendor/graphiql-3.9.0/graphiql.min.js');
     }
 
     async function _resolveGraphqlFolderSlug() {

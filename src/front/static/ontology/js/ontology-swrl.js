@@ -329,7 +329,7 @@ window.SwrlModule = {
         if (typeof d3 !== 'undefined') return Promise.resolve();
         return new Promise((resolve, reject) => {
             const script = document.createElement('script');
-            script.src = 'https://d3js.org/d3.v7.min.js';
+            script.src = '/static/global/vendor/d3-7.9.0/d3.min.js';
             script.onload = resolve;
             script.onerror = () => reject(new Error('Failed to load D3.js'));
             document.head.appendChild(script);

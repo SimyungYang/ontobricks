@@ -32,6 +32,7 @@ STATIC = FRONT / "static"
 STATIC_JS = STATIC / "global/js"
 I18N_JS = STATIC_JS / "i18n.js"
 KO_JS = STATIC_JS / "i18n-ko.js"
+VENDOR = STATIC / "global/vendor"  # third-party bundles, not UI copy
 I18N_CSS = STATIC / "global/css/i18n.css"
 BASE_HTML = TEMPLATES / "base.html"
 MENU_CONFIG = FRONT / "config/menu_config.json"
@@ -507,7 +508,7 @@ def _untranslated_template_strings(dict_: dict) -> set:
 def _untranslated_script_strings(dict_: dict) -> set:
     pieces = []
     for path in sorted(STATIC.rglob("*.js")):
-        if path.name.startswith("i18n"):
+        if path.name.startswith("i18n") or VENDOR in path.parents:
             continue
         src = path.read_text(encoding="utf-8")
         for rx in (_SCRIPT_CALL, _SCRIPT_OPTION):

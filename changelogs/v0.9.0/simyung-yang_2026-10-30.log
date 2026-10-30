@@ -1,0 +1,49 @@
+## Serve graph and GraphQL libraries from the app instead of public CDNs
+
+Context:
+A customer network blocks d3js.org. The ontology map then failed with
+"ReferenceError: d3 is not defined" while Bootstrap (cdn.jsdelivr.net) still
+loaded. The knowledge-graph explorer (cdnjs.cloudflare.com) and the GraphQL
+view (unpkg.com) depend on equally blockable hosts. These libraries now ship
+with the app, pinned to the versions the app already used.
+
+Changes:
+1. src/front/static/global/vendor/
+   New, unmodified upstream bundles: d3 7.9.0, graphology 0.26.0,
+   graphology-library 0.8.0, sigma 3.0.2, graphiql 3.9.0 (JS + CSS),
+   react 18.3.1, react-dom 18.3.1.
+2. src/front/templates/partials/ontology/_ontology_map.html,
+   src/front/templates/partials/mapping/_mapping_design.html
+   Load D3 through url_for('static', ...) instead of d3js.org.
+3. src/front/static/ontology/js/ontology-swrl.js,
+   src/front/static/query/js/query-ontology-viewer.js,
+   src/front/static/registry/js/registry.js,
+   src/front/static/query/js/query-sigmagraph.js,
+   src/front/static/query/js/query-graphql.js
+   Lazy loaders point at /static/global/vendor/... paths.
+4. licenses/README.md
+   Pin D3, GraphiQL and React versions and note the vendored location.
+5. tests/units/front/test_vendored_graph_libs.py
+   New: no front source uses d3js.org / cdnjs / unpkg, no graph library
+   comes from jsdelivr, and every vendor reference exists on disk.
+6. tests/units/front/test_i18n.py
+   The script-string scan skips static/global/vendor (third-party code).
+
+Modified files:
+- src/front/static/global/vendor/** (new)
+- src/front/templates/partials/ontology/_ontology_map.html
+- src/front/templates/partials/mapping/_mapping_design.html
+- src/front/static/ontology/js/ontology-swrl.js
+- src/front/static/query/js/query-ontology-viewer.js
+- src/front/static/registry/js/registry.js
+- src/front/static/query/js/query-sigmagraph.js
+- src/front/static/query/js/query-graphql.js
+- licenses/README.md
+- tests/units/front/test_vendored_graph_libs.py
+- tests/units/front/test_i18n.py
+- changelogs/v0.9.0/simyung-yang_2026-10-30.log
+
+Test result:
+uv run --frozen pytest -q tests/units/front tests/units/architecture
+tests/units/api/test_ui_rendering.py -> 1921 passed.
+Local TestClient: all eight vendor files return 200 with JS/CSS content types.

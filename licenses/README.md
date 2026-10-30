@@ -11,14 +11,19 @@ This folder contains the license files for all external libraries used by OntoBr
 | Bootstrap | 5.3.2 | MIT | [javascript/bootstrap-LICENSE.txt](javascript/bootstrap-LICENSE.txt) |
 | Bootstrap Icons | 1.11.2 | MIT | [javascript/bootstrap-icons-LICENSE.txt](javascript/bootstrap-icons-LICENSE.txt) |
 | Chart.js | 4.x | MIT | [javascript/chartjs-LICENSE.txt](javascript/chartjs-LICENSE.txt) |
-| D3.js | 7.x | ISC | [javascript/d3-LICENSE.txt](javascript/d3-LICENSE.txt) |
-| GraphiQL | 3.x | MIT | [javascript/graphiql-LICENSE.txt](javascript/graphiql-LICENSE.txt) |
+| D3.js | 7.9.0 | ISC | [javascript/d3-LICENSE.txt](javascript/d3-LICENSE.txt) |
+| GraphiQL | 3.9.0 | MIT | [javascript/graphiql-LICENSE.txt](javascript/graphiql-LICENSE.txt) |
 | Graphology | 0.26.0 | MIT | [javascript/graphology-LICENSE.txt](javascript/graphology-LICENSE.txt) |
 | Graphology Library | 0.8.0 | MIT | [javascript/graphology-library-LICENSE.txt](javascript/graphology-library-LICENSE.txt) |
 | Grid.js | latest | MIT | [javascript/gridjs-LICENSE.txt](javascript/gridjs-LICENSE.txt) |
 | Marked | latest | MIT | [javascript/marked-LICENSE.txt](javascript/marked-LICENSE.txt) |
-| React / ReactDOM | 18.x | MIT | [javascript/react-LICENSE.txt](javascript/react-LICENSE.txt) |
+| React / ReactDOM | 18.3.1 | MIT | [javascript/react-LICENSE.txt](javascript/react-LICENSE.txt) |
 | Sigma.js | 3.0.2 | MIT | [javascript/sigma-LICENSE.txt](javascript/sigma-LICENSE.txt) |
+
+> D3.js, GraphiQL, Graphology, Graphology Library, React / ReactDOM and Sigma.js are
+> vendored unmodified under `src/front/static/global/vendor/<library>-<version>/` so
+> networks that block public CDNs (`d3js.org`, `unpkg.com`, `cdnjs.cloudflare.com`)
+> still render the graph and GraphQL views.
 
 ## Python Libraries (Main Application)
 
