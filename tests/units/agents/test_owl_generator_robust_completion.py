@@ -233,3 +233,79 @@ class TestProseWrappedJSON:
     def test_text_without_any_json_object_is_still_rejected(self):
         with pytest.raises(schemas.SchemaValidationError):
             schemas.parse_json_object("no structured answer here")
+
+
+# ---------------------------------------------------------------------------
+# Models that cannot (or do not) call tools still see the sources
+# ---------------------------------------------------------------------------
+
+
+_LOT_TABLE = {
+    "name": "lot_master",
+    "full_name": "lgit.mes.lot_master",
+    "columns": [{"name": "lot_id", "type": "string"}, {"name": "work_order_id", "type": "string"}],
+}
+
+
+def _tools_rejected() -> requests.exceptions.HTTPError:
+    # Live LGIT, databricks-gpt-6-astra / -sol: "Function tools with
+    # reasoning_effort are not supported for gpt-6-astra in /v1/chat/completions".
+    resp = type("Resp", (), {"status_code": 400, "text": "Function tools ... not supported"})()
+    return requests.exceptions.HTTPError(response=resp)
+
+
+class TestDetectionWithoutToolCalls:
+    def _detect(self, responses, tables=(_LOT_TABLE,), anchors=()):
+        with patch.object(staged, "call_serving_endpoint") as mock_llm:
+            mock_llm.side_effect = responses
+            result = staged.detect_entities(
+                host="h", token="t", endpoint_name="e",
+                metadata={"tables": list(tables), "table_count": len(tables)},
+                existing_anchors=list(anchors),
+                registry={"catalog": "c", "schema": "s", "volume": "v"},
+            )
+        return result, mock_llm
+
+    @staticmethod
+    def _final_prompt(mock_llm, index=-1) -> str:
+        return mock_llm.call_args_list[index].args[3][1]["content"]
+
+    def test_endpoint_rejecting_tools_gets_the_metadata_inline(self):
+        ok = _answer('{"candidate_entities": [{"canonical_label": "Lot"}]}')
+        result, mock_llm = self._detect([_tools_rejected(), ok])
+        assert result.success is True
+        assert "lot_master" in self._final_prompt(mock_llm)
+        assert "work_order_id" in self._final_prompt(mock_llm)
+
+    def test_model_that_skips_tools_gets_the_metadata_inline(self):
+        ok = _answer('{"candidate_entities": [{"canonical_label": "Lot"}]}')
+        _, mock_llm = self._detect([_answer("I will answer directly."), ok])
+        assert "lot_master" in self._final_prompt(mock_llm)
+
+    def test_empty_answer_despite_sources_is_asked_once_more(self):
+        empty = _answer('{"candidate_entities": []}')
+        ok = _answer('{"candidate_entities": [{"canonical_label": "Lot"}]}')
+        result, mock_llm = self._detect([_answer(""), empty, ok])
+        assert [c.canonical_label for c in result.candidate_entities] == ["Lot"]
+        assert mock_llm.call_count == 3
+
+    def test_empty_twice_is_a_successful_empty_result(self):
+        empty = _answer('{"candidate_entities": []}')
+        result, mock_llm = self._detect([_answer(""), empty, empty])
+        assert result.success is True
+        assert result.candidate_entities == []
+        assert mock_llm.call_count == 3
+
+    def test_empty_with_anchors_is_trusted_without_a_retry(self):
+        empty = _answer('{"candidate_entities": []}')
+        result, mock_llm = self._detect(
+            [_answer(""), empty],
+            anchors=[GenerateEntity.locked_anchor("Lot", "Lot")],
+        )
+        assert result.success is True
+        assert mock_llm.call_count == 2
+
+    def test_empty_without_any_source_is_trusted_without_a_retry(self):
+        empty = _answer('{"candidate_entities": []}')
+        _, mock_llm = self._detect([_answer(""), empty], tables=())
+        assert mock_llm.call_count == 2

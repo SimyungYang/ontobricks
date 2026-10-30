@@ -236,6 +236,14 @@ def build_continuation_user_prompt(substage: str, emitted_count: int) -> str:
     )
 
 
+EMPTY_DETECTION_RETRY_PROMPT = (
+    "The selected sources above contain tables and/or documents, but your "
+    "answer listed no entities. Detect the core business entities they "
+    "describe and return the candidate_entities JSON. Return an empty list "
+    "only if the sources truly describe nothing. JSON only."
+)
+
+
 def build_compact_detection_retry_prompt(max_candidates: int) -> str:
     """Re-ask for the detection JSON in compact form after a length truncation."""
     return (

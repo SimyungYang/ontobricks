@@ -141,3 +141,40 @@ uv run --frozen python tests/eval/run_agent_owl_generator.py -> staged 41/41,
 aggregate 1.000 (threshold 0.950); parsed-corpus aggregate 1.000 (threshold 0.900).
 Live, LGIT system.ai.claude-sonnet-5-5: 40-entity draft -> relations 48,
 attributes 91, axioms 13, 39 s total (previously failed on the first call).
+
+## Entity detection sees the sources even when the model cannot call tools
+
+Context:
+A cross-model live check on LGIT (11 chat endpoints) after the change above
+found databricks-gpt-6-astra and -sol finishing detection "successfully" with
+0 entities in 4 s. They reject the gathering call ("Function tools with
+reasoning_effort are not supported for gpt-6-astra in /v1/chat/completions"),
+the gathering phase is skipped, and the finalization call never saw any table
+metadata. databricks-kimi-k3 also returned 0 entities once (12 on a re-run).
+
+Changes:
+1. src/agents/agent_owl_generator/staged.py
+   - When gathering made no tool call (tools rejected or never called), the
+     detection user turn carries the get_metadata and list_documents output
+     inline (new `_with_inline_sources`, through the traced tool dispatcher).
+   - `_finalize_detection` asks ONE more time when the answer is an empty list
+     while tables/documents are selected and nothing is anchored; an empty
+     second answer is accepted. The compact truncation retry is unchanged.
+     Shared follow-up turn builder `_with_retry_turn`.
+2. src/agents/agent_owl_generator/prompts.py
+   - New `EMPTY_DETECTION_RETRY_PROMPT`.
+3. tests/units/agents/test_owl_generator_robust_completion.py
+   - New TestDetectionWithoutToolCalls (6 tests).
+4. .planning/agents/agent_owl_generator/SPEC.md
+   - §6 failure-mode row for tool-less endpoints.
+
+Modified files:
+- src/agents/agent_owl_generator/staged.py
+- src/agents/agent_owl_generator/prompts.py
+- tests/units/agents/test_owl_generator_robust_completion.py
+- .planning/agents/agent_owl_generator/SPEC.md
+- changelogs/v0.9.0/simyung-yang_2026-10-30.log
+
+Test result:
+uv run --frozen pytest -q tests/units/agents tests/eval tests/units/architecture -> 551 passed.
+Live, databricks-gpt-6-astra, 5 LGIT tables: 0 -> 8 entities.

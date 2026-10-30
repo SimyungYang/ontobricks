@@ -32,7 +32,7 @@ from __future__ import annotations
 import json
 import time
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, List, Optional, Sequence
+from typing import Any, Callable, Dict, List, Optional, Sequence, Set
 
 import requests
 
@@ -380,18 +380,30 @@ def detect_entities(
             )
         # Gathering continues for another iteration (budget permitting).
 
-    # -----------------------------------------------------------------
-    # Phase 2 — exactly ONE schema-enforced FINALIZATION call. `tools=None`
-    # always; `response_format=` the strict detection schema so the
-    # transport itself constrains the answer shape (not just the prompt).
-    # Reject-only: a malformed or truncated answer fails here, with no
-    # second finalization attempt.
-    # -----------------------------------------------------------------
+    # Phase 2 — the schema-enforced FINALIZATION (see `_finalize_detection`).
+    # A model that rejects tools (gpt-6 "Function tools with reasoning_effort
+    # are not supported") or never calls one gets the sources inline instead.
+    if not any(step.step_type == "tool_call" for step in steps):
+        messages[-1] = _with_inline_sources(messages[-1], ctx)
     return _finalize_detection(
         host, token, endpoint_name, messages,
         steps=steps, usage=usage, existing_anchors=existing_anchors,
         max_candidates=max_candidates, on_step=on_step,
+        has_sources=bool(ctx.metadata.get("tables") or selected_docs),
     )
+
+
+def _with_inline_sources(user_message: dict, ctx: ToolContext) -> dict:
+    """The detection user turn plus the metadata / document-list tool output."""
+    sources = "\n\n".join(
+        f"{name} result:\n"
+        + _dispatch_detection_tool(ctx, name, {}, trace_name="owl_generator.detect")
+        for name in ("get_metadata", "list_documents")
+    )
+    return {
+        **user_message,
+        "content": f"{user_message['content']}\n\nSOURCES (pre-loaded):\n{sources}",
+    }
 
 
 def _finalize_detection(
@@ -405,16 +417,18 @@ def _finalize_detection(
     existing_anchors: Sequence[GenerateEntity],
     max_candidates: Optional[int],
     on_step: Optional[Callable[[str], None]],
+    has_sources: bool = False,
 ) -> DetectionResult:
     """Phase 2 of detection: the schema-enforced finalization call.
 
-    A length-truncated answer gets ONE compact re-emission (fewer, shorter
-    entries) — an output-size retry, never a validation rewrite. A malformed
-    answer is still rejected without a second call.
+    At most one extra call per reason, never a validation rewrite: a
+    length-truncated answer gets ONE compact re-emission, and an empty list
+    while the sources hold tables/documents and nothing is anchored gets ONE
+    more ask. A malformed answer is still rejected without a second call.
     """
     _notify(on_step, "Finalizing detected entities…")
-    content = ""
-    for attempt in range(_MAX_COMPLETION_ATTEMPTS):
+    retried: Set[str] = set()
+    while True:
         try:
             resp = call_serving_endpoint(
                 host,
@@ -435,48 +449,53 @@ def _finalize_detection(
         finish_reason = resp.get("choices", [{}])[0].get("finish_reason", "?")
         content = extract_message_content(resp)
         steps.append(AgentStep(step_type="output", content=content[:200]))
-        if finish_reason != "length":
-            break
-        if attempt == _MAX_COMPLETION_ATTEMPTS - 1:
-            return DetectionResult(
-                success=False,
-                steps=steps,
-                usage=usage,
-                error="Detection output was truncated and could not be completed.",
-            )
-        messages = messages + [
-            {"role": "assistant", "content": content},
-            {
-                "role": "user",
-                "content": prompts.build_compact_detection_retry_prompt(
+        if finish_reason == "length":
+            if "length" in retried:
+                return DetectionResult(
+                    success=False,
+                    steps=steps,
+                    usage=usage,
+                    error="Detection output was truncated and could not be completed.",
+                )
+            retried.add("length")
+            messages = _with_retry_turn(
+                messages, content,
+                prompts.build_compact_detection_retry_prompt(
                     max_candidates or _DEFAULT_MAX_CANDIDATES
                 ),
-            },
-        ]
+            )
+            continue
 
-    try:
-        candidates = schemas.parse_detection_payload(
-            content,
-            existing_anchors=existing_anchors,
-            max_candidates=max_candidates,
-        )
-    except schemas.SchemaValidationError as exc:
-        # Reject-only: report the malformed answer; do not re-prompt.
+        try:
+            candidates = schemas.parse_detection_payload(
+                content,
+                existing_anchors=existing_anchors,
+                max_candidates=max_candidates,
+            )
+        except schemas.SchemaValidationError as exc:
+            # Reject-only: report the malformed answer; do not re-prompt.
+            return DetectionResult(
+                success=False, steps=steps, usage=usage, error=str(exc), rejected=True
+            )
+        if not candidates and has_sources and not existing_anchors and "empty" not in retried:
+            retried.add("empty")
+            messages = _with_retry_turn(
+                messages, content, prompts.EMPTY_DETECTION_RETRY_PROMPT
+            )
+            continue
+
+        _notify(on_step, f"Detected {len(candidates)} candidate ent(y/ies).")
         return DetectionResult(
-            success=False,
-            steps=steps,
-            usage=usage,
-            error=str(exc),
-            rejected=True,
+            success=True, candidate_entities=candidates, steps=steps, usage=usage
         )
 
-    _notify(on_step, f"Detected {len(candidates)} candidate ent(y/ies).")
-    return DetectionResult(
-        success=True,
-        candidate_entities=candidates,
-        steps=steps,
-        usage=usage,
-    )
+
+def _with_retry_turn(messages: List[dict], content: str, ask: str) -> List[dict]:
+    """*messages* plus the previous answer and a follow-up user turn."""
+    return messages + [
+        {"role": "assistant", "content": content},
+        {"role": "user", "content": ask},
+    ]
 
 
 # =====================================================
