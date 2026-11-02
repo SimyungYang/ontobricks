@@ -1,0 +1,70 @@
+## Fix Graph Chat tool calls failing for users with a non-ASCII display name
+
+Context:
+On the LGE Korea workspace every Graph Chat tool call (get_status,
+list_entity_types, query_graphql, triples/find, ...) failed with
+`'ascii' codec can't encode characters in position 0-5: ordinal not in
+range(128)` (logged at `agents.agent_dtwin_chat.tools | tools._error:139`)
+for users whose Databricks display name is Korean. Databricks Apps sends
+`X-Forwarded-Preferred-Username` as the UTF-8 display name; Starlette decodes
+header bytes as latin-1, so the router saw a str with non-ASCII code points.
+The router forwarded every `x-forwarded-*` header onto the agent's loopback
+httpx client, and httpx encodes str header values as ASCII, so building the
+client raised before any request was sent. Users with ASCII names were not
+affected. The same forwarding fed the Graph Interpreter and Cohort agents.
+
+Changes:
+1. src/agents/tools/loopback_http.py
+   - New `loopback_forwarded_headers(headers)`: the single selection rule for
+     inbound headers an agent forwards on loopback calls (`x-forwarded-*`,
+     `x-real-*`, `x-csrf-token`, `referer`). Moved here from the dtwin router.
+   - New `loopback_wire_headers(headers)`: encodes header values to the raw
+     bytes that arrived on the wire (latin-1 re-encode of the Starlette str;
+     UTF-8 for a str holding code points above U+00FF; bytes pass through).
+   - `loopback_client` now builds the httpx client from wire bytes, so a
+     non-ASCII value can never break a loopback call for any agent
+     (Graph Chat, Graph Interpreter, Cohort). Identity headers are kept, and
+     the receiving PermissionMiddleware decodes them to exactly the same
+     values the outer request saw.
+2. src/api/routers/internal/dtwin.py
+   - `/dtwin/assistant/chat`, `/dtwin/assistant/chat/stream` and
+     `/dtwin/metrics/interpret` use `loopback_forwarded_headers`.
+   - Removed `_chat_forwarded_headers` and its constants, plus the inline
+     filter in `/dtwin/metrics/interpret` (which now also forwards `x-real-*`
+     and `referer`, like Graph Chat).
+3. tests/units/agents/test_loopback_http.py (new)
+   - Unit tests for header selection and wire encoding.
+   - Graph Chat `get_status` through the real `loopback_client` (httpx
+     MockTransport) succeeds for a Starlette-decoded Korean name, and the
+     loopback receiver re-parses identical identity headers.
+4. tests/units/api/test_dtwin_assistant_chat.py
+   - Route test: `POST /dtwin/assistant/chat` with a UTF-8 Korean
+     `x-forwarded-preferred-username` runs a tool call over the loopback
+     client; the reply is the tool output and email / access-token / display
+     name arrive byte-identical. Reproduced the production error before the
+     fix.
+
+Notes:
+- MCP server (`src/mcp-server/server/http_client.py`, #208 acting headers)
+  only forwards `x-forwarded-email` and `x-forwarded-access-token` as
+  `x-ontobricks-acting-*`; both are ASCII by construction and the display
+  name is never forwarded, so it is unchanged.
+- This is a transport fix under `src/agents/**`; no prompt, tool schema or
+  model behaviour changed, so no eval delta is required by the AI-feature
+  gate.
+
+Modified files:
+- src/agents/tools/loopback_http.py
+- src/api/routers/internal/dtwin.py
+- tests/units/agents/test_loopback_http.py (new)
+- tests/units/api/test_dtwin_assistant_chat.py
+- changelogs/v0.9.1/simyung-yang_2026-11-03.log (new)
+
+Test result:
+- Targeted: tests/units/agents/test_loopback_http.py,
+  tests/units/api/test_dtwin_assistant_chat.py, tests/units/test_user_agent.py,
+  tests/units/agents/test_agent_dtwin_chat.py, tests/units/architecture
+  -> 73 passed.
+- Full suite (`uv run --frozen pytest -q -m "not scenario" --deselect
+  tests/units/settings/test_deploy_instance_id.py`):
+  10105 passed, 327 skipped, 17 deselected, 40 warnings in 923.41s.

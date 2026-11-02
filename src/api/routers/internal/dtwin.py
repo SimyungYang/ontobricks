@@ -10,6 +10,7 @@ import time
 from typing import Any, Optional
 
 from fastapi import APIRouter, Request, Depends, Query
+from agents.tools.loopback_http import loopback_forwarded_headers
 from back.core.logging import get_logger
 from back.core.errors import (
     InfrastructureError,
@@ -655,11 +656,7 @@ async def interpret_graph_metrics(
         app_port = os.environ.get("DATABRICKS_APP_PORT") or os.environ.get("PORT") or "8000"
         base_url = f"http://localhost:{app_port}"
         session_cookies = dict(request.cookies or {})
-        session_headers = {
-            k: v
-            for k, v in request.headers.items()
-            if k.lower().startswith("x-forwarded-") or k.lower() == "x-csrf-token"
-        }
+        session_headers = loopback_forwarded_headers(request.headers)
 
         dt = DigitalTwin(domain)
         result = await run_blocking(
@@ -2025,23 +2022,6 @@ def _chat_domain_key(domain) -> str:
     return TwinAssistantCache.domain_key(domain)
 
 
-# Databricks-Apps identity + CSRF headers forwarded on the agent's loopback
-# calls so they pass PermissionMiddleware (which otherwise 302-redirects the
-# anonymous internal request to ``/access-denied``).
-_FORWARDED_HEADER_PREFIXES = ("x-forwarded-", "x-real-")
-_FORWARDED_EXTRA_HEADERS = {"x-csrf-token", "referer"}
-
-
-def _chat_forwarded_headers(request: Request) -> dict:
-    """Headers the Graph Chat agent forwards on its loopback calls."""
-    return {
-        k: v
-        for k, v in request.headers.items()
-        if k.lower().startswith(_FORWARDED_HEADER_PREFIXES)
-        or k.lower() in _FORWARDED_EXTRA_HEADERS
-    }
-
-
 def _chat_schema_digest(domain) -> str:
     """Schema digest for the chat prompt, keyed by the session display name.
 
@@ -2133,7 +2113,7 @@ async def dtwin_assistant_chat(
     # resolve the same user session and active domain.
     session_cookies = dict(request.cookies or {})
 
-    session_headers = _chat_forwarded_headers(request)
+    session_headers = loopback_forwarded_headers(request.headers)
 
     domain_name = _chat_resolve_domain_name(domain)
 
@@ -2255,7 +2235,7 @@ async def dtwin_assistant_chat_stream(
     base_url = f"http://localhost:{app_port}"
     session_cookies = dict(request.cookies or {})
 
-    session_headers = _chat_forwarded_headers(request)
+    session_headers = loopback_forwarded_headers(request.headers)
 
     domain_name = _chat_resolve_domain_name(domain)
 

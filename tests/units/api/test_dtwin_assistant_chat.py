@@ -50,3 +50,71 @@ def test_chat_rejects_empty_domain_llm_before_running_agent(client):
         "No LLM selected. Select one in Domain → General → AI."
     )
     run_chat_agent.assert_not_called()
+
+
+def test_chat_tool_calls_succeed_for_non_ascii_display_name(client, monkeypatch):
+    """A Korean display name must not break the agent's loopback tool calls.
+
+    The Apps proxy sends ``X-Forwarded-Preferred-Username`` as UTF-8 bytes;
+    the route forwards it onto the agent's httpx loopback client, which
+    used to fail with ``'ascii' codec can't encode characters``.
+    """
+    import httpx
+
+    from agents.agent_dtwin_chat import tools as chat_tools
+    from agents.tools import loopback_http
+    from agents.tools.context import ToolContext
+
+    korean_name = "시명 양".encode("utf-8")
+    loopback_requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        loopback_requests.append(request)
+        return httpx.Response(200, json={"success": True, "has_data": True, "count": 1})
+
+    real_client = httpx.Client
+    monkeypatch.setattr(
+        loopback_http,
+        "httpx",
+        SimpleNamespace(
+            Client=lambda **kw: real_client(transport=httpx.MockTransport(handler), **kw)
+        ),
+    )
+
+    def fake_run_agent(**kwargs):
+        ctx = ToolContext(
+            host=kwargs["host"],
+            token=kwargs["token"],
+            dtwin_base_url=kwargs["base_url"],
+            dtwin_session_cookies=kwargs["session_cookies"],
+            dtwin_session_headers=kwargs["session_headers"],
+            dtwin_domain_name=kwargs["domain_name"],
+        )
+        return AgentResult(success=True, reply=chat_tools.tool_get_status(ctx))
+
+    domain = SimpleNamespace(info={})
+    with (
+        patch.object(dtwin, "get_domain", return_value=domain),
+        patch.object(dtwin, "require_domain_llm", return_value=("h", "t", "ep", "fm")),
+        patch.object(dtwin.DigitalTwin, "resolve_registry", return_value={}),
+        patch.object(dtwin, "_chat_resolve_domain_name", return_value="sales_demo"),
+        patch.object(dtwin, "_chat_schema_digest", return_value=""),
+        patch.object(dtwin, "_chat_save_cache"),
+        patch("agents.agent_dtwin_chat.run_agent", side_effect=fake_run_agent),
+    ):
+        response = client.post(
+            "/dtwin/assistant/chat",
+            json={"message": "status?"},
+            headers={
+                "x-forwarded-email": "simyung.yang@example.com",
+                "x-forwarded-access-token": "dapi-user-token",
+                "x-forwarded-preferred-username": korean_name,
+            },
+        )
+
+    assert response.status_code == 200
+    assert "Status:  OK" in response.json()["reply"]
+    sent = dict(loopback_requests[0].headers.raw)
+    assert sent[b"x-forwarded-preferred-username"] == korean_name
+    assert sent[b"x-forwarded-email"] == b"simyung.yang@example.com"
+    assert sent[b"x-forwarded-access-token"] == b"dapi-user-token"
