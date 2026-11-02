@@ -1345,7 +1345,7 @@ function escapeHtmlAttr(text) {
 }
 
 /**
- * Load domain from Unity Catalog Volume
+ * Load domain from the Lakebase registry
  */
 async function domainLoad() {
     // Check if warehouse is selected first

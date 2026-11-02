@@ -1,0 +1,49 @@
+## Merge upstream master (v0.9.1) into integration-0.9.0
+
+Context:
+integration-0.9.0 was 16 commits behind databrickslabs/ontobricks master
+(v0.9.1 release: Dependabot security floors, Lakebase DQ on the Build
+warehouse, Auto-Map metric-view SQL, viewer Graph Chat access, SWRL builtin
+filters, docs split, .planning/ untracked with eval datasets moved to
+tests/eval/datasets/). This merges master in; the version becomes 0.9.1.
+
+Changes:
+1. .planning/agents/agent_dtwin_chat/SPEC.md,
+   .planning/agents/agent_owl_generator/SPEC.md,
+   .planning/agents/agent_owl_generator/eval/dataset.jsonl
+   Modify/delete conflicts resolved in favour of upstream: .planning/ is now
+   git-ignored. Every dataset row this branch added is already present in
+   tests/eval/datasets/agent_owl_generator/, so nothing is lost; the local
+   copies stay on disk untracked.
+2. src/agents/agent_auto_assignment/engine.py
+   SYSTEM_PROMPT keeps both blocks: this branch's SUBCLASSES rule, then
+   upstream's METRIC VIEW SOURCES rule.
+3. src/agents/tools/mapping.py
+   Keeps both helpers: this branch's _missing_attributes (attribute coverage
+   check) and upstream's _metric_view_sql_error / _prepare_mapping_sql
+   (metric-view SQL guard). The entity submit path uses both.
+4. tests/units/front/i18n_untranslated_baseline.json
+   Upstream rewrote the Help / About / Registry configuration prose for the
+   Lakebase registry. The templates baseline gains the 22 new English
+   fragments and drops the 4 that no longer exist ("Python 3.10+ & FastAPI",
+   "), the REST", "not", "tab."), matching how earlier upstream copy was
+   baselined.
+
+Known follow-up:
+- uv.lock does not satisfy the raised pyproject floors yet (`uv lock --check`
+  fails). This is upstream's state ("lock regen pending"); installs keep using
+  the pinned lock via `uv sync --frozen` / `uv run --frozen`.
+
+Modified files:
+- .planning/agents/agent_dtwin_chat/SPEC.md (untracked)
+- .planning/agents/agent_owl_generator/SPEC.md (untracked)
+- .planning/agents/agent_owl_generator/eval/dataset.jsonl (untracked)
+- src/agents/agent_auto_assignment/engine.py
+- src/agents/tools/mapping.py
+- tests/units/front/i18n_untranslated_baseline.json
+- changelogs/v0.9.1/simyung-yang_2026-11-02.log
+
+Test result:
+uv run --frozen pytest -q -m "not scenario" -> 10025 passed, 338 skipped,
+2 failed (tests/units/front/test_i18n.py, baseline drift fixed by item 4).
+Re-run of tests/units/front/test_i18n.py -> 127 passed.

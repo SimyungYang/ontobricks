@@ -19,6 +19,7 @@ from back.objects.digitaltwin.cache.TwinAssistantCache import TwinAssistantCache
 from back.objects.digitaltwin.explorer.TwinNeighborTriples import TwinNeighborTriples
 from back.objects.digitaltwin.TwinGraphAccess import TwinGraphAccess
 from back.objects.digitaltwin.build.TwinGraphBuild import TwinGraphBuild
+from back.objects.digitaltwin.quality.DataQualitySnapshot import DataQualitySnapshot
 from back.objects.digitaltwin.quality.TwinDataQualityRun import TwinDataQualityRun
 from back.objects.digitaltwin.explorer.TwinOntologyGroups import TwinOntologyGroups
 from back.objects.digitaltwin.query.TwinSparqlTranslate import TwinSparqlTranslate
@@ -34,6 +35,7 @@ from back.objects.digitaltwin.node.VirtualAttributeService import VirtualAttribu
 __all__ = [
     "CohortEngineContext",
     "CohortService",
+    "DataQualitySnapshot",
     "DigitalTwin",
     "DomainSnapshot",
     "GraphFilter",
