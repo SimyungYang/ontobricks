@@ -252,6 +252,7 @@ fi
 require_file "scripts/_internal/_init-lakebase-registry.py"
 if $IS_LAKEBASE; then
     require_file "scripts/bootstrap/setup-lakebase.sh"
+    require_file "scripts/bootstrap/lakebase-compute.sh"
     require_file "scripts/_internal/_lakebase-resolve-db.py"
 fi
 if $DO_BOOTSTRAP; then
@@ -362,6 +363,19 @@ if $IS_LAKEBASE; then
             || die "Lakebase project/database provision failed (see scripts/bootstrap/setup-lakebase.sh)"
         ok "Lakebase project '${LAKEBASE_PROJECT}' / database '${LAKEBASE_DATABASE}' ready"
     fi
+
+    begin_step "Apply Lakebase compute settings"
+    chmod +x scripts/bootstrap/lakebase-compute.sh
+    _compute_args=(
+        --project "$LAKEBASE_PROJECT"
+        --branch "$LAKEBASE_BRANCH"
+        --min-cu "${LAKEBASE_MIN_CU:-}"
+        --max-cu "${LAKEBASE_MAX_CU:-}"
+        --suspend-timeout "${LAKEBASE_SUSPEND_TIMEOUT:-}"
+    )
+    if $DRY_RUN; then _compute_args+=(--dry-run); fi
+    scripts/bootstrap/lakebase-compute.sh "${_compute_args[@]}" \
+        || die "Lakebase compute settings failed (see scripts/bootstrap/lakebase-compute.sh)"
 
     # Resolve db-… segment now that the database should exist.
     if [[ -z "${LAKEBASE_DATABASE_RESOURCE_SEGMENT:-}" ]]; then

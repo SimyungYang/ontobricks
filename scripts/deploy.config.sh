@@ -72,6 +72,13 @@ DEFAULT_LAKEBASE_DATABASE="ontobricks_demo_09_registry_db"
 # Postgres schema inside the Lakebase database, Each instance should have its own schema for isolation.
 DEFAULT_LAKEBASE_SCHEMA="ontobricks_demo_09_registry_sc"
 # Example — reuse existing schema: DEFAULT_LAKEBASE_SCHEMA="ontobricks_demo"
+# Compute of the branch's read-write endpoint, applied on every deploy
+# (scripts/bootstrap/lakebase-compute.sh). Autoscaling range in CU (max - min
+# must be <= 16) and idle time before scale-to-zero. Set a value to "" to leave
+# that setting as it is on the endpoint.
+DEFAULT_LAKEBASE_MIN_CU="${DEFAULT_LAKEBASE_MIN_CU-4}"
+DEFAULT_LAKEBASE_MAX_CU="${DEFAULT_LAKEBASE_MAX_CU-16}"
+DEFAULT_LAKEBASE_SUSPEND_TIMEOUT="${DEFAULT_LAKEBASE_SUSPEND_TIMEOUT-3600s}"
 
 # ── 0c. Derived defaults (auto-computed — do NOT edit) ────────────────
 DEFAULT_APP_NAME="ontobricks-${DEFAULT_INSTANCE_ID}"
@@ -140,6 +147,9 @@ export LAKEBASE_SCHEMA="${DEFAULT_LAKEBASE_SCHEMA}"
 # via the Databricks API. Exposed here so it can be overridden in CI
 # without re-running the API lookup (e.g. LAKEBASE_DATABASE_RESOURCE_SEGMENT=db-xxx make deploy).
 export LAKEBASE_DATABASE_RESOURCE_SEGMENT="${LAKEBASE_DATABASE_RESOURCE_SEGMENT:-}"
+export LAKEBASE_MIN_CU="${LAKEBASE_MIN_CU-$DEFAULT_LAKEBASE_MIN_CU}"
+export LAKEBASE_MAX_CU="${LAKEBASE_MAX_CU-$DEFAULT_LAKEBASE_MAX_CU}"
+export LAKEBASE_SUSPEND_TIMEOUT="${LAKEBASE_SUSPEND_TIMEOUT-$DEFAULT_LAKEBASE_SUSPEND_TIMEOUT}"
 
 # ── 4. app.yaml runtime fallbacks ───────────────────────────────────
 

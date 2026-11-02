@@ -117,3 +117,46 @@ Modified files:
 
 Test result:
 uv run --frozen pytest -q tests/units/front -> 1808 passed.
+
+## Deploy keeps the Lakebase endpoint at a configured compute
+
+Context:
+Lakebase compute was left at whatever the project was created with (1-4 CU
+without scale-to-zero on some demo workspaces, 4-8 CU on others) and had to be
+fixed by hand per workspace. The deploy config now owns it: every Lakebase
+deploy sets the branch's read-write endpoint to 4-16 CU with scale-to-zero
+after one hour, unless overridden.
+
+Changes:
+1. scripts/bootstrap/lakebase-compute.sh (new)
+   Reads the read-write endpoint of projects/<project>/branches/<branch> and
+   updates only the differing fields (autoscaling min/max CU, suspend
+   timeout) with an update mask. Validates numbers, `Ns` timeouts and
+   min <= max <= min + 16 before any API call. Empty values are left alone;
+   --dry-run reports the change.
+2. scripts/deploy.config.sh
+   New DEFAULT_LAKEBASE_MIN_CU (4), DEFAULT_LAKEBASE_MAX_CU (16),
+   DEFAULT_LAKEBASE_SUSPEND_TIMEOUT (3600s), exported as LAKEBASE_MIN_CU /
+   LAKEBASE_MAX_CU / LAKEBASE_SUSPEND_TIMEOUT. "" opts a setting out.
+3. scripts/deploy.sh
+   New step "Apply Lakebase compute settings" right after the Lakebase
+   project/database step (dry-run aware); the script is a required file.
+4. docs/deployment.md
+   Config table row for the three settings.
+5. tests/units/scripts/test_lakebase_compute.py (new)
+   Fake-CLI tests: update when different, no-op when equal, empty values,
+   dry run, invalid input rejected before the API, config defaults, step order.
+
+Modified files:
+- scripts/bootstrap/lakebase-compute.sh
+- scripts/deploy.config.sh
+- scripts/deploy.sh
+- docs/deployment.md
+- tests/units/scripts/test_lakebase_compute.py
+- changelogs/v0.9.1/simyung-yang_2026-11-02.log
+
+Test result:
+uv run --frozen pytest -q tests/units/scripts
+tests/units/settings/test_bundle_job_resource.py -> 58 passed.
+Dry run against the lgit-innotek and fevm-simyung endpoints: "already at
+min=4 max=16 suspend=3600s"; a 2-16 request plans only the min CU field.
