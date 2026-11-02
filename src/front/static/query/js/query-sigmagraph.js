@@ -104,6 +104,7 @@ var SigmaGraph = (function () {
     var _pathHighlightEdges = null; // Set of undirected edge keys (nodeA\0nodeB)
     var _highlightedSeeds = null; // Set of node IDs to visually emphasize (ring effect)
     var _pendingHighlightTerm = null; // term to auto-highlight after next filter execution
+    var _pendingHighlightSeeds = null; // seed URIs to highlight once the next graph renders
     var _graphFilterActive = false;
     var _lastExpandedSeedUris = null;
     var _initialized = false;
@@ -959,6 +960,7 @@ var SigmaGraph = (function () {
         }
 
         _renderer.on('afterRender', _drawSeedHalos);
+        _applyPendingHighlight();
 
         _renderer.on('clickNode', function (e) {
             _searchMatched = null;
@@ -2400,6 +2402,8 @@ var SigmaGraph = (function () {
         _searchNeighbors = null;
         _selectedNode = null;
         _hoveredNode = null;
+        _highlightedSeeds = null;
+        _pendingHighlightSeeds = uris && uris.length ? new Set(uris) : null;
         if (highlightTerm) _pendingHighlightTerm = highlightTerm;
         _setGraphLoadingStep('Rendering graph…');
         await _waitForGraphLoadingPaint();
@@ -2411,8 +2415,6 @@ var SigmaGraph = (function () {
             _searchTimerPending = false;
             _showSearchTiming(_searchTiming);
         }
-
-        setTimeout(function () { _applyPendingHighlight(); }, 200);
 
         var clearBtn = document.getElementById('sgClearGraphFilterBtn');
         if (clearBtn) {
@@ -2466,6 +2468,7 @@ var SigmaGraph = (function () {
         _pathHighlightEdges = null;
         _highlightedSeeds = null;
         _pendingHighlightTerm = null;
+        _pendingHighlightSeeds = null;
         _selectedNode = null;
         _hoveredNode = null;
 
@@ -2950,24 +2953,36 @@ var SigmaGraph = (function () {
         });
     }
 
+    /**
+     * Turn the pending search into the highlighted node set. Runs from
+     * _render once the new graph exists (a first search defers rendering
+     * until the groups load). The exact seed URIs win; the term only matters
+     * when none of them is a node (e.g. reasoning highlights by term).
+     */
     function _applyPendingHighlight() {
-        if (!_pendingHighlightTerm || !_graph) {
-            _highlightedSeeds = null;
-            return;
-        }
-        var term = _pendingHighlightTerm.toLowerCase();
+        if (!_graph || (!_pendingHighlightSeeds && !_pendingHighlightTerm)) return;
+        var seeds = _pendingHighlightSeeds;
+        var term = (_pendingHighlightTerm || '').toLowerCase();
+        _pendingHighlightSeeds = null;
         _pendingHighlightTerm = null;
         var matched = new Set();
-        _graph.forEachNode(function (nodeId, attrs) {
-            var label = (attrs.label || '').toLowerCase();
-            var localId = nodeId.toLowerCase();
-            var frag = localId.indexOf('#') >= 0
-                ? localId.substring(localId.lastIndexOf('#') + 1)
-                : localId.substring(localId.lastIndexOf('/') + 1);
-            if (label === term || frag === term || label.indexOf(term) >= 0 || frag.indexOf(term) >= 0) {
-                matched.add(nodeId);
-            }
-        });
+        if (seeds) {
+            seeds.forEach(function (uri) {
+                if (_graph.hasNode(uri)) matched.add(uri);
+            });
+        }
+        if (matched.size === 0 && term) {
+            _graph.forEachNode(function (nodeId, attrs) {
+                var label = (attrs.label || '').toLowerCase();
+                var localId = nodeId.toLowerCase();
+                var frag = localId.indexOf('#') >= 0
+                    ? localId.substring(localId.lastIndexOf('#') + 1)
+                    : localId.substring(localId.lastIndexOf('/') + 1);
+                if (label === term || frag === term || label.indexOf(term) >= 0 || frag.indexOf(term) >= 0) {
+                    matched.add(nodeId);
+                }
+            });
+        }
         _highlightedSeeds = matched.size > 0 ? matched : null;
         if (_renderer) {
             _renderer.refresh();
@@ -3389,7 +3404,7 @@ var SigmaGraph = (function () {
         updateSeedSelection: function () { _updateSeedSelectedCount(); },
         clearGraphFilter: function () { _clearGraphFilter(); },
         setHighlightTerm: function (term) { _pendingHighlightTerm = term || null; },
-        clearHighlight: function () { _highlightedSeeds = null; _pendingHighlightTerm = null; if (_renderer) _renderer.refresh(); },
+        clearHighlight: function () { _highlightedSeeds = null; _pendingHighlightTerm = null; _pendingHighlightSeeds = null; if (_renderer) _renderer.refresh(); },
 
         loadInferredTriples: async function () {
             try {

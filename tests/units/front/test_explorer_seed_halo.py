@@ -42,3 +42,32 @@ def test_halo_styles_exist_and_ignore_pointer_events():
     assert ".sg-seed-halo" in css
     layer = css.split(".sg-seed-halo-layer", 1)[1].split("}", 1)[0]
     assert "pointer-events: none" in layer
+
+
+def _fn(name: str) -> str:
+    return _js().split(f"function {name}(", 1)[1].split("\n    }\n", 1)[0]
+
+
+@pytest.mark.unit
+def test_highlight_is_applied_when_the_graph_renders_not_on_a_timer():
+    # A first search defers _render until the groups load, so a fixed 200 ms
+    # timer ran before the graph existed and the highlight was lost.
+    js = _js()
+    assert "setTimeout(function () { _applyPendingHighlight(); }" not in js
+    assert "_applyPendingHighlight();" in _fn("_render")
+
+
+@pytest.mark.unit
+def test_search_seeds_are_highlighted_by_uri_before_the_term():
+    expand = _fn("_expandAndRenderGraph")
+    assert "_pendingHighlightSeeds = " in expand
+    apply = _fn("_applyPendingHighlight")
+    assert "_graph.hasNode" in apply
+    assert apply.index("_pendingHighlightSeeds") < apply.index("indexOf(term)")
+
+
+@pytest.mark.unit
+def test_rerenders_without_a_pending_search_keep_the_current_highlight():
+    apply = _fn("_applyPendingHighlight")
+    guard = apply.split("return;", 1)[0]
+    assert "_highlightedSeeds = null" not in guard
