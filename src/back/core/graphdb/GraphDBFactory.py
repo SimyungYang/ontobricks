@@ -477,9 +477,9 @@ class GraphDBFactory:
         branch_path = resolve_lakebase_branch_path(cfg)
         try:
             if branch_path:
-                from back.core.databricks.lakebase import BranchLakebaseAuth
+                from back.core.databricks.lakebase import get_branch_lakebase_auth
 
-                auth = BranchLakebaseAuth(branch_path, database_override)
+                auth = get_branch_lakebase_auth(branch_path, database_override)
                 logger.info(
                     "Graph engine using explicit branch %r (database=%r)",
                     branch_path,

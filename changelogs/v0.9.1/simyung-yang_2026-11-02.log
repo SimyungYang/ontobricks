@@ -160,3 +160,43 @@ uv run --frozen pytest -q tests/units/scripts
 tests/units/settings/test_bundle_job_resource.py -> 58 passed.
 Dry run against the lgit-innotek and fevm-simyung endpoints: "already at
 min=4 max=16 suspend=3600s"; a 2-16 request plans only the min CU field.
+
+## Faster Lakebase-backed explorer and chat requests
+
+Context:
+Measured on ontobricks-lgit from Korea, an explorer search (preview + expand)
+took ~2 s. Server time was 0.30-0.44 s per data request against 0.02-0.09 s for
+session-only endpoints, and expansion JSON was sent uncompressed (860 KB, 28 KB
+gzipped) across the Pacific. With graph_engine_config.lakebase_branch set (all
+demo workspaces), GraphDBFactory built a new BranchLakebaseAuth per request,
+so each request created a WorkspaceClient and re-resolved the endpoint host
+(and token) over REST before querying (logged on every request).
+
+Changes:
+1. src/back/core/databricks/lakebase/BranchLakebaseAuth.py
+   New get_branch_lakebase_auth(branch, database): one process-wide instance
+   per (branch, database), guarded by a lock, so the resolved host and minted
+   JWT (55-minute TTL) survive across requests. Re-exported from the package.
+2. src/back/core/graphdb/GraphDBFactory.py
+   The explicit-branch path uses get_branch_lakebase_auth, matching the
+   bound path's get_lakebase_auth singleton.
+3. src/shared/fastapi/main.py
+   GZipMiddleware (minimum_size=1024, compresslevel=6). Starlette leaves
+   text/event-stream uncompressed, so Graph Chat still streams.
+4. tests/units/core/test_branch_lakebase_auth_reuse.py,
+   tests/units/core/test_response_compression.py (new)
+   Shared instance per key, host resolved once, factory hands stores the same
+   auth; gzip registered, large JSON compressed, event streams not.
+
+Modified files:
+- src/back/core/databricks/lakebase/BranchLakebaseAuth.py
+- src/back/core/databricks/lakebase/__init__.py
+- src/back/core/graphdb/GraphDBFactory.py
+- src/shared/fastapi/main.py
+- tests/units/core/test_branch_lakebase_auth_reuse.py
+- tests/units/core/test_response_compression.py
+- changelogs/v0.9.1/simyung-yang_2026-11-02.log
+
+Test result:
+Targeted (new tests, graphdb factory, graph-engine Lakebase settings, health,
+architecture) -> 148 passed. Full suite (uv run --frozen pytest -q -m "not scenario") -> 10059 passed, 338 skipped.

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import threading
 import time
 
 from back.core.databricks.lakebase.constants import TOKEN_TTL_S as _TOKEN_TTL_S
@@ -203,3 +204,23 @@ class BranchLakebaseAuth:
                 exc,
             )
         return ""
+
+
+_branch_auths: dict = {}
+_branch_auths_lock = threading.Lock()
+
+
+def get_branch_lakebase_auth(branch_path: str, database: str = "") -> BranchLakebaseAuth:
+    """Return the process-wide :class:`BranchLakebaseAuth` for one branch + database.
+
+    Reusing it keeps the resolved endpoint host and the minted JWT across
+    requests, so a query does not first rebuild a WorkspaceClient and call the
+    endpoints / credentials APIs.
+    """
+    key = ((branch_path or "").strip(), (database or "").strip())
+    with _branch_auths_lock:
+        auth = _branch_auths.get(key)
+        if auth is None:
+            auth = BranchLakebaseAuth(*key)
+            _branch_auths[key] = auth
+        return auth

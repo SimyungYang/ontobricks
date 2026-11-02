@@ -697,6 +697,13 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
+    # Gzip responses for clients that accept it: explorer expansions are
+    # hundreds of KB of JSON. Starlette skips text/event-stream, so Graph
+    # Chat keeps streaming token by token.
+    from starlette.middleware.gzip import GZipMiddleware
+
+    app.add_middleware(GZipMiddleware, minimum_size=1024, compresslevel=6)
+
     # Request duration logging (outermost — wraps everything)
     from shared.fastapi.timing import RequestTimingMiddleware
 
