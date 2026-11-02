@@ -131,8 +131,15 @@ NODE = shutil.which("node")
 def test_escape_and_render_markdown_behaviour():
     js = _read(UTILS_JS)
     escapes = re.search(r"^const _HTML_ESCAPES = .*?;$", js, re.M).group(0)
+    strong_rule = [
+        re.search(r"^const _STRONG_ANY_FLANK_RE = .*?;$", js, re.M).group(0),
+        re.search(r"^let _strongAnyFlankInstalled = .*?;$", js, re.M).group(0),
+        _top_level_function(js, "_strongAnyFlankMatch"),
+        _top_level_function(js, "_installStrongAnyFlank"),
+    ]
     source = "\n".join([
         escapes,
+        *strong_rule,
         _top_level_function(js, "escapeHtml"),
         _top_level_function(js, "renderMarkdown"),
     ])

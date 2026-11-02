@@ -47,3 +47,40 @@ Test result:
 uv run --frozen pytest -q -m "not scenario" -> 10025 passed, 338 skipped,
 2 failed (tests/units/front/test_i18n.py, baseline drift fixed by item 4).
 Re-run of tests/units/front/test_i18n.py -> 127 passed.
+
+## Markdown bold closes before Korean particles
+
+Context:
+Graph Chat replies often showed literal `**` around entity names. CommonMark
+only closes `**` when the run is right-flanking: after punctuation it must be
+followed by whitespace or punctuation. Korean particles attach directly, so
+`**[대구지점](/resolve?uri=…)**이` (closer after the link's `)`) and
+`**대구지점(E1)**이` stayed unformatted. Reproduced with marked 15.0.12, the
+version base.html loads.
+
+Changes:
+1. src/front/static/global/js/utils.js
+   - New _strongAnyFlankMatch: matches a same-line `**…**` pair at the start
+     of the source regardless of flanking. Openers followed by whitespace,
+     closers preceded by whitespace, triple runs and multi-line pairs are left
+     to the default rules.
+   - renderMarkdown installs it once as a marked inline extension
+     (strongAnyFlank) that emits standard strong tokens, so every caller
+     (Graph Chat, assistant, comments, audit, help) benefits.
+2. tests/units/front/test_markdown_strong_any_flank.py
+   New node-run tests for the matcher and the one-time marked wiring.
+3. tests/units/front/test_frontend_xss_hardening.py
+   The renderMarkdown harness extracts single functions, so it now also
+   loads the strong-rule helpers it calls.
+
+Modified files:
+- src/front/static/global/js/utils.js
+- tests/units/front/test_markdown_strong_any_flank.py
+- tests/units/front/test_frontend_xss_hardening.py
+- changelogs/v0.9.1/simyung-yang_2026-11-02.log
+
+Test result:
+uv run --frozen pytest -q tests/units/front
+tests/units/api/test_discussion_panel_assets.py -> 1817 passed.
+Manual check with marked 15.0.12: link-in-bold before a particle, bold in a
+GFM table cell, code spans/blocks untouched, spaced `a ** b ** c` literal.

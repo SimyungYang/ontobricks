@@ -323,6 +323,38 @@ function escapeAttr(text) {
     return escapeHtml(text);
 }
 
+// CommonMark closes `**` only when the run is right-flanking: after
+// punctuation it must be followed by whitespace or punctuation. Korean
+// particles attach directly, so `**[대구지점](…)**이` or `**대구지점(E1)**이`
+// stayed literal. This matches a same-line `**…**` pair at the start of `src`
+// regardless of flanking; triple runs and multi-line pairs keep the default.
+const _STRONG_ANY_FLANK_RE = /^\*\*(?![\s*])((?:\\[\s\S]|[^\\*\n]|\*(?!\*))+?)(?<!\s)\*\*(?!\*)/;
+
+function _strongAnyFlankMatch(src) {
+    const m = _STRONG_ANY_FLANK_RE.exec(src);
+    return m ? { raw: m[0], text: m[1] } : null;
+}
+
+let _strongAnyFlankInstalled = false;
+
+function _installStrongAnyFlank() {
+    if (_strongAnyFlankInstalled || typeof window.marked.use !== 'function') return;
+    _strongAnyFlankInstalled = true;
+    window.marked.use({ extensions: [{
+        name: 'strongAnyFlank',
+        level: 'inline',
+        start(src) {
+            const i = src.indexOf('**');
+            return i < 0 ? undefined : i;
+        },
+        tokenizer(src) {
+            const m = _strongAnyFlankMatch(src);
+            if (!m) return undefined;
+            return { type: 'strong', raw: m.raw, text: m.text, tokens: this.lexer.inlineTokens(m.text) };
+        },
+    }] });
+}
+
 /**
  * Render untrusted Markdown to sanitised HTML.
  * Uses the global `marked` + `DOMPurify` (loaded in base.html); without
@@ -335,6 +367,7 @@ function renderMarkdown(text) {
     if (window.marked && typeof window.marked.parse === 'function'
             && window.DOMPurify && typeof window.DOMPurify.sanitize === 'function') {
         try {
+            _installStrongAnyFlank();
             return window.DOMPurify.sanitize(window.marked.parse(src, { breaks: true, gfm: true }));
         } catch (e) { /* fall through to plain text */ }
     }
