@@ -10,16 +10,19 @@ streamed with the same cap as a local upload.
 from __future__ import annotations
 
 import posixpath
+from dataclasses import replace
 from typing import Any
 
 from back.core.databricks.document.DocumentExtractor import DocumentExtractor
 from back.core.databricks.document.DocumentParseService import DocumentParseService
 from back.core.databricks.document.VolumeDocument import VolumeDocument
+from back.core.databricks.document.VolumeImportPlan import VolumeImportPlan
 from back.core.errors import (
     AuthorizationError,
     InfrastructureError,
     NotFoundError,
     OntoBricksError,
+    SessionExpiredError,
     ValidationError,
 )
 from back.core.logging import get_logger
@@ -33,8 +36,11 @@ class VolumeDocumentSource:
     PATH_PREFIX = "/Volumes/"
     MAX_PATH_LENGTH = 1024
     MAX_IMPORT_PATHS = 50
-    MAX_IMPORT_FILES = 50
-    MAX_BROWSE_ENTRIES = 500
+    # Total files per import job; the job itself works in batches of 50.
+    MAX_IMPORT_FILES = 500
+    MAX_BROWSE_ENTRIES = MAX_IMPORT_FILES
+    # A folder is scanned past the cap so the skipped-over-cap count is exact.
+    MAX_FOLDER_SCAN = 10 * MAX_IMPORT_FILES
     SCOPE_HINT = (
         "If you can open it in Databricks, the app may be missing the "
         "'files.files' user authorization scope."
@@ -83,7 +89,12 @@ class VolumeDocumentSource:
 
     @classmethod
     def _status_error(cls, status: int, path: str) -> OntoBricksError:
-        if status in (401, 403):
+        if status == 401:
+            return SessionExpiredError(
+                f"Your Databricks sign-in expired while reading {path}. "
+                "Reload the page and import the remaining files again."
+            )
+        if status == 403:
             return AuthorizationError(
                 f"You do not have permission to read {path}. {cls.SCOPE_HINT}"
             )
@@ -117,45 +128,60 @@ class VolumeDocumentSource:
 
     # -- import plan ------------------------------------------------
 
-    def plan(self, paths: Any) -> tuple[list[VolumeDocument], bool]:
-        """Resolve file/folder paths into documents; return ``(docs, truncated)``.
+    @classmethod
+    def validate_paths(cls, paths: Any) -> list[str]:
+        """Check the request shape (cheap, no I/O); return the non-blank paths."""
+        cleaned = (
+            [str(p).strip() for p in paths if str(p).strip()]
+            if isinstance(paths, list)
+            else []
+        )
+        if not cleaned:
+            raise ValidationError("At least one /Volumes path is required")
+        if len(cleaned) > cls.MAX_IMPORT_PATHS:
+            raise ValidationError(
+                f"At most {cls.MAX_IMPORT_PATHS} paths can be imported at once"
+            )
+        return cleaned
+
+    def plan(self, paths: Any) -> VolumeImportPlan:
+        """Resolve file/folder paths into one import job's documents.
 
         Folders contribute the supported files directly inside them (not
-        recursive). At most ``MAX_IMPORT_FILES`` files are accepted per call;
-        duplicate paths are dropped and a second file with an already-used
-        name is reported instead of silently overwriting the first.
+        recursive). Importable files are ordered by path (stable name order
+        within a folder); a later file whose name is already taken is
+        reported instead of overwriting the first. At most
+        ``MAX_IMPORT_FILES`` are kept; the rest are counted as skipped.
         """
-        if not isinstance(paths, list) or not [p for p in paths if str(p).strip()]:
-            raise ValidationError("At least one /Volumes path is required")
-        if len(paths) > self.MAX_IMPORT_PATHS:
-            raise ValidationError(
-                f"At most {self.MAX_IMPORT_PATHS} paths can be imported at once"
-            )
-        docs: list[VolumeDocument] = []
+        failed: list[VolumeDocument] = []
+        candidates: list[VolumeDocument] = []
         seen_paths: set[str] = set()
-        seen_names: set[str] = set()
-        truncated = False
-        for raw in (str(p).strip() for p in paths if str(p).strip()):
-            resolved, folder_truncated = self._resolve(raw)
-            truncated = truncated or folder_truncated
+        listing_truncated = False
+        for raw in self.validate_paths(paths):
+            resolved, truncated = self._resolve(raw)
+            listing_truncated = listing_truncated or truncated
             for doc in resolved:
                 if doc.path in seen_paths:
                     continue
                 seen_paths.add(doc.path)
-                if not doc.error and doc.filename in seen_names:
-                    doc = VolumeDocument(
-                        doc.path,
-                        doc.filename,
-                        doc.size,
-                        "Another selected file has the same name",
-                    )
-                if not doc.error:
-                    if len(seen_names) >= self.MAX_IMPORT_FILES:
-                        truncated = True
-                        continue
-                    seen_names.add(doc.filename)
-                docs.append(doc)
-        return docs, truncated
+                (failed if doc.error else candidates).append(doc)
+
+        candidates.sort(key=lambda d: (d.path.casefold(), d.path))
+        accepted: list[VolumeDocument] = []
+        seen_names: set[str] = set()
+        for doc in candidates:
+            if doc.filename in seen_names:
+                failed.append(
+                    replace(doc, error="Another selected file has the same name")
+                )
+                continue
+            seen_names.add(doc.filename)
+            accepted.append(doc)
+        return VolumeImportPlan(
+            docs=failed + accepted[: self.MAX_IMPORT_FILES],
+            skipped_over_cap=max(0, len(accepted) - self.MAX_IMPORT_FILES),
+            listing_truncated=listing_truncated,
+        )
 
     def _resolve(self, raw: str) -> tuple[list[VolumeDocument], bool]:
         """Resolve one user path as a file, else as a folder."""
@@ -171,7 +197,7 @@ class VolumeDocumentSource:
                 return [self._failed(path, file_status)], False
             # Not a readable file (a folder answers 404 or 4xx here): try a listing.
             status, items, truncated = self._files.list_directory_page(
-                path, self.MAX_BROWSE_ENTRIES
+                path, self.MAX_FOLDER_SCAN
             )
         except Exception as exc:  # noqa: BLE001 - reported per path, never fatal
             logger.warning(

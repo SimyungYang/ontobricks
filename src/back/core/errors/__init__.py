@@ -10,6 +10,7 @@ from back.core.errors.AuthorizationError import AuthorizationError  # noqa: F401
 from back.core.errors.InfrastructureError import InfrastructureError  # noqa: F401
 from back.core.errors.ConflictError import ConflictError  # noqa: F401
 from back.core.errors.GoneError import GoneError  # noqa: F401
+from back.core.errors.SessionExpiredError import SessionExpiredError  # noqa: F401
 from back.core.errors.OperationCancelledError import (  # noqa: F401
     OperationCancelledError,
 )
@@ -33,6 +34,7 @@ __all__ = [
     "InfrastructureError",
     "ConflictError",
     "GoneError",
+    "SessionExpiredError",
     "OperationCancelledError",
     "ErrorResponse",
     "_error_code_from_class",

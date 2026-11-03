@@ -46,6 +46,16 @@
     min-width: 0;
 }
 
+.doc-volume-report {
+    max-height: 12rem;
+    overflow-y: auto;
+    word-break: break-all;
+}
+
+#docVolumeProgressFill {
+    width: 0;
+}
+
 /* ==========================================================================
    Registry Select Spinners
    ========================================================================== */

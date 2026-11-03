@@ -82,6 +82,27 @@ def test_volume_import_uses_user_scoped_endpoints_and_shared_list():
         assert url in js
 
 
+def test_volume_import_follows_a_background_task():
+    html = DOCUMENTS_HTML.read_text(encoding="utf-8")
+    for element_id in (
+        "docVolumeProgress",
+        "docVolumeProgressBar",
+        "docVolumeProgressFill",
+        "docVolumeProgressCount",
+        "docVolumeSummary",
+    ):
+        assert f'id="{element_id}"' in html, element_id
+    # Progress and summary live inside the gated import block.
+    assert html.index('id="docVolumeImport"') < html.index('id="docVolumeSummary"')
+    js = VOLUME_JS.read_text(encoding="utf-8")
+    assert "waitForTask(taskId, task =>" in js
+    assert "summary.batches_done" in js
+    tracker = (REPO_ROOT / "src/front/static/global/js/task-tracker.js").read_text(
+        encoding="utf-8"
+    )
+    assert "'knowledge_store_import': '/domain#documents'" in tracker
+
+
 def test_volume_import_is_gated_like_upload():
     css = PERMISSIONS_CSS.read_text(encoding="utf-8")
     gate = "body:is(.read-only-version, .role-viewer, .read-only-locked)"

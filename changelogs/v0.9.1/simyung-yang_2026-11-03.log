@@ -237,3 +237,119 @@ Test result:
   191 passed.
 - Full unit suite (`uv run --frozen pytest tests/units -q -x -p no:cacheprovider`):
   9635 passed, 12 skipped, 18 warnings in 890.24s.
+
+## Run UC Volume imports as a background task (500 files, batches of 50)
+
+Context:
+Follow-up to "Import Knowledge Store documents from a Unity Catalog Volume". The first version imported inside
+the HTTP request and stopped at 50 files. Per user decision the server now
+imports all supported files, up to 500 per job. The job runs as a TaskManager
+background task, so a large import does not depend on one request staying
+open behind the Apps proxy. Files are processed in batches of 50 with bounded
+concurrency. The task keeps the caller's token captured at request time and
+stops cleanly on 401 instead of falling back to the service principal.
+
+Changes:
+
+1. src/back/core/databricks/document/VolumeImportJob.py (new)
+   - Runs a plan in batches of `BATCH_SIZE` (50), with at most `CONCURRENCY`
+     (4) reads in flight.
+   - Records processed / imported / failed (with reasons) and publishes a
+     snapshot after every file and every batch.
+   - On `SessionExpiredError` (401) it stops, lists every unread file as
+     `remaining`, and sets `stopped_reason`. Task cancellation stops it the
+     same way.
+2. src/back/core/databricks/document/VolumeImportPlan.py (new)
+   - Plan record: docs, `skipped_over_cap`, `listing_truncated`.
+3. src/back/core/databricks/document/VolumeDocumentSource.py
+   - `MAX_IMPORT_FILES = 500` (job cap), `MAX_BROWSE_ENTRIES` aligned to it.
+   - `MAX_FOLDER_SCAN` (5000) for import scans, so the skipped count is exact.
+   - `validate_paths()`: request-shape check with no I/O.
+   - `plan()` sorts importable files by path (stable name order), resolves
+     duplicate names in that order, keeps the first 500 and counts the rest.
+   - A 401 now maps to `SessionExpiredError`; 403 stays `AuthorizationError`.
+4. src/back/core/errors/SessionExpiredError.py (new), src/back/core/errors/__init__.py
+   - `AuthorizationError` subclass with HTTP 401 for expired forwarded
+     credentials.
+5. src/back/core/databricks/__init__.py, src/back/core/databricks/document/__init__.py
+   - Re-export `VolumeImportJob` and `VolumeImportPlan`.
+6. src/api/routers/internal/domain.py
+   - `POST /domain/documents/import-volume` validates the shape and binds the
+     Files API client to the caller's token. It starts a
+     `knowledge_store_import` task and returns `task_id`, `max_files` and
+     `batch_size` at once.
+   - `_run_volume_import_task` plans, runs the job, and mirrors progress onto
+     the task (progress %, log line, `result` snapshot).
+   - `_submit_document(..., parse_inline=True)` parses on the import worker,
+     so the job does not spawn one parse task per file. Uploads keep their
+     per-file parse task.
+   - Removed the in-request `_import_volume_document`.
+7. src/front/static/domain/js/domain-documents-volume.js, src/front/templates/partials/domain/_domain_documents.html, src/front/static/global/css/config.css
+   - After the POST, follows the task via `waitForTask` and shows a progress
+     bar with processed / total.
+   - Refreshes the document list after each finished batch and at the end.
+   - Renders a final summary: imported, failed with reasons, skipped over the
+     limit, and remaining files if the job stopped.
+   - Help text now says 500 per import, batches of 50.
+8. src/front/static/global/js/task-tracker.js
+   - `knowledge_store_import` deep-links to `/domain#documents` from the
+     hourglass tracker.
+9. src/front/static/global/js/i18n-ko.js
+   - Korean strings for progress, summary, notifications and common
+     per-file reasons; dropped the two strings the old flow used.
+10. docs/user-guide.md, docs/architecture.md
+    - Background import, 500-file limit, batches, sign-in expiry behaviour.
+11. Tests
+    - tests/units/core/test_volume_import_job.py (new) covers:
+      - 120 files → 3 batches, all imported.
+      - 600 files → 500 imported, 100 skipped.
+      - Concurrency bound, no batch overlap, default constants.
+      - 401 mid-job stops and lists the remaining files.
+      - A 403 fails one file only.
+      - Planned and parse failures carry reasons; cancellation stops the job.
+    - tests/units/core/test_volume_document_source.py: plan record, 500 cap
+      with stable order, folder scan above the cap, `validate_paths`, 401 →
+      `SessionExpiredError`.
+    - tests/units/api/test_document_volume_import_routes.py (rewritten):
+      - The POST returns a `task_id` before any Files API call.
+      - The worker runs on a fresh thread with no request identity and still
+        sends only `Bearer USER_TOKEN`.
+      - Progress and summary are readable through `GET /tasks/{id}`.
+      - Parse runs inline (no extra tasks); 401 stops with `remaining`.
+      - A 403 is reported per file; bad request shapes are rejected without a
+        task.
+    - tests/units/front/test_domain_documents_volume_behaviour.py (rewritten):
+      task following, progress text and width, refresh per batch, summary
+      escaping and counts, stopped job, rejected start.
+    - tests/units/front/test_domain_documents_ui.py: progress/summary markup
+      and the task-tracker mapping.
+
+Modified files:
+- src/back/core/databricks/document/VolumeImportJob.py (new)
+- src/back/core/databricks/document/VolumeImportPlan.py (new)
+- src/back/core/databricks/document/VolumeDocumentSource.py
+- src/back/core/databricks/document/__init__.py
+- src/back/core/databricks/__init__.py
+- src/back/core/errors/SessionExpiredError.py (new)
+- src/back/core/errors/__init__.py
+- src/api/routers/internal/domain.py
+- src/front/static/domain/js/domain-documents-volume.js
+- src/front/templates/partials/domain/_domain_documents.html
+- src/front/static/global/css/config.css
+- src/front/static/global/js/task-tracker.js
+- src/front/static/global/js/i18n-ko.js
+- docs/user-guide.md
+- docs/architecture.md
+- tests/units/core/test_volume_import_job.py (new)
+- tests/units/core/test_volume_document_source.py
+- tests/units/api/test_document_volume_import_routes.py
+- tests/units/front/test_domain_documents_volume_behaviour.py
+- tests/units/front/test_domain_documents_ui.py
+
+Test result:
+- Targeted (volume source, import job, Files API service, document routes,
+  documents UI + behaviour, i18n, bundle resources, architecture, permission
+  middleware, data-plane client): 720 passed.
+- Full unit suite (`uv run --frozen pytest tests/units -q -x -p no:cacheprovider`):
+  9646 passed, 12 skipped, 18 warnings in 880.92s (before the rebase onto
+  eb132cc5; affected modules re-run after it, see the report).

@@ -27,6 +27,7 @@ const TASK_TYPE_URLS = {
     'auto_assign': '/mapping#autoassign',
     'metadata_load': '/domain#metadata',
     'metadata_update': '/domain#metadata',
+    'knowledge_store_import': '/domain#documents',
     'triplestore_sync': '/dtwin#sync',
     'registry_archive': '/dtwin#sync',
     'quality_checks': '/dtwin#quality',

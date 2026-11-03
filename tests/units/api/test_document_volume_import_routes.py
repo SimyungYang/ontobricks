@@ -3,12 +3,14 @@
 The Files API is mocked at the HTTP-session level and the real
 ``get_data_plane_client`` → ``DatabricksClient`` → ``VolumeFileService``
 chain runs in Databricks App mode, so these tests prove the forwarded user
-token (not the app service principal) is the bearer on every volume call.
+token (not the app service principal) is the bearer on every volume call —
+including calls made later by the background import task.
 """
 
 from __future__ import annotations
 
 import importlib
+import threading
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 from urllib.parse import unquote
@@ -17,6 +19,7 @@ import pytest
 import requests
 
 from api.routers.internal import domain as routes
+from api.routers.internal import tasks as task_routes
 from back.core.databricks import DatabricksAuth, ParseStatus, ParseSubmission
 from back.core.databricks.request_identity import (
     RequestIdentity,
@@ -24,6 +27,7 @@ from back.core.databricks.request_identity import (
     set_request_identity,
 )
 from back.core.errors import AuthorizationError, ValidationError
+from back.core.task_manager import get_task_manager
 
 pytestmark = pytest.mark.unit
 
@@ -31,6 +35,7 @@ FOLDER, VERSION = "sales", "1"
 ROOT = "/Volumes/main/docs/raw"
 FILES_PREFIX = "https://ws.example.com/api/2.0/fs/files"
 DIRS_PREFIX = "https://ws.example.com/api/2.0/fs/directories"
+SETTINGS = SimpleNamespace(databricks_host="", databricks_token="")
 
 
 class _Request:
@@ -42,25 +47,37 @@ class _Request:
 
 
 class _FakeParseService:
-    def __init__(self):
+    """``pending=True`` makes binaries go through ``parse_pending`` (inline)."""
+
+    def __init__(self, pending=False):
+        self.pending = pending
         self.prepared = []
+        self.parsed = []
 
     def prepare_upload(self, folder, version, filename, content):
         self.prepared.append((folder, version, filename, content))
+        if self.pending:
+            return ParseSubmission(filename, True, False, True, ParseStatus.PENDING)
         return ParseSubmission(filename, True, False, False, ParseStatus.READY)
+
+    def parse_pending(self, folder, version, filename):
+        self.parsed.append(filename)
+        return {"filename": filename, "status": ParseStatus.READY.value}
 
 
 class _FilesAPI:
-    """Mocked Files API keyed by absolute volume path; records bearer tokens."""
+    """Mocked Files API keyed by volume path; records every bearer token."""
 
-    def __init__(self, files=None, dirs=None, forbidden=()):
+    def __init__(self, files=None, dirs=None, forbidden=(), expired=()):
         self.files = files or {}
         self.dirs = dirs or {}
         self.forbidden = set(forbidden)
+        self.expired = set(expired)  # 401 on download only (token aged mid-job)
         self.bearers = []
         self.downloads = []
 
-    def _resp(self, status, *, headers=None, payload=None, body=b""):
+    @staticmethod
+    def _resp(status, *, headers=None, payload=None, body=b""):
         resp = MagicMock(status_code=status, headers=headers or {})
         resp.json.return_value = payload or {}
         resp.iter_content.side_effect = lambda **_kw: iter([body] if body else [])
@@ -81,16 +98,40 @@ class _FilesAPI:
         self.bearers.append(headers["Authorization"])
         if url.startswith(DIRS_PREFIX):
             path = unquote(url[len(DIRS_PREFIX):])
-            if path in self.forbidden:
-                return self._resp(403)
             if path not in self.dirs:
                 return self._resp(404)
             return self._resp(200, payload={"contents": self.dirs[path]})
         path = unquote(url[len(FILES_PREFIX):])
         self.downloads.append(path)
+        if path in self.expired:
+            return self._resp(401)
         if path in self.forbidden:
             return self._resp(403)
         return self._resp(200, body=self.files[path])
+
+
+class _Tasks:
+    """Real TaskManager, but background targets run when the test says so."""
+
+    def __init__(self):
+        self.real = get_task_manager()
+        self.pending = []
+
+    def run_background_task(self, name, task_type, target, *args, steps=None, **kwargs):
+        task = self.real.create_task(name, task_type, steps=steps)
+        self.pending.append((task, target, args, kwargs))
+        return task
+
+    def run_pending(self):
+        """Run queued workers on a fresh thread (no request context)."""
+        for task, target, args, kwargs in self.pending:
+            worker = threading.Thread(target=target, args=(task, *args), kwargs=kwargs)
+            worker.start()
+            worker.join(timeout=30)
+        self.pending.clear()
+
+    def __getattr__(self, name):
+        return getattr(self.real, name)
 
 
 @pytest.fixture
@@ -112,12 +153,13 @@ def app_mode(monkeypatch):
         uc_domain_folder=FOLDER, domain_folder=FOLDER, current_version=VERSION
     )
     monkeypatch.setattr(routes, "get_domain", lambda _m: domain)
-    parse_service = _FakeParseService()
-    monkeypatch.setattr(routes, "_make_document_parse_service", lambda *_a, **_k: parse_service)
-    monkeypatch.setattr(routes, "get_task_manager", lambda: MagicMock())
+    ctx = SimpleNamespace(domain=domain, monkeypatch=monkeypatch, tasks=_Tasks())
+    ctx.parse_service = _FakeParseService()
+    monkeypatch.setattr(routes, "_make_document_parse_service", lambda *_a, **_k: ctx.parse_service)
+    monkeypatch.setattr(routes, "get_task_manager", lambda: ctx.tasks)
 
     token = set_request_identity(RequestIdentity(email="u@x.com", user_token="USER_TOKEN"))
-    yield SimpleNamespace(domain=domain, parse_service=parse_service, monkeypatch=monkeypatch)
+    yield ctx
     reset_request_identity(token)
 
 
@@ -126,59 +168,121 @@ def _use_files_api(ctx, api):
     ctx.monkeypatch.setattr(requests.Session, "get", lambda self, url, **kw: api.get(url, **kw))
 
 
-SETTINGS = SimpleNamespace(databricks_host="", databricks_token="")
+async def _start(paths):
+    return await routes.import_volume_documents(
+        _Request({"paths": paths}), SimpleNamespace(), SETTINGS
+    )
+
+
+async def _finish(ctx, task_id):
+    """Run the worker with *no* request identity, then read GET /tasks/{id}."""
+    blank = set_request_identity(RequestIdentity())
+    try:
+        ctx.tasks.run_pending()
+    finally:
+        reset_request_identity(blank)
+    return (await task_routes.get_task(task_id))["task"]
+
+
+# -- task lifecycle ---------------------------------------------------------
 
 
 @pytest.mark.asyncio
-async def test_import_file_runs_shared_pipeline_with_user_token(app_mode):
+async def test_post_returns_task_id_before_any_volume_call(app_mode):
     api = _FilesAPI(files={f"{ROOT}/guide.md": b"# Guide"})
     _use_files_api(app_mode, api)
 
-    result = await routes.import_volume_documents(
-        _Request({"paths": [f"{ROOT}/guide.md"]}), SimpleNamespace(), SETTINGS
-    )
+    response = await _start([f"{ROOT}/guide.md"])
 
-    assert result["success"] is True
-    item = result["results"][0]
-    assert item["filename"] == "guide.md"
-    assert item["source_path"] == f"{ROOT}/guide.md"
-    assert item["parse_status"] == "ready"
+    assert response["success"] is True
+    assert response["task_id"]
+    assert response["max_files"] == 500
+    assert response["batch_size"] == 50
+    assert api.bearers == []  # nothing ran inside the request
+    assert app_mode.tasks.real.get_task(response["task_id"]).task_type == "knowledge_store_import"
+
+
+@pytest.mark.asyncio
+async def test_task_reads_with_the_token_captured_at_request_time(app_mode):
+    api = _FilesAPI(files={f"{ROOT}/guide.md": b"# Guide"})
+    _use_files_api(app_mode, api)
+    response = await _start([f"{ROOT}/guide.md"])
+
+    task = await _finish(app_mode, response["task_id"])
+
+    assert task["status"] == "completed"
+    assert task["result"]["imported"] == 1
     assert app_mode.parse_service.prepared == [(FOLDER, VERSION, "guide.md", b"# Guide")]
     assert api.bearers and set(api.bearers) == {"Bearer USER_TOKEN"}
 
 
 @pytest.mark.asyncio
-async def test_import_folder_imports_supported_direct_children(app_mode):
+async def test_progress_and_summary_are_on_the_task(app_mode):
     contents = [
-        {"name": "a.md", "is_directory": False, "file_size": 2},
-        {"name": "b.exe", "is_directory": False, "file_size": 2},
-        {"name": "sub/", "is_directory": True},
+        {"name": f"d{i:03d}.md", "is_directory": False, "file_size": 2} for i in range(120)
     ]
-    api = _FilesAPI(files={f"{ROOT}/a.md": b"aa"}, dirs={ROOT: contents})
-    _use_files_api(app_mode, api)
+    files = {f"{ROOT}/d{i:03d}.md": b"aa" for i in range(120)}
+    _use_files_api(app_mode, _FilesAPI(files=files, dirs={ROOT: contents}))
+    response = await _start([ROOT])
 
-    result = await routes.import_volume_documents(
-        _Request({"paths": [ROOT]}), SimpleNamespace(), SETTINGS
-    )
+    task = await _finish(app_mode, response["task_id"])
 
-    assert [r["filename"] for r in result["results"]] == ["a.md"]
-    assert api.downloads == [f"{ROOT}/a.md"]
+    result = task["result"]
+    assert task["progress"] == 100
+    assert (result["processed"], result["total"]) == (120, 120)
+    assert (result["imported"], result["failed"]) == (120, 0)
+    assert (result["batches"], result["batches_done"]) == (3, 3)
+    assert task["log_entries"]  # human-readable progress lines for the tracker
 
 
 @pytest.mark.asyncio
-async def test_forbidden_file_is_reported_and_not_stored(app_mode):
+async def test_binary_files_are_parsed_inline_not_as_extra_tasks(app_mode):
+    app_mode.parse_service = _FakeParseService(pending=True)
+    _use_files_api(app_mode, _FilesAPI(files={f"{ROOT}/spec.pdf": b"%PDF"}))
+    before = len(app_mode.tasks.real.get_all_tasks())
+    response = await _start([f"{ROOT}/spec.pdf"])
+
+    task = await _finish(app_mode, response["task_id"])
+
+    assert app_mode.parse_service.parsed == ["spec.pdf"]
+    assert task["result"]["imported"] == 1
+    # Only the import task itself was created — no per-file parse tasks.
+    assert len(app_mode.tasks.real.get_all_tasks()) <= before + 1
+
+
+@pytest.mark.asyncio
+async def test_expired_token_stops_the_task_and_lists_remaining_files(app_mode):
+    path = f"{ROOT}/late.pdf"
+    _use_files_api(app_mode, _FilesAPI(files={path: b"%PDF"}, expired={path}))
+    response = await _start([path])
+
+    task = await _finish(app_mode, response["task_id"])
+
+    result = task["result"]
+    assert task["status"] == "completed"
+    assert "sign-in expired" in result["stopped_reason"]
+    assert result["remaining"] == [path]
+    assert result["imported"] == 0
+    assert app_mode.parse_service.prepared == []
+
+
+@pytest.mark.asyncio
+async def test_forbidden_file_is_a_reported_failure(app_mode):
     path = f"{ROOT}/secret.pdf"
     api = _FilesAPI(files={path: b"%PDF"}, forbidden={path})
     _use_files_api(app_mode, api)
+    response = await _start([path])
 
-    result = await routes.import_volume_documents(
-        _Request({"paths": [path]}), SimpleNamespace(), SETTINGS
-    )
+    task = await _finish(app_mode, response["task_id"])
 
-    assert result["success"] is False
-    assert "permission" in result["results"][0]["message"]
+    failure = task["result"]["failures"][0]
+    assert failure["source_path"] == path
+    assert "permission" in failure["message"]
     assert app_mode.parse_service.prepared == []
     assert api.downloads == []
+
+
+# -- request-time validation ------------------------------------------------
 
 
 @pytest.mark.asyncio
@@ -188,15 +292,13 @@ async def test_missing_user_token_fails_closed_before_any_volume_call(app_mode):
     token = set_request_identity(RequestIdentity(email="u@x.com", user_token=""))
     try:
         with pytest.raises(AuthorizationError):
-            await routes.import_volume_documents(
-                _Request({"paths": [f"{ROOT}/a.md"]}), SimpleNamespace(), SETTINGS
-            )
+            await _start([f"{ROOT}/a.md"])
         with pytest.raises(AuthorizationError):
             await routes.browse_document_volume(ROOT, SimpleNamespace(), SETTINGS)
     finally:
         reset_request_identity(token)
+    assert app_mode.tasks.pending == []
     assert api.bearers == []
-    assert app_mode.parse_service.prepared == []
 
 
 @pytest.mark.asyncio
@@ -204,22 +306,30 @@ async def test_unsaved_domain_is_rejected(app_mode):
     app_mode.domain.uc_domain_folder = ""
     app_mode.domain.domain_folder = ""
     with pytest.raises(ValidationError):
-        await routes.import_volume_documents(
-            _Request({"paths": [f"{ROOT}/a.md"]}), SimpleNamespace(), SETTINGS
-        )
+        await _start([f"{ROOT}/a.md"])
 
 
 @pytest.mark.asyncio
-async def test_invalid_path_never_reaches_the_files_api(app_mode):
+async def test_bad_request_shape_is_rejected_without_a_task(app_mode):
+    for body in ([], [" "], [f"{ROOT}/{i}.md" for i in range(51)]):
+        with pytest.raises(ValidationError):
+            await _start(body)
+    assert app_mode.tasks.pending == []
+
+
+@pytest.mark.asyncio
+async def test_invalid_path_is_reported_without_calling_the_files_api(app_mode):
     api = _FilesAPI()
     _use_files_api(app_mode, api)
-    result = await routes.import_volume_documents(
-        _Request({"paths": ["/Volumes/main/docs/raw/../../other/x.md"]}),
-        SimpleNamespace(),
-        SETTINGS,
-    )
-    assert result["success"] is False
+    response = await _start(["/Volumes/main/docs/raw/../../other/x.md"])
+
+    task = await _finish(app_mode, response["task_id"])
+
+    assert task["result"]["failed"] == 1
     assert api.bearers == []
+
+
+# -- browse / gating --------------------------------------------------------
 
 
 @pytest.mark.asyncio

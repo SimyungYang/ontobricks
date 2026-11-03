@@ -27,6 +27,8 @@ from back.core.databricks.document.ParseStatus import ParseStatus  # noqa: F401
 from back.core.databricks.document.ParseSubmission import ParseSubmission  # noqa: F401
 from back.core.databricks.document.VolumeDocument import VolumeDocument  # noqa: F401
 from back.core.databricks.document.VolumeDocumentSource import VolumeDocumentSource  # noqa: F401
+from back.core.databricks.document.VolumeImportJob import VolumeImportJob  # noqa: F401
+from back.core.databricks.document.VolumeImportPlan import VolumeImportPlan  # noqa: F401
 
 # Backward-compatible wrappers for previously module-level functions
 is_databricks_app = DatabricksAuth.is_databricks_app
@@ -82,6 +84,8 @@ __all__ = [
     "ParseSubmission",
     "VolumeDocument",
     "VolumeDocumentSource",
+    "VolumeImportJob",
+    "VolumeImportPlan",
     "is_databricks_app",
     "get_local_user_email",
     "normalize_host",

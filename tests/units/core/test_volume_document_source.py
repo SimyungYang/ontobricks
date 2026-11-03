@@ -5,7 +5,12 @@ from __future__ import annotations
 import pytest
 
 from back.core.databricks import VolumeDocument, VolumeDocumentSource
-from back.core.errors import AuthorizationError, NotFoundError, ValidationError
+from back.core.errors import (
+    AuthorizationError,
+    NotFoundError,
+    SessionExpiredError,
+    ValidationError,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -119,39 +124,39 @@ class TestIsSupported:
 class TestPlanFiles:
     def test_single_file_is_planned_with_size(self):
         files = _FakeFiles(files={f"{ROOT}/a.md": b"# hi"})
-        docs, truncated = VolumeDocumentSource(files).plan([f"{ROOT}/a.md"])
-        assert docs == [VolumeDocument(f"{ROOT}/a.md", "a.md", 4)]
-        assert truncated is False
+        plan = VolumeDocumentSource(files).plan([f"{ROOT}/a.md"])
+        assert plan.docs == [VolumeDocument(f"{ROOT}/a.md", "a.md", 4)]
+        assert plan.skipped_over_cap == 0
 
     def test_oversize_file_is_rejected_from_metadata_without_download(self):
         path = f"{ROOT}/big.pdf"
         files = _FakeFiles(files={path: b"x"}, sizes={path: 10 * MB + 1})
-        docs, _ = VolumeDocumentSource(files).plan([path])
+        docs = VolumeDocumentSource(files).plan([path]).docs
         assert "10 MB" in docs[0].error
         assert files.reads == []
 
     def test_unsupported_type_is_rejected_without_download(self):
         path = f"{ROOT}/tool.exe"
         files = _FakeFiles(files={path: b"MZ"})
-        docs, _ = VolumeDocumentSource(files).plan([path])
+        docs = VolumeDocumentSource(files).plan([path]).docs
         assert docs[0].error == "Unsupported document type"
         assert files.reads == []
 
     def test_invalid_path_is_reported_per_item(self):
         files = _FakeFiles(files={f"{ROOT}/a.md": b"a"})
-        docs, _ = VolumeDocumentSource(files).plan(
+        docs = VolumeDocumentSource(files).plan(
             [f"{ROOT}/../x.md", f"{ROOT}/a.md"]
-        )
+        ).docs
         assert docs[0].error.startswith("Path must look like")
         assert docs[1].error == ""
 
     def test_missing_path_is_not_found(self):
-        docs, _ = VolumeDocumentSource(_FakeFiles()).plan([f"{ROOT}/nope.md"])
+        docs = VolumeDocumentSource(_FakeFiles()).plan([f"{ROOT}/nope.md"]).docs
         assert docs[0].error.startswith("Path not found")
 
     def test_forbidden_path_reports_permission_and_scope_hint(self):
         path = f"{ROOT}/secret.md"
-        docs, _ = VolumeDocumentSource(_FakeFiles(status={path: 403})).plan([path])
+        docs = VolumeDocumentSource(_FakeFiles(status={path: 403})).plan([path]).docs
         assert "permission" in docs[0].error
         assert "files.files" in docs[0].error
 
@@ -169,13 +174,14 @@ class TestPlanFiles:
     def test_same_name_from_two_folders_is_flagged_not_overwritten(self):
         a, b = f"{ROOT}/x/r.md", f"{ROOT}/y/r.md"
         files = _FakeFiles(files={a: b"1", b: b"2"})
-        docs, _ = VolumeDocumentSource(files).plan([a, b])
-        assert docs[0].error == ""
-        assert docs[1].error == "Another selected file has the same name"
+        docs = VolumeDocumentSource(files).plan([b, a]).docs
+        by_path = {d.path: d.error for d in docs}
+        # Stable path order decides the winner, not the order of the request.
+        assert by_path == {a: "", b: "Another selected file has the same name"}
 
     def test_duplicate_path_is_dropped(self):
         path = f"{ROOT}/a.md"
-        docs, _ = VolumeDocumentSource(_FakeFiles(files={path: b"a"})).plan([path, path])
+        docs = VolumeDocumentSource(_FakeFiles(files={path: b"a"})).plan([path, path]).docs
         assert len(docs) == 1
 
 
@@ -194,36 +200,60 @@ class TestPlanFolders:
                 ]
             }
         )
-        docs, truncated = VolumeDocumentSource(files).plan([ROOT])
-        assert [d.filename for d in docs] == ["a.md", "b.pdf"]
-        assert all(not d.error for d in docs)
-        assert truncated is False
+        plan = VolumeDocumentSource(files).plan([ROOT])
+        assert [d.filename for d in plan.docs] == ["a.md", "b.pdf"]
+        assert all(not d.error for d in plan.docs)
+        assert plan.skipped_over_cap == 0
+        assert plan.listing_truncated is False
 
     def test_folder_flags_oversize_children(self):
         files = _FakeFiles(dirs={ROOT: [_file("big.pdf", 11 * MB)]})
-        docs, _ = VolumeDocumentSource(files).plan([ROOT])
+        docs = VolumeDocumentSource(files).plan([ROOT]).docs
         assert "10 MB" in docs[0].error
 
     def test_folder_without_supported_files_reports_it(self):
         files = _FakeFiles(dirs={ROOT: [_file("x.exe"), _dir("sub")]})
-        docs, _ = VolumeDocumentSource(files).plan([ROOT])
+        docs = VolumeDocumentSource(files).plan([ROOT]).docs
         assert docs[0].error == "No supported documents directly inside this folder"
 
-    def test_folder_import_is_capped(self):
-        cap = VolumeDocumentSource.MAX_IMPORT_FILES
-        children = [_file(f"doc{i:03d}.md") for i in range(cap + 7)]
-        docs, truncated = VolumeDocumentSource(_FakeFiles(dirs={ROOT: children})).plan(
-            [ROOT]
-        )
-        assert len(docs) == cap
-        assert truncated is True
+    def test_cap_is_500_and_matches_browse_limit(self):
+        assert VolumeDocumentSource.MAX_IMPORT_FILES == 500
+        assert VolumeDocumentSource.MAX_BROWSE_ENTRIES == 500
+        assert VolumeDocumentSource.MAX_FOLDER_SCAN > 500
+
+    def test_600_files_keep_the_first_500_by_name_and_count_100_skipped(self):
+        # Listed in reverse so the result proves the stable name sort.
+        children = [_file(f"doc{i:03d}.md") for i in reversed(range(600))]
+        plan = VolumeDocumentSource(_FakeFiles(dirs={ROOT: children})).plan([ROOT])
+        assert len(plan.docs) == 500
+        assert plan.docs[0].filename == "doc000.md"
+        assert plan.docs[-1].filename == "doc499.md"
+        assert plan.skipped_over_cap == 100
+        assert plan.listing_truncated is False
+
+    def test_folder_scan_asks_for_more_than_the_cap(self):
+        seen = []
+
+        class _Recording(_FakeFiles):
+            def list_directory_page(self, path, max_entries):
+                seen.append(max_entries)
+                return super().list_directory_page(path, max_entries)
+
+        VolumeDocumentSource(_Recording(dirs={ROOT: [_file("a.md")]})).plan([ROOT])
+        assert seen == [VolumeDocumentSource.MAX_FOLDER_SCAN]
 
     def test_listing_truncation_is_reported(self):
-        many = [_file(f"f{i}.md") for i in range(VolumeDocumentSource.MAX_BROWSE_ENTRIES + 1)]
-        _docs, truncated = VolumeDocumentSource(_FakeFiles(dirs={ROOT: many})).plan(
-            [ROOT]
-        )
-        assert truncated is True
+        many = [_file(f"f{i}.md") for i in range(VolumeDocumentSource.MAX_FOLDER_SCAN + 1)]
+        plan = VolumeDocumentSource(_FakeFiles(dirs={ROOT: many})).plan([ROOT])
+        assert plan.listing_truncated is True
+
+    def test_validate_paths_rejects_bad_shapes_without_io(self):
+        assert VolumeDocumentSource.validate_paths([" /Volumes/a/b/c ", ""]) == [
+            "/Volumes/a/b/c"
+        ]
+        for bad in (None, [], [" "], "x", [f"{ROOT}/{i}" for i in range(51)]):
+            with pytest.raises(ValidationError):
+                VolumeDocumentSource.validate_paths(bad)
 
     def test_folder_is_detected_when_file_head_answers_non_404(self):
         class _DirHead400(_FakeFiles):
@@ -231,7 +261,7 @@ class TestPlanFolders:
                 return (400, None) if path in self.dirs else super().head_file(path)
 
         files = _DirHead400(dirs={ROOT: [_file("a.md")]})
-        docs, _ = VolumeDocumentSource(files).plan([ROOT])
+        docs = VolumeDocumentSource(files).plan([ROOT]).docs
         assert [d.filename for d in docs] == ["a.md"]
 
     def test_files_api_exception_is_reported_per_path(self):
@@ -239,7 +269,7 @@ class TestPlanFolders:
             def head_file(self, path):
                 raise ConnectionError("boom")
 
-        docs, _ = VolumeDocumentSource(_Broken()).plan([f"{ROOT}/a.md"])
+        docs = VolumeDocumentSource(_Broken()).plan([f"{ROOT}/a.md"]).docs
         assert docs[0].error == "Could not reach the Unity Catalog Files API"
 
 
@@ -287,6 +317,13 @@ class TestRead:
         source = VolumeDocumentSource(_FakeFiles(files={path: b"x" * 11}), max_bytes=10)
         with pytest.raises(ValidationError):
             source.read(VolumeDocument(path, "a.pdf", 5))
+
+    def test_expired_token_read_raises_session_expired(self):
+        path = f"{ROOT}/a.md"
+        source = VolumeDocumentSource(_FakeFiles(status={path: 401}))
+        with pytest.raises(SessionExpiredError) as caught:
+            source.read(VolumeDocument(path, "a.md"))
+        assert caught.value.status_code == 401
 
     def test_forbidden_read_raises_authorization_error(self):
         path = f"{ROOT}/a.md"

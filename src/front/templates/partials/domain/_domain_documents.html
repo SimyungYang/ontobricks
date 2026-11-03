@@ -59,7 +59,8 @@
             <h6 class="mb-1"><i class="bi bi-database me-1"></i>Import from Unity Catalog Volume</h6>
             <p class="text-muted small mb-2">
                 Paste a file or folder path, or browse a volume. Files are read with your own Unity Catalog permissions.
-                A folder imports the supported files directly inside it (up to 50, not recursive).
+                A folder imports the supported files directly inside it (up to 500 per import, not recursive).
+                Large imports run in the background in batches of 50.
             </p>
             <div class="input-group input-group-sm">
                 <input type="text" class="form-control" id="docVolumePathInput"
@@ -112,6 +113,19 @@
                     </button>
                 </div>
             </div>
+
+            <!-- Background import progress and final summary -->
+            <div id="docVolumeProgress" class="mt-3 d-none" aria-live="polite">
+                <div class="d-flex justify-content-between align-items-center small mb-1">
+                    <span><span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>Importing from the volume</span>
+                    <span data-i18n-skip id="docVolumeProgressCount"></span>
+                </div>
+                <div class="progress" id="docVolumeProgressBar" role="progressbar" aria-label="Import progress"
+                     aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+                    <div class="progress-bar" id="docVolumeProgressFill"></div>
+                </div>
+            </div>
+            <div id="docVolumeSummary" class="mt-3 d-none" aria-live="polite"></div>
         </div>
     </div>
 </div>

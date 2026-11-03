@@ -236,9 +236,13 @@ const VolumeImport = {
         this.updateSelectionUI();
     },
 
+    // The server runs the import as a background task (batches of 50) and
+    // returns a task_id at once; progress is polled from /tasks/{id}.
     async importPaths(paths) {
         if (!this.isEditable() || this.busy || paths.length === 0) return;
         this.setBusy(true);
+        document.getElementById('docVolumeSummary').classList.add('d-none');
+        this.showProgress({});
         try {
             const resp = await fetch('/domain/documents/import-volume', {
                 method: 'POST',
@@ -247,26 +251,97 @@ const VolumeImport = {
                 credentials: 'same-origin',
             });
             const result = await resp.json();
-            if (!resp.ok) throw new Error(result.message || 'Request failed');
-            const results = result.results || [];
-            if (result.success) {
-                const partial = result.truncated || results.some(item => !item.success);
-                const pending = results.some(item => item.parse_status === 'pending');
-                showNotification(
-                    !partial && pending ? 'Import complete; document parsing started' : result.message,
-                    partial ? 'warning' : 'success'
-                );
-                this.selected.clear();
-                document.querySelectorAll('#docVolumeEntries input[data-volume-file]').forEach(box => { box.checked = false; });
-            } else {
-                showNotification('Import failed: ' + result.message, 'error');
-            }
-            DocManager.refreshList();
+            if (!resp.ok || !result.success) throw new Error(result.message || 'Request failed');
+            this.selected.clear();
+            document.querySelectorAll('#docVolumeEntries input[data-volume-file]').forEach(box => { box.checked = false; });
+            if (typeof window.refreshTasks === 'function') window.refreshTasks();
+            const task = await this.followTask(result.task_id);
+            this.finish(task.result || {});
         } catch (err) {
-            showNotification('Import error: ' + err.message, 'error');
+            showNotification('Import failed: ' + err.message, 'error');
         } finally {
+            this.hideProgress();
             this.setBusy(false);
+            DocManager.refreshList();
         }
+    },
+
+    followTask(taskId) {
+        let batchesSeen = 0;
+        return waitForTask(taskId, task => {
+            const summary = task.result || {};
+            this.showProgress(summary);
+            // Refresh the shared document list each time a batch of 50 finishes.
+            if ((summary.batches_done || 0) > batchesSeen) {
+                batchesSeen = summary.batches_done;
+                DocManager.refreshList();
+            }
+        });
+    },
+
+    showProgress(summary) {
+        const processed = summary.processed || 0;
+        const total = summary.total || 0;
+        const pct = total ? Math.round((processed * 100) / total) : 0;
+        document.getElementById('docVolumeProgress').classList.remove('d-none');
+        document.getElementById('docVolumeProgressCount').textContent = total ? `${processed} / ${total}` : '';
+        const bar = document.getElementById('docVolumeProgressBar');
+        bar.setAttribute('aria-valuenow', String(pct));
+        document.getElementById('docVolumeProgressFill').style.width = `${pct}%`;
+    },
+
+    hideProgress() {
+        document.getElementById('docVolumeProgress').classList.add('d-none');
+    },
+
+    finish(summary) {
+        this.renderSummary(summary);
+        if (summary.stopped_reason) {
+            showNotification('Import stopped before all files were read: ' + summary.stopped_reason, 'warning');
+        } else if (summary.failed || summary.skipped_over_cap) {
+            showNotification('Import finished with some files not imported', 'warning');
+        } else {
+            showNotification('Import complete', 'success');
+        }
+    },
+
+    summaryLine(icon, label, value) {
+        return `<div><i class="bi ${icon} me-1"></i><span>${label}</span>: <strong>${value}</strong></div>`;
+    },
+
+    pathList(label, rows) {
+        if (!rows.length) return '';
+        return `<details class="mt-1"><summary>${label}</summary>
+            <ul class="doc-volume-report mb-0 ps-3">${rows.join('')}</ul></details>`;
+    },
+
+    renderSummary(summary) {
+        const failures = (summary.failures || []).map(f => `<li>
+            <span data-i18n-skip class="fw-semibold">${escapeDocHtml(f.filename || f.source_path || '')}</span>
+            — <span>${escapeDocHtml(f.message || '')}</span></li>`);
+        const remaining = (summary.remaining || []).map(path =>
+            `<li><span data-i18n-skip>${escapeDocHtml(path)}</span></li>`);
+        const lines = [
+            this.summaryLine('bi-check-circle text-success', 'Imported', summary.imported || 0),
+            this.summaryLine('bi-x-circle text-danger', 'Failed', summary.failed || 0),
+        ];
+        if (summary.skipped_over_cap) {
+            const count = `${summary.skipped_over_cap}${summary.listing_truncated ? '+' : ''}`;
+            lines.push(this.summaryLine('bi-dash-circle text-warning', 'Skipped (over the per-import limit)', count));
+        }
+        if (remaining.length) {
+            lines.push(this.summaryLine('bi-exclamation-triangle text-danger', 'Not imported because the job stopped', remaining.length));
+            lines.push(`<div class="text-muted">${escapeDocHtml(summary.stopped_reason || '')}</div>`);
+        }
+        const warn = summary.failed || summary.skipped_over_cap || remaining.length;
+        const box = document.getElementById('docVolumeSummary');
+        box.innerHTML = `<div class="alert ${warn ? 'alert-warning' : 'alert-success'} py-2 small mb-0">
+                <div class="fw-semibold mb-1">Import summary</div>
+                ${lines.join('')}
+                ${this.pathList('Show failed files', failures)}
+                ${this.pathList('Show remaining files', remaining)}
+            </div>`;
+        box.classList.remove('d-none');
     },
 };
 

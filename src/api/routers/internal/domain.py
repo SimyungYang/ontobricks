@@ -15,8 +15,8 @@ from back.core.databricks import (
     DocumentExtractor,
     DocumentParseService,
     ParseStatus,
-    VolumeDocument,
     VolumeDocumentSource,
+    VolumeImportJob,
     is_databricks_app,
 )
 from back.core.errors import (
@@ -1067,11 +1067,16 @@ def _submit_document(
     version: str,
     filename: str,
     content: bytes,
+    *,
+    parse_inline: bool = False,
 ) -> Dict[str, Any]:
     """Run one document through the shared parse-once pipeline.
 
     Used by both local upload and UC Volume import so the size cap, the
-    stored row, and the background parse are identical for either source.
+    stored row, and the parse are identical for either source. Uploads
+    schedule one parse task per file; a volume import job already runs on a
+    background worker with bounded concurrency, so it parses inline
+    (``parse_inline``) instead of spawning hundreds of parse tasks.
     """
     max_bytes = DocumentParseService.MAX_UPLOAD_BYTES
     if len(content) > max_bytes:
@@ -1090,7 +1095,15 @@ def _submit_document(
             "no_op": submission.no_op,
             "parse_status": submission.parse_status.value,
         }
-        if submission.should_parse:
+        if submission.should_parse and parse_inline:
+            row = parse_service.parse_pending(folder, version, filename) or {}
+            item["parse_status"] = row.get("status") or ParseStatus.FAILED.value
+            item["message"] = (
+                "Parsed and ready"
+                if item["parse_status"] == ParseStatus.READY.value
+                else row.get("error") or "Document parsing failed"
+            )
+        elif submission.should_parse:
             item["task_id"] = _schedule_document_parse(
                 parse_service, folder, version, filename
             )
@@ -1190,32 +1203,59 @@ def _make_volume_document_source(
     return VolumeDocumentSource(client.volumes)
 
 
-async def _import_volume_document(
+def _volume_import_message(summary: Dict[str, Any]) -> str:
+    """One-line English status for the task tracker and logs."""
+    message = (
+        f"Imported {summary['imported']}, failed {summary['failed']} "
+        f"of {summary['total']} file(s)"
+    )
+    if summary.get("skipped_over_cap"):
+        message += f"; {summary['skipped_over_cap']} skipped over the limit"
+    if summary.get("stopped_reason"):
+        message += f"; stopped: {summary['stopped_reason']}"
+    return message
+
+
+def _run_volume_import_task(
+    task: Any,
     source: VolumeDocumentSource,
     parse_service: DocumentParseService,
     folder: str,
     version: str,
-    doc: VolumeDocument,
-) -> Dict[str, Any]:
-    """Download one planned volume file and hand it to the shared pipeline."""
-    failed = {
-        "filename": doc.filename,
-        "source_path": doc.path,
-        "success": False,
-        "parse_status": ParseStatus.FAILED.value,
-    }
-    if doc.error:
-        return {**failed, "message": doc.error}
+    paths: List[str],
+) -> None:
+    """Background worker: plan, then import in batches with the captured token."""
+    manager = get_task_manager()
+    manager.start_task(task.id, message="Resolving Unity Catalog Volume paths")
+
+    def on_progress(summary: Dict[str, Any]) -> None:
+        total = summary["total"] or 1
+        manager.merge_result(task.id, summary)
+        manager.update_progress(
+            task.id,
+            int(summary["processed"] * 100 / total),
+            _volume_import_message(summary),
+        )
+
     try:
-        content = await run_blocking(source.read, doc)
+        plan = source.plan(paths)
+        job = VolumeImportJob(
+            source,
+            lambda filename, content: _submit_document(
+                parse_service, folder, version, filename, content, parse_inline=True
+            ),
+            on_progress=on_progress,
+            is_cancelled=lambda: manager.is_cancelled(task.id),
+        )
+        summary = job.run(plan)
+        manager.complete_task(
+            task.id, result=summary, message=_volume_import_message(summary)
+        )
     except OntoBricksError as exc:
-        return {**failed, "message": exc.message}
-    except Exception as exc:  # noqa: BLE001 - reported per file
-        logger.warning("Volume read failed for %s: %s", doc.path, type(exc).__name__)
-        return {**failed, "message": "Could not read the file from the volume"}
-    item = _submit_document(parse_service, folder, version, doc.filename, content)
-    logger.info("Knowledge Store import of %s from %s", doc.filename, doc.path)
-    return {**item, "source_path": doc.path}
+        manager.fail_task(task.id, exc.message)
+    except Exception as exc:  # noqa: BLE001 - worker must always settle the task
+        logger.exception("Volume import task %s failed: %s", task.id, exc)
+        manager.fail_task(task.id, "Import from volume failed")
 
 
 @router.get("/documents/volume/browse")
@@ -1245,32 +1285,39 @@ async def import_volume_documents(
     session_mgr: SessionManager = Depends(get_session_manager),
     settings: Settings = Depends(get_settings),
 ):
-    """Import ``/Volumes/...`` files or folders into the Knowledge Store.
+    """Start a background import of ``/Volumes/...`` files or folders.
 
-    Body: ``{"paths": [...]}``. Each file is read with the caller's identity
-    and then goes through the same parse-once pipeline as a local upload.
+    Body: ``{"paths": [...]}``. Returns a ``task_id`` at once; progress and
+    the final summary are on ``GET /tasks/{task_id}``. The Files API client
+    is bound to the caller's token *now*, so the background worker keeps
+    reading as this user (never the app service principal).
     """
     try:
         data = await request.json()
+        paths = VolumeDocumentSource.validate_paths(data.get("paths"))
         domain = get_domain(session_mgr)
         folder, version = _resolve_document_scope(domain)
         if not folder:
             raise ValidationError("Domain not saved to the registry")
         source = _make_volume_document_source(domain, settings)
         parse_service = _make_document_parse_service(domain, settings)
-        docs, truncated = await run_blocking(source.plan, data.get("paths"))
-        results = [
-            await _import_volume_document(source, parse_service, folder, version, doc)
-            for doc in docs
-        ]
-        response = _document_batch_response(results, "imported")
-        if truncated:
-            response["truncated"] = True
-            response["message"] += (
-                f". Only the first {VolumeDocumentSource.MAX_IMPORT_FILES} "
-                "supported files were imported"
-            )
-        return response
+        task = get_task_manager().run_background_task(
+            name="Import documents from Unity Catalog Volume",
+            task_type="knowledge_store_import",
+            target=_run_volume_import_task,
+            source=source,
+            parse_service=parse_service,
+            folder=folder,
+            version=version,
+            paths=paths,
+        )
+        return {
+            "success": True,
+            "task_id": task.id,
+            "message": "Import started",
+            "max_files": VolumeDocumentSource.MAX_IMPORT_FILES,
+            "batch_size": VolumeImportJob.BATCH_SIZE,
+        }
     except OntoBricksError:
         raise
     except Exception as e:

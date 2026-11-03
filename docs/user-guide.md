@@ -121,9 +121,19 @@ Volume**:
 - **Paste a path** such as `/Volumes/<catalog>/<schema>/<volume>/specs/guide.pdf`
   and click **Import**.
   - A folder path imports the supported files directly inside it.
-  - Sub-folders are not followed, and at most 50 files are imported per request.
+  - Sub-folders are not followed.
 - **Or click Browse**, pick a catalog, schema and volume, open folders, then
   either tick files and click **Import selected** or click **Import this folder**.
+
+The import runs **in the background**, so it keeps going even if the request
+that started it ends:
+
+- Files are processed in batches of 50, a few at a time.
+- A progress bar shows processed / total files. The job also appears in the
+  task tracker (hourglass icon).
+- The document list refreshes after each batch and again at the end.
+- When the job ends, a summary shows how many files were imported, which
+  failed and why, and how many were skipped over the limit.
 
 Imported files go through exactly the same pipeline as uploads, so they show
 up in the same list with the same **Parsing / Ready / Parse failed** states.
@@ -132,9 +142,11 @@ The original file name is kept.
 | Rule | Behaviour |
 |------|-----------|
 | Identity | Files are listed and read with **your own** Unity Catalog permissions, not the app's. A file you cannot open in Databricks cannot be imported. |
+| Limit | Up to **500 files per import**. Above that, the first 500 by path (name order within a folder) are imported, and the rest are reported as skipped. |
 | Size | 10 MB per file, checked before download; larger files are skipped. |
 | Types | The same types as upload; other files are shown as *Unsupported type* and skipped. |
 | Duplicate names | A second selected file with an already-used name is skipped instead of overwriting the first. |
+| Sign-in expiry | The job uses the sign-in you had when you clicked Import. If it expires mid-job, the job stops and lists the remaining files. Reload the page and import them again; files that are already Ready are not imported twice. |
 | Read-only versions | Import is disabled wherever upload is disabled (older versions, Viewers, locked versions). |
 
 > **Deployment note** — the app needs the `files.files` user authorization
