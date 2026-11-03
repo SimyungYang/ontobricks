@@ -983,49 +983,9 @@ async function initMappingDesigner(opts) {
         
         mappingMapInitialized = true;
         
-        // Bind zoom controls
-        document.getElementById('mappingMapZoomIn')?.addEventListener('click', () => {
-            svg.transition().duration(300).call(mappingMapZoom.scaleBy, 1.3);
-        });
-        
-        document.getElementById('mappingMapZoomOut')?.addEventListener('click', () => {
-            svg.transition().duration(300).call(mappingMapZoom.scaleBy, 0.7);
-        });
-        
-        document.getElementById('mappingMapResetView')?.addEventListener('click', () => {
-            svg.transition().duration(500).call(mappingMapZoom.transform, d3.zoomIdentity);
-        });
-        
-        document.getElementById('mappingMapResetLayout')?.addEventListener('click', async () => {
-            // Reload saved layout from Ontology Designer
-            const layout = await loadMapLayout();
-            if (layout && layout.positions) {
-                nodes.forEach((node, idx) => {
-                    const savedPos = layout.positions[node.id];
-                    if (savedPos) {
-                        node.x = savedPos.x;
-                        node.y = savedPos.y;
-                        node.fx = savedPos.x;
-                        node.fy = savedPos.y;
-                    } else {
-                        // Default grid position
-                        node.x = 100 + (idx % 5) * 150;
-                        node.y = 100 + Math.floor(idx / 5) * 120;
-                        node.fx = node.x;
-                        node.fy = node.y;
-                    }
-                });
-                mappingMapSimulation.alpha(0.01).restart();
-                
-                if (typeof showNotification === 'function') {
-                    showNotification('Layout restored from Ontology Studio', 'info', 2000);
-                }
-            } else {
-                if (typeof showNotification === 'function') {
-                    showNotification('No saved layout found', 'warning', 2000);
-                }
-            }
-        });
+        // Toolbar buttons are static markup while this function re-runs on every
+        // section switch, mapping save and drift refresh — bind them idempotently.
+        bindMappingMapToolbar();
         
     } catch (error) {
         console.error('Error initializing mapping map:', error);
@@ -1036,6 +996,120 @@ async function initMappingDesigner(opts) {
             }, 500);
         }
     }
+}
+
+/**
+ * Wire the Studio toolbar (zoom / reset view / reset layout).
+ *
+ * initMappingDesigner() runs again after every section switch, mapping save and
+ * schema-drift refresh, but the toolbar buttons live in the static template.
+ * Binding with addEventListener there stacked one more handler per render, so a
+ * single Reset Layout click fired N layout lookups and N warning toasts. Assigning
+ * onclick replaces the previous handler, and the handlers read the module-level
+ * map state, so they always act on the graph that is currently on screen.
+ */
+function bindMappingMapToolbar() {
+    const zoomBy = (factor) => {
+        if (!mappingMapSvg || !mappingMapZoom) return;
+        mappingMapSvg.transition().duration(300).call(mappingMapZoom.scaleBy, factor);
+    };
+    const zoomIn = document.getElementById('mappingMapZoomIn');
+    if (zoomIn) zoomIn.onclick = () => zoomBy(1.3);
+    const zoomOut = document.getElementById('mappingMapZoomOut');
+    if (zoomOut) zoomOut.onclick = () => zoomBy(0.7);
+    const resetView = document.getElementById('mappingMapResetView');
+    if (resetView) {
+        resetView.onclick = () => {
+            if (!mappingMapSvg || !mappingMapZoom) return;
+            mappingMapSvg.transition().duration(500).call(mappingMapZoom.transform, d3.zoomIdentity);
+        };
+    }
+    const resetLayout = document.getElementById('mappingMapResetLayout');
+    if (resetLayout) resetLayout.onclick = () => resetMappingMapLayout();
+}
+
+// True while a Reset Layout click is being handled, so rapid repeat clicks
+// collapse into one layout lookup and one message.
+let mappingMapLayoutResetInFlight = false;
+
+/**
+ * Reset Layout (toolbar shuffle button / context-menu "Auto Layout").
+ *
+ * Restores the positions saved in Ontology Studio. A domain that never saved a
+ * layout (e.g. a fresh draft) has nothing to restore, so the nodes are
+ * auto-arranged instead of failing with a warning.
+ */
+async function resetMappingMapLayout() {
+    if (mappingMapLayoutResetInFlight) return;
+    if (!mappingMapSimulation || !mappingMapNodes.length) return;
+    mappingMapLayoutResetInFlight = true;
+    try {
+        const layout = await loadMapLayout();
+        const positions = layout && layout.positions;
+        if (positions && Object.keys(positions).length > 0) {
+            mappingMapNodes.forEach((node, idx) => {
+                const savedPos = positions[node.id];
+                if (savedPos) {
+                    node.x = savedPos.x;
+                    node.y = savedPos.y;
+                } else {
+                    // Default grid position
+                    node.x = 100 + (idx % 5) * 150;
+                    node.y = 100 + Math.floor(idx / 5) * 120;
+                }
+                node.fx = node.x;
+                node.fy = node.y;
+            });
+            mappingMapSimulation.alpha(0.01).restart();
+            if (typeof showNotification === 'function') {
+                showNotification('Layout restored from Ontology Studio', 'info', 2000);
+            }
+        } else {
+            autoArrangeMappingMap();
+            if (typeof showNotification === 'function') {
+                showNotification('No saved layout - nodes auto-arranged', 'info', 2000);
+            }
+        }
+    } finally {
+        mappingMapLayoutResetInFlight = false;
+    }
+}
+
+/**
+ * Run the force layout once over the current nodes, then pin them where they
+ * settle. The designer normally renders statically (pinned nodes, instant decay).
+ */
+function autoArrangeMappingMap() {
+    const simulation = mappingMapSimulation;
+    const nodes = mappingMapNodes;
+    if (!simulation || !nodes.length) return;
+    const container = document.getElementById('mapping-map-container');
+    const width = (container && container.clientWidth) || 800;
+    const height = (container && container.clientHeight) || 600;
+    
+    nodes.forEach(node => {
+        node.fx = null;
+        node.fy = null;
+    });
+    simulation
+        .alphaDecay(0.0228) // Default decay
+        .velocityDecay(0.4) // Default velocity decay
+        .force('charge', d3.forceManyBody().strength(-400))
+        .force('collision', d3.forceCollide().radius(60))
+        .force('center', d3.forceCenter(width / 2, height / 2))
+        .alpha(1)
+        .restart();
+    
+    // Once settled, pin the nodes and return to static mode — unless the map was
+    // re-rendered meanwhile (a new simulation owns the canvas then).
+    setTimeout(() => {
+        if (mappingMapSimulation !== simulation) return;
+        nodes.forEach(node => {
+            node.fx = node.x;
+            node.fy = node.y;
+        });
+        simulation.alphaDecay(1).velocityDecay(1);
+    }, 3000);
 }
 
 /**

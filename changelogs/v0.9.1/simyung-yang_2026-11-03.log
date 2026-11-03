@@ -353,3 +353,62 @@ Test result:
 - Full unit suite (`uv run --frozen pytest tests/units -q -x -p no:cacheprovider`):
   9646 passed, 12 skipped, 18 warnings in 880.92s (before the rebase onto
   eb132cc5; affected modules re-run after it, see the report).
+
+## Mapping Studio: one Reset Layout click raised a stack of "No saved layout found" toasts
+
+Context:
+On Mapping -> Studio, one click on the Reset Layout button (shuffle icon, also
+the context-menu "Auto Layout") showed 12+ identical "No saved layout found"
+warning toasts. This happened on a domain that never saved a layout (LG Chem
+CathodeTrace draft). `initMappingDesigner()` re-runs on every section switch,
+mapping save and schema-drift refresh. The toolbar buttons are static template
+markup, but the function bound them with `addEventListener` on every run. The
+handlers stacked, so one click ran N saved-layout fetches and N toasts. Zoom
+in/out and reset view stacked the same way, and stale handlers kept the node
+arrays of earlier renders. Ontology Studio's graph toolbar
+(`initOntologyMap()`) had the same per-render `addEventListener`. Its reset
+saved an empty layout N times and scheduled N auto-saves of stale nodes. The
+bug is present in the deployed 560fc7b3 and at f5e12517.
+
+Changes:
+1. src/front/static/mapping/js/mapping-design.js
+   - New `bindMappingMapToolbar()`, called from `initMappingDesigner()`. It
+     assigns `onclick` (so a re-bind replaces the handler) for zoom in/out,
+     reset view and reset layout. Handlers read the module-level map state
+     (`mappingMapSvg`, `mappingMapZoom`, `mappingMapNodes`,
+     `mappingMapSimulation`) so they act on the graph on screen.
+   - New `resetMappingMapLayout()`: restores Ontology Studio positions when
+     any are saved. With no saved layout (`{}` or empty `positions`) it
+     auto-arranges via the new `autoArrangeMappingMap()` and shows one info
+     message, not a warning. An in-flight guard collapses rapid repeat clicks
+     into one lookup.
+   - New `autoArrangeMappingMap()`: releases the nodes, runs the force layout
+     (charge / collision / center), and pins the nodes after 3 s. It skips the
+     pin if the map was re-rendered meanwhile.
+2. src/front/static/ontology/js/ontology-map.js
+   - Zoom in/out, reset view and reset layout toolbar buttons use `onclick`
+     instead of a per-render `addEventListener`.
+   - `initMapSearch()`: the Enter-key handler uses `onkeydown`, and the
+     outside-click listener on `document` is bound once.
+3. src/front/static/global/js/i18n-ko.js
+   - "No saved layout found" replaced by "No saved layout - nodes
+     auto-arranged".
+4. tests/units/front/test_mapping_studio_layout_toolbar.py (new)
+   - Node harness loads the real mapping-design.js with DOM / d3 / fetch
+     stubs. 12 re-binds then one click -> one fetch, one non-warning message.
+     No saved layout or empty positions -> auto-arrange. Four rapid clicks
+     -> one fetch and one message. A saved layout is restored (missing node ->
+     grid slot) with no forces.
+   - Static checks: `initMappingDesigner()` and `initOntologyMap()` no longer
+     call `addEventListener` on the toolbar ids.
+
+Modified files:
+- src/front/static/mapping/js/mapping-design.js
+- src/front/static/ontology/js/ontology-map.js
+- src/front/static/global/js/i18n-ko.js
+- tests/units/front/test_mapping_studio_layout_toolbar.py (new)
+
+Test result:
+- New module: 10 passed. tests/units/front (incl. i18n): 1842 passed.
+- Full unit suite (`uv run --frozen pytest tests/units -q -x -p no:cacheprovider`):
+  9665 passed, 12 skipped, 18 warnings in 888.61s.

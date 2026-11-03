@@ -2256,7 +2256,7 @@ window.OB_I18N_DICTS.ko = {
     "No rules yet. Design one in": "아직 규칙이 없습니다. 다음에서 설계하세요",
     "No runs recorded yet.": "아직 기록된 실행이 없습니다.",
     "No saved cohort rules in this domain": "이 도메인에 저장된 세그먼트 규칙이 없습니다",
-    "No saved layout found": "저장된 레이아웃을 찾을 수 없습니다",
+    "No saved layout - nodes auto-arranged": "저장된 레이아웃이 없어 노드를 자동 정렬했습니다",
     "No schedules yet": "아직 스케줄이 없습니다",
     "No schemas available": "사용 가능한 스키마가 없습니다",
     "No schemas found": "스키마를 찾을 수 없습니다",

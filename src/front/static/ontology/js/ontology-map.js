@@ -1303,18 +1303,23 @@ async function initOntologyMap() {
     `;
     container.appendChild(legend);
 
-    // Bind zoom controls
-    document.getElementById('mapZoomIn')?.addEventListener('click', () => {
+    // Bind zoom controls. The toolbar is static markup while initOntologyMap()
+    // re-runs after every edit, so assign onclick (replaces the previous render's
+    // handler) instead of stacking one more addEventListener per render.
+    const zoomInBtn = document.getElementById('mapZoomIn');
+    if (zoomInBtn) zoomInBtn.onclick = () => {
         svg.transition().duration(300).call(ontologyMapZoom.scaleBy, 1.3);
-    });
+    };
 
-    document.getElementById('mapZoomOut')?.addEventListener('click', () => {
+    const zoomOutBtn = document.getElementById('mapZoomOut');
+    if (zoomOutBtn) zoomOutBtn.onclick = () => {
         svg.transition().duration(300).call(ontologyMapZoom.scaleBy, 0.7);
-    });
+    };
 
-    document.getElementById('mapResetView')?.addEventListener('click', () => {
+    const resetViewBtn = document.getElementById('mapResetView');
+    if (resetViewBtn) resetViewBtn.onclick = () => {
         svg.transition().duration(500).call(ontologyMapZoom.transform, d3.zoomIdentity);
-    });
+    };
     
     // Auto-map icons button (use onclick to avoid stacking listeners on map refresh)
     const autoIconsBtn = document.getElementById('mapAutoAssignIcons');
@@ -1348,8 +1353,10 @@ async function initOntologyMap() {
     const discussBtn = document.getElementById('mapDiscuss');
     if (discussBtn) discussBtn.onclick = () => openOntologyDiscussion();
 
-    // Reset layout button - clears saved positions and re-runs simulation
-    document.getElementById('mapResetLayout')?.addEventListener('click', async () => {
+    // Reset layout button - clears saved positions and re-runs simulation.
+    // onclick (not addEventListener): one handler, bound to the current render.
+    const resetLayoutBtn = document.getElementById('mapResetLayout');
+    if (resetLayoutBtn) resetLayoutBtn.onclick = async () => {
         // Clear fixed positions
         nodes.forEach(node => {
             node.fx = null;
@@ -1384,7 +1391,7 @@ async function initOntologyMap() {
         if (typeof showNotification === 'function') {
             showNotification('Layout reset - nodes will auto-arrange', 'info', 2000);
         }
-    });
+    };
     
     // Wire search popup to the search button
     initMapSearch(nodes);
@@ -1437,8 +1444,8 @@ function initMapSearch(nodes) {
 
     if (close) close.onclick = closePopup;
 
-    // Enter key in select triggers focus
-    sel.addEventListener('keydown', (e) => { if (e.key === 'Enter') goBtn.click(); });
+    // Enter key in select triggers focus (onkeydown: initMapSearch re-runs per render)
+    sel.onkeydown = (e) => { if (e.key === 'Enter') goBtn.click(); };
 
     goBtn.onclick = () => {
         const name = sel.value;
@@ -1447,7 +1454,9 @@ function initMapSearch(nodes) {
         closePopup();
     };
 
-    // Dismiss on outside click
+    // Dismiss on outside click — bound once; popup and button are static markup
+    if (popup.dataset.outsideClickBound === '1') return;
+    popup.dataset.outsideClickBound = '1';
     document.addEventListener('click', (e) => {
         if (!popup.classList.contains('map-search-popup--hidden') && !popup.contains(e.target) && e.target !== btn) {
             closePopup();
