@@ -36,6 +36,16 @@
     background-color: rgba(255, 54, 33, 0.04);
 }
 
+/* Unity Catalog Volume browser in the Knowledge Store upload card. */
+.doc-volume-entries {
+    max-height: 18rem;
+    overflow-y: auto;
+}
+
+#docVolumeCurrentPath {
+    min-width: 0;
+}
+
 /* ==========================================================================
    Registry Select Spinners
    ========================================================================== */

@@ -68,3 +68,129 @@ Test result:
 - Full suite (`uv run --frozen pytest -q -m "not scenario" --deselect
   tests/units/settings/test_deploy_instance_id.py`):
   10105 passed, 327 skipped, 17 deselected, 40 warnings in 923.41s.
+
+## Import Knowledge Store documents from a Unity Catalog Volume
+
+Context:
+The Knowledge Store only accepted local uploads, so documents already stored
+in a UC Volume had to be downloaded to a laptop and uploaded again. Users can
+now paste a `/Volumes/...` file or folder path, or browse catalog → schema →
+volume → folder and multi-select files. Files are listed and read with the
+caller's own token (OBO, fail-closed in App mode), never the app service
+principal, and then enter exactly the same parse-once pipeline as an upload.
+
+Changes:
+
+1. src/back/core/databricks/document/VolumeDocumentSource.py (new)
+   - Validates paths (`/Volumes/<catalog>/<schema>/<volume>[/...]`, no `..`,
+     `.`, empty segments, backslashes or control characters, max 1024 chars).
+   - Plans imports: a file path is checked by HEAD; a folder contributes its
+     supported direct children only (not recursive); max 50 paths and 50 files
+     per request; duplicate paths dropped; a second file with an already-used
+     name is reported instead of overwriting the first.
+   - Type and the 10 MB cap are checked from metadata before download; the
+     download is streamed and aborted past the cap (defence in depth).
+   - Maps 401/403/404/other Files API statuses to `AuthorizationError` (with a
+     `files.files` scope hint), `NotFoundError` and `InfrastructureError`.
+   - `browse()` lists one folder with `supported` / `too_large` flags.
+2. src/back/core/databricks/document/VolumeDocument.py (new)
+   - Frozen record for one planned volume file (path, filename, size, error).
+3. src/back/core/databricks/uc/VolumeFileService.py
+   - `head_file`, `list_directory_page` (follows `next_page_token` up to a cap)
+     and `read_binary_file_capped` (streamed, stops reading past the cap).
+4. src/back/core/databricks/__init__.py, src/back/core/databricks/document/__init__.py
+   - Re-export `VolumeDocument` and `VolumeDocumentSource`.
+5. src/api/routers/internal/domain.py
+   - Extract Method: `_submit_document` (size cap → `prepare_upload` →
+     background parse → result row) and `_document_batch_response`, shared by
+     upload and volume import; `upload_documents` drops below the 100-line
+     budget.
+   - New `GET /domain/documents/volume/browse` and
+     `POST /domain/documents/import-volume`; `_make_volume_document_source`
+     binds the Files API client through `get_data_plane_client` (user token in
+     App mode, 403 when it is missing). Results carry `source_path`; the
+     registry-save rule and the existing status/viewer gates on
+     `/domain/documents/` POSTs apply unchanged.
+6. src/front/templates/partials/domain/_domain_documents.html
+   - "Import from Unity Catalog Volume" section in the upload card: path input,
+     Browse panel with catalog / schema / volume pickers, folder list, Import
+     selected / Import this folder.
+7. src/front/static/domain/js/domain-documents-volume.js (new), src/front/templates/domain.html
+   - `VolumeImport`: reuses `/settings/catalogs|schemas|volumes` for pickers,
+     browses folders via the new endpoint, posts `{paths}` (CSRF header via the
+     global fetch wrapper), refreshes the shared document list. Paths travel
+     in data attributes with delegated handlers (no inline JS); names are
+     escaped and marked `data-i18n-skip`. Respects `window.isActiveVersion`.
+8. src/front/static/global/css/permissions.css, src/front/static/global/css/config.css
+   - `#docVolumeImport` is disabled exactly where `#docDropZone` is
+     (read-only version, Viewer, locked); scroll cap for the folder list.
+9. src/front/static/global/js/i18n-ko.js, tests/units/front/i18n_untranslated_baseline.json
+   - Korean strings for the new UI; the path placeholder is a baseline token.
+10. databricks.yml
+    - UI app `user_api_scopes` gains `files.files` (Files API on behalf of the
+      user). Users re-consent once after deploy.
+11. docs/user-guide.md, docs/deployment.md, docs/architecture.md
+    - Import workflow, rules table, scope/consent note, architecture notes.
+12. Tests
+    - tests/units/core/test_volume_document_source.py (new): path validation,
+      size limit (metadata and stream), unsupported types, folder listing and
+      cap, duplicates, status mapping.
+    - tests/units/core/test_volume_file_service.py: new Files API methods and
+      the user token as bearer in App mode with SP credentials present.
+    - tests/units/api/test_document_volume_import_routes.py (new): routes with
+      a mocked Files API through the real data-plane client; user token on
+      every call, fail-closed without a token, shared pipeline, gating.
+    - tests/units/front/test_domain_documents_ui.py,
+      tests/units/front/test_domain_documents_volume_behaviour.py (new):
+      markup/gating contracts and node-executed behaviour (payload, read-only
+      gate, navigation, HTML escaping).
+    - tests/units/settings/test_bundle_job_resource.py: `files.files` scope.
+    - tests/units/architecture/baseline.json: drop the `upload_documents`
+      size-budget entry (now within budget).
+
+Notes:
+- `domain_documents` has no column for the source path; adding one needs a
+  schema migration, so the path is returned in the import response and logged
+  instead of being persisted.
+- The existing `UCFileDialog` was not reused: it is single-select, requires a
+  warehouse pick that saves settings, reads through `/read-volume-file` with
+  the app identity, and its `/browse-volume` calls a missing
+  `list_volume_files` method.
+- Catalog / schema / volume *names* come from the existing `/settings/*`
+  listing APIs (app identity, as elsewhere in the app); folder contents and
+  file bytes are always read as the user.
+
+Modified files:
+- src/back/core/databricks/document/VolumeDocumentSource.py (new)
+- src/back/core/databricks/document/VolumeDocument.py (new)
+- src/back/core/databricks/document/__init__.py
+- src/back/core/databricks/__init__.py
+- src/back/core/databricks/uc/VolumeFileService.py
+- src/api/routers/internal/domain.py
+- src/front/templates/partials/domain/_domain_documents.html
+- src/front/templates/domain.html
+- src/front/static/domain/js/domain-documents-volume.js (new)
+- src/front/static/global/css/permissions.css
+- src/front/static/global/css/config.css
+- src/front/static/global/js/i18n-ko.js
+- databricks.yml
+- docs/user-guide.md
+- docs/deployment.md
+- docs/architecture.md
+- tests/units/core/test_volume_document_source.py (new)
+- tests/units/core/test_volume_file_service.py
+- tests/units/api/test_document_volume_import_routes.py (new)
+- tests/units/front/test_domain_documents_ui.py
+- tests/units/front/test_domain_documents_volume_behaviour.py (new)
+- tests/units/front/i18n_untranslated_baseline.json
+- tests/units/settings/test_bundle_job_resource.py
+- tests/units/architecture/baseline.json
+
+Test result:
+- Targeted (volume source, Files API service, document routes, documents UI,
+  i18n, bundle resources, architecture, permission middleware, data-plane
+  client): 700 passed.
+- Full unit suite (`uv run --frozen pytest tests/units -q -x -p no:cacheprovider`):
+  9625 passed, 12 skipped, 18 warnings in 895.30s. The folder-detection
+  fallback in `VolumeDocumentSource._resolve` landed during that run; its
+  modules were re-run afterwards (60 passed).

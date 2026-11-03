@@ -4,10 +4,14 @@ from back.core.databricks.document.DocumentExtractor import DocumentExtractor
 from back.core.databricks.document.DocumentParseService import DocumentParseService
 from back.core.databricks.document.ParseStatus import ParseStatus
 from back.core.databricks.document.ParseSubmission import ParseSubmission
+from back.core.databricks.document.VolumeDocument import VolumeDocument
+from back.core.databricks.document.VolumeDocumentSource import VolumeDocumentSource
 
 __all__ = [
     "DocumentExtractor",
     "DocumentParseService",
     "ParseStatus",
     "ParseSubmission",
+    "VolumeDocument",
+    "VolumeDocumentSource",
 ]

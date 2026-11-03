@@ -283,3 +283,117 @@ class TestParseDirectoryContents:
         )
         assert len(items) == 1
         assert items[0]["name"] == "sub"
+
+
+def _response(status=200, *, headers=None, payload=None, chunks=None):
+    resp = MagicMock(status_code=status, headers=headers or {})
+    resp.json.return_value = payload or {}
+    resp.iter_content.return_value = iter(chunks or [])
+    resp.__enter__.return_value = resp
+    resp.__exit__.return_value = False
+    return resp
+
+
+def _page(names, token=None):
+    payload = {
+        "contents": [{"name": n, "is_directory": False, "file_size": 1} for n in names]
+    }
+    if token:
+        payload["next_page_token"] = token
+    return _response(payload=payload)
+
+
+class TestHeadFile:
+    def test_returns_status_and_content_length(self, clean_databricks_env):
+        svc = VolumeFileService(host="https://h.com", token="tok")
+        svc._session = MagicMock()
+        svc._session.head.return_value = _response(headers={"content-length": "42"})
+        assert svc.head_file("/Volumes/c/s/v/a.md") == (200, 42)
+        url = svc._session.head.call_args.args[0]
+        assert url == "https://h.com/api/2.0/fs/files/Volumes/c/s/v/a.md"
+
+    def test_missing_length_is_none(self, clean_databricks_env):
+        svc = VolumeFileService(host="https://h.com", token="tok")
+        svc._session = MagicMock()
+        svc._session.head.return_value = _response(404)
+        assert svc.head_file("/Volumes/c/s/v/a.md") == (404, None)
+
+
+class TestListDirectoryPage:
+    def test_follows_page_tokens_until_cap(self, clean_databricks_env):
+        svc = VolumeFileService(host="https://h.com", token="tok")
+        svc._session = MagicMock()
+        svc._session.get.side_effect = [_page(["a", "b"], "t1"), _page(["c", "d"], "t2")]
+        status, items, truncated = svc.list_directory_page("/Volumes/c/s/v", 3)
+        assert status == 200
+        assert [i["name"] for i in items] == ["a", "b", "c"]
+        assert truncated is True
+        assert svc._session.get.call_args.kwargs["params"] == {"page_token": "t1"}
+
+    def test_last_page_is_not_truncated(self, clean_databricks_env):
+        svc = VolumeFileService(host="https://h.com", token="tok")
+        svc._session = MagicMock()
+        svc._session.get.return_value = _page(["a"])
+        assert svc.list_directory_page("/Volumes/c/s/v", 3)[2] is False
+
+    def test_error_status_is_returned(self, clean_databricks_env):
+        svc = VolumeFileService(host="https://h.com", token="tok")
+        svc._session = MagicMock()
+        svc._session.get.return_value = _response(403)
+        assert svc.list_directory_page("/Volumes/c/s/v", 10) == (403, [], False)
+
+
+class TestReadBinaryFileCapped:
+    def test_returns_bytes_under_cap(self, clean_databricks_env):
+        svc = VolumeFileService(host="https://h.com", token="tok")
+        svc._session = MagicMock()
+        svc._session.get.return_value = _response(chunks=[b"ab", b"c"])
+        assert svc.read_binary_file_capped("/Volumes/c/s/v/a", 10) == (200, b"abc")
+        assert svc._session.get.call_args.kwargs["stream"] is True
+
+    def test_stops_reading_past_cap(self, clean_databricks_env):
+        svc = VolumeFileService(host="https://h.com", token="tok")
+        svc._session = MagicMock()
+        consumed = []
+
+        def chunks(**_kw):
+            for chunk in (b"12345", b"67890", b"never"):
+                consumed.append(chunk)
+                yield chunk
+
+        resp = _response()
+        resp.iter_content.side_effect = chunks
+        svc._session.get.return_value = resp
+        assert svc.read_binary_file_capped("/Volumes/c/s/v/a", 8) == (200, None)
+        assert consumed == [b"12345", b"67890"]
+
+    def test_error_status(self, clean_databricks_env):
+        svc = VolumeFileService(host="https://h.com", token="tok")
+        svc._session = MagicMock()
+        svc._session.get.return_value = _response(404)
+        assert svc.read_binary_file_capped("/Volumes/c/s/v/a", 8) == (404, None)
+
+
+class TestUserTokenInAppMode:
+    """In Databricks Apps the SP credentials are always present; an explicit
+    (forwarded user) token must still be the bearer for Files API calls."""
+
+    @pytest.fixture
+    def app_env(self, clean_databricks_env, monkeypatch):
+        monkeypatch.setenv("DATABRICKS_APP_PORT", "8000")
+        monkeypatch.setenv("DATABRICKS_CLIENT_ID", "sp-id")
+        monkeypatch.setenv("DATABRICKS_CLIENT_SECRET", "sp-secret")
+        monkeypatch.setattr(DatabricksAuth, "get_oauth_token", lambda self: "SP_TOKEN")
+
+    def test_user_token_is_the_bearer_not_the_sp(self, app_env):
+        svc = VolumeFileService(host="https://h.com", token="USER_TOKEN")
+        svc._session = MagicMock()
+        svc._session.head.return_value = _response(headers={"content-length": "1"})
+        svc._session.get.side_effect = [_page(["a.md"]), _response(chunks=[b"x"])]
+        svc.head_file("/Volumes/c/s/v/a.md")
+        svc.list_directory_page("/Volumes/c/s/v", 10)
+        svc.read_binary_file_capped("/Volumes/c/s/v/a.md", 10)
+        calls = [svc._session.head.call_args, *svc._session.get.call_args_list]
+        assert [c.kwargs["headers"]["Authorization"] for c in calls] == [
+            "Bearer USER_TOKEN"
+        ] * 3

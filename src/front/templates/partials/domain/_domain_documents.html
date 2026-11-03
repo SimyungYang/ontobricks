@@ -53,6 +53,66 @@
                 </button>
             </div>
         </div>
+
+        <!-- Unity Catalog Volume import: read with the user's own UC permissions -->
+        <div id="docVolumeImport" class="doc-volume-import mt-4 pt-3 border-top">
+            <h6 class="mb-1"><i class="bi bi-database me-1"></i>Import from Unity Catalog Volume</h6>
+            <p class="text-muted small mb-2">
+                Paste a file or folder path, or browse a volume. Files are read with your own Unity Catalog permissions.
+                A folder imports the supported files directly inside it (up to 50, not recursive).
+            </p>
+            <div class="input-group input-group-sm">
+                <input type="text" class="form-control" id="docVolumePathInput"
+                       placeholder="/Volumes/catalog/schema/volume/folder/file.pdf"
+                       aria-label="Unity Catalog Volume path" autocomplete="off" spellcheck="false">
+                <button type="button" class="btn btn-outline-secondary" id="docVolumeBrowseBtn"
+                        aria-expanded="false" aria-controls="docVolumeBrowser">
+                    <i class="bi bi-folder2-open"></i> Browse
+                </button>
+                <button type="button" class="btn btn-primary" id="docVolumeImportPathBtn">
+                    <i class="bi bi-box-arrow-in-down"></i> Import
+                </button>
+            </div>
+
+            <!-- Volume browser: catalog / schema / volume pickers, then folders -->
+            <div id="docVolumeBrowser" class="doc-volume-browser mt-2 d-none">
+                <div class="row g-2 mb-2">
+                    <div class="col-md-4">
+                        <select class="form-select form-select-sm" id="docVolumeCatalog" aria-label="Catalog">
+                            <option value="">Select catalog...</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <select class="form-select form-select-sm" id="docVolumeSchema" aria-label="Schema" disabled>
+                            <option value="">Select schema...</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <select class="form-select form-select-sm" id="docVolumeVolume" aria-label="Volume" disabled>
+                            <option value="">Select volume...</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="d-flex align-items-center gap-2 mb-1">
+                    <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-1" id="docVolumeUpBtn"
+                            title="Parent folder" disabled>
+                        <i class="bi bi-arrow-90deg-up"></i>
+                    </button>
+                    <code data-i18n-skip id="docVolumeCurrentPath" class="small text-truncate"></code>
+                </div>
+                <div id="docVolumeEntries" class="doc-volume-entries list-group list-group-flush border rounded" aria-live="polite">
+                    <div class="text-muted small fst-italic px-2 py-2">Select a volume to browse its files.</div>
+                </div>
+                <div class="d-flex align-items-center gap-2 mt-2">
+                    <button type="button" class="btn btn-primary btn-sm" id="docVolumeImportSelectedBtn" disabled>
+                        <i class="bi bi-box-arrow-in-down"></i> Import selected (<span id="docVolumeSelectedCount">0</span>)
+                    </button>
+                    <button type="button" class="btn btn-outline-secondary btn-sm" id="docVolumeImportFolderBtn" disabled>
+                        <i class="bi bi-folder-check"></i> Import this folder
+                    </button>
+                </div>
+            </div>
+        </div>
     </div>
 </div>
 

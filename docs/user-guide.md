@@ -112,6 +112,36 @@ UTF-8 text formats are ready immediately. Unsupported formats remain failed
 and are not sent to Generate or Mapping. Creating a new domain version copies the
 parsed documents forward.
 
+### Import from a Unity Catalog Volume
+
+Documents that already live in a Unity Catalog Volume can be imported without
+downloading them first. In the upload card, under **Import from Unity Catalog
+Volume**:
+
+- **Paste a path** such as `/Volumes/<catalog>/<schema>/<volume>/specs/guide.pdf`
+  and click **Import**.
+  - A folder path imports the supported files directly inside it.
+  - Sub-folders are not followed, and at most 50 files are imported per request.
+- **Or click Browse**, pick a catalog, schema and volume, open folders, then
+  either tick files and click **Import selected** or click **Import this folder**.
+
+Imported files go through exactly the same pipeline as uploads, so they show
+up in the same list with the same **Parsing / Ready / Parse failed** states.
+The original file name is kept.
+
+| Rule | Behaviour |
+|------|-----------|
+| Identity | Files are listed and read with **your own** Unity Catalog permissions, not the app's. A file you cannot open in Databricks cannot be imported. |
+| Size | 10 MB per file, checked before download; larger files are skipped. |
+| Types | The same types as upload; other files are shown as *Unsupported type* and skipped. |
+| Duplicate names | A second selected file with an already-used name is skipped instead of overwriting the first. |
+| Read-only versions | Import is disabled wherever upload is disabled (older versions, Viewers, locked versions). |
+
+> **Deployment note** — the app needs the `files.files` user authorization
+> scope (declared in `databricks.yml`). After the scope is added, each user is
+> asked to consent once on their next visit. Without it, import reports a
+> permission error instead of falling back to the app service principal.
+
 ## Application Workflow
 
 OntoBricks follows a 3-step workflow:

@@ -109,7 +109,6 @@
     "api/routers/digitaltwin.py::dt_triples": 102,
     "api/routers/digitaltwin.py::dt_triples_find": 131,
     "api/routers/domains.py::get_domain_design_status": 170,
-    "api/routers/internal/domain.py::upload_documents": 102,
     "api/routers/internal/dtwin.py::dtwin_assistant_chat": 129,
     "api/routers/internal/dtwin.py::dtwin_assistant_chat_stream": 163,
     "api/routers/internal/mapping.py::start_auto_assign": 116,

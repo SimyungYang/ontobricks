@@ -26,12 +26,80 @@ def test_feature_is_named_knowledge_store():
 
 
 def test_no_volume_location_banner():
+    # The Knowledge Store itself is Volume-free (Lakebase rows); a Volume only
+    # appears as an optional *import source*, never as the storage location.
     html = DOCUMENTS_HTML.read_text(encoding="utf-8")
     assert "docLocationBanner" not in html
-    assert "/Volumes" not in html
     assert "Unity Catalog volume" not in html
     js = DOCUMENTS_JS.read_text(encoding="utf-8")
     assert "loadVolumeLocation" not in js
+
+
+# -- Import from a Unity Catalog Volume ------------------------------
+
+VOLUME_JS = REPO_ROOT / "src/front/static/domain/js/domain-documents-volume.js"
+DOMAIN_HTML = REPO_ROOT / "src/front/templates/domain.html"
+PERMISSIONS_CSS = REPO_ROOT / "src/front/static/global/css/permissions.css"
+
+
+def test_volume_import_controls_sit_in_the_upload_card():
+    html = DOCUMENTS_HTML.read_text(encoding="utf-8")
+    for element_id in (
+        "docVolumeImport",
+        "docVolumePathInput",
+        "docVolumeBrowseBtn",
+        "docVolumeImportPathBtn",
+        "docVolumeCatalog",
+        "docVolumeSchema",
+        "docVolumeVolume",
+        "docVolumeEntries",
+        "docVolumeImportSelectedBtn",
+        "docVolumeImportFolderBtn",
+    ):
+        assert f'id="{element_id}"' in html, element_id
+    assert "Import from Unity Catalog Volume" in html
+    # Upload card precedes the Parsed Documents card that shows the status list.
+    assert html.index('id="docVolumeImport"') < html.index("Parsed Documents")
+
+
+def test_volume_import_script_loads_after_documents_script():
+    html = DOMAIN_HTML.read_text(encoding="utf-8")
+    assert html.index("domain/js/domain-documents.js") < html.index(
+        "domain/js/domain-documents-volume.js"
+    )
+
+
+def test_volume_import_uses_user_scoped_endpoints_and_shared_list():
+    js = VOLUME_JS.read_text(encoding="utf-8")
+    assert "'/domain/documents/import-volume'" in js
+    assert "/domain/documents/volume/browse?path=${encodeURIComponent(path)}" in js
+    assert "JSON.stringify({ paths })" in js
+    assert "method: 'POST'" in js
+    # Imported rows show up in the same Ready/status list as uploads.
+    assert "DocManager.refreshList()" in js
+    # Existing catalog / schema / volume listing APIs are reused.
+    for url in ("/settings/catalogs", "/settings/schemas/", "/settings/volumes/"):
+        assert url in js
+
+
+def test_volume_import_is_gated_like_upload():
+    css = PERMISSIONS_CSS.read_text(encoding="utf-8")
+    gate = "body:is(.read-only-version, .role-viewer, .read-only-locked)"
+    assert f"{gate} #docDropZone" in css
+    assert f"{gate} #docVolumeImport" in css
+    js = VOLUME_JS.read_text(encoding="utf-8")
+    assert "return window.isActiveVersion !== false;" in js
+    assert "if (!this.isEditable() || this.busy || paths.length === 0) return;" in js
+
+
+def test_volume_paths_never_reach_inline_handlers():
+    js = VOLUME_JS.read_text(encoding="utf-8")
+    assert "onclick=" not in js
+    assert "onchange=" not in js
+    assert 'data-volume-dir="${safePath}"' in js
+    assert 'data-volume-file="${safePath}"' in js
+    assert "<span data-i18n-skip class=\"text-truncate\">${safeName}</span>" in js
+    assert "option.setAttribute('data-i18n-skip', '');" in js
 
 
 def test_upload_enforces_10mb_client_guard():

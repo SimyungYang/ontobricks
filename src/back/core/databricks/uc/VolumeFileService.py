@@ -126,6 +126,59 @@ class VolumeFileService:
             logger.exception("Error listing directory %s: %s", dir_path, exc)
             return False, [], f"Error: {exc}"
 
+    def head_file(self, file_path: str) -> Tuple[int, Optional[int]]:
+        """Return ``(http_status, size_bytes)`` for a file without its body."""
+        response = self._session.head(
+            f"{self._host()}{FS_FILES_PATH}{VolumeFileService._fs_api_path_suffix(file_path)}",
+            headers=self._headers(),
+            timeout=_REQUEST_TIMEOUT,
+        )
+        size = response.headers.get("content-length")
+        return response.status_code, int(size) if size and size.isdigit() else None
+
+    def list_directory_page(
+        self, dir_path: str, max_entries: int
+    ) -> Tuple[int, List[Dict], bool]:
+        """List up to *max_entries* direct children; return ``(status, items, truncated)``.
+
+        Follows ``next_page_token`` until the cap so large folders are not
+        silently cut at the server page size.
+        """
+        url = f"{self._host()}{FS_DIRS_PATH}{VolumeFileService._fs_api_path_suffix(dir_path)}"
+        items: List[Dict] = []
+        params: Dict[str, str] = {}
+        while True:
+            response = self._session.get(
+                url, headers=self._headers(), params=params, timeout=_REQUEST_TIMEOUT
+            )
+            if response.status_code != 200:
+                return response.status_code, [], False
+            data = response.json()
+            items.extend(self._parse_directory_contents(data, dir_path))
+            token = data.get("next_page_token")
+            if len(items) >= max_entries:
+                return 200, items[:max_entries], bool(token) or len(items) > max_entries
+            if not token:
+                return 200, items, False
+            params = {"page_token": token}
+
+    def read_binary_file_capped(
+        self, file_path: str, max_bytes: int
+    ) -> Tuple[int, Optional[bytes]]:
+        """Stream a file; return ``(status, data)`` with ``data=None`` past *max_bytes*."""
+        url = f"{self._host()}{FS_FILES_PATH}{VolumeFileService._fs_api_path_suffix(file_path)}"
+        with self._session.get(
+            url, headers=self._headers(), stream=True, timeout=_REQUEST_TIMEOUT
+        ) as response:
+            if response.status_code != 200:
+                return response.status_code, None
+            buf = bytearray()
+            for chunk in response.iter_content(chunk_size=256 * 1024):
+                buf.extend(chunk)
+                if len(buf) > max_bytes:
+                    return 200, None
+            return 200, bytes(buf)
+
     def _read_file_raw(self, file_path: str) -> Tuple[bool, requests.Response, str]:
         """GET a file from the Files API and return ``(success, response, message)``."""
         if not self.is_configured():

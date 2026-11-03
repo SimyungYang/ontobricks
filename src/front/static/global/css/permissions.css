@@ -154,11 +154,12 @@ body:is(.read-only-version, .role-viewer, .read-only-locked) [data-meta-action="
 body:is(.read-only-version, .role-viewer, .read-only-locked) button[onclick*="saveTableDetails"],
 body:is(.read-only-version, .role-viewer, .read-only-locked) button[onclick*="saveTableComment"],
 body:is(.read-only-version, .role-viewer, .read-only-locked) button[onclick*="clearMetadata"],
-/* --- Domain > Documents: dropzone + delete-file in dynamically rendered list. */
+/* --- Domain > Documents: dropzone, UC Volume import + delete-file in dynamically rendered list. */
 body:is(.read-only-version, .role-viewer, .read-only-locked) #docDropZone,
 body:is(.read-only-version, .role-viewer, .read-only-locked) #docUploadBtn,
 body:is(.read-only-version, .role-viewer, .read-only-locked) #docClearQueueBtn,
 body:is(.read-only-version, .role-viewer, .read-only-locked) #docFileInput,
+body:is(.read-only-version, .role-viewer, .read-only-locked) #docVolumeImport,
 body:is(.read-only-version, .role-viewer, .read-only-locked) #docFileList button[onclick*="deleteFile"],
 /* --- Ontology > Import: every "import from …" trigger + module checkboxes. */
 body:is(.read-only-version, .role-viewer, .read-only-locked) #importOwlLocalBtn,

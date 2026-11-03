@@ -382,6 +382,14 @@ per-file upload cap** (base64 inflation against the Statement Execution API's
 ~16 MiB limit). Generate and Mapping are read-only corpus consumers and never
 invoke the extractor. Creating a new version copies the parsed-text rows.
 
+`VolumeDocumentSource` adds Unity Catalog Volumes as a second document source.
+It lists and reads `/Volumes/...` files through the Files API with the caller's
+forwarded token (on-behalf-of, fail-closed in App mode), validates the path,
+and checks type and size from metadata before a streamed, capped download. The
+bytes then enter the same `prepare_upload` → background parse path as a local
+upload. The source path is returned in the import response and logged; it is
+not a `domain_documents` column.
+
 ---
 
 ## Module Structure
@@ -2921,6 +2929,7 @@ and the engine that ultimately runs (column **Engine**).
 | Data source deletion guard | `domain-metadata` | `POST /domain/metadata/removal-impact` | REST | `Mapping.find_mappings_referencing` over the session `assignment` (no warehouse call) |
 | Metadata refresh diff preview | `domain-metadata` | `POST /domain/metadata/update-async` → `GET /tasks/{id}` | REST → Spark SQL | `compute_column_diff` over the pre-merge snapshot; applied only after the user confirms |
 | Knowledge Store upload / status / retry / purge | `domain-documents.js` | `/domain/documents/upload`, `/domain/documents/list`, `/domain/documents/retry-parse` | REST → Spark SQL parse → Lakebase | Parsed text stored in Lakebase `domain_documents` (no originals kept); one asynchronous inline-base64 `ai_parse_document` call per changed source hash; 10 MB per-file cap |
+| Knowledge Store import from UC Volume | `domain-documents-volume.js` | `GET /domain/documents/volume/browse`, `POST /domain/documents/import-volume` (+ `/settings/catalogs`, `/settings/schemas/{c}`, `/settings/volumes/{c}/{s}` for pickers) | REST → Files API (caller's token) → same parse pipeline | Path validated, type/size checked from metadata, streamed with the 10 MB cap; folders import direct children only, max 50 files per request |
 | Versions | `domain-versions` | `/api/v1/domain/versions` | REST | UC Volume listing |
 
 #### 4.2 Ontology Studio

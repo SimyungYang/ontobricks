@@ -15,6 +15,8 @@ from back.core.databricks import (
     DocumentExtractor,
     DocumentParseService,
     ParseStatus,
+    VolumeDocument,
+    VolumeDocumentSource,
     is_databricks_app,
 )
 from back.core.errors import (
@@ -24,8 +26,10 @@ from back.core.errors import (
     ValidationError,
 )
 from back.core.helpers import (
+    get_data_plane_client,
     get_databricks_client,
     resolve_warehouse_id,
+    run_blocking,
 )
 from back.core.logging import get_logger
 from back.core.task_manager import get_task_manager
@@ -1057,6 +1061,69 @@ async def list_documents(
         raise InfrastructureError("Failed to list documents", detail=str(e))
 
 
+def _submit_document(
+    parse_service: DocumentParseService,
+    folder: str,
+    version: str,
+    filename: str,
+    content: bytes,
+) -> Dict[str, Any]:
+    """Run one document through the shared parse-once pipeline.
+
+    Used by both local upload and UC Volume import so the size cap, the
+    stored row, and the background parse are identical for either source.
+    """
+    max_bytes = DocumentParseService.MAX_UPLOAD_BYTES
+    if len(content) > max_bytes:
+        return {
+            "filename": filename,
+            "success": False,
+            "parse_status": ParseStatus.FAILED.value,
+            "message": f"File exceeds the {max_bytes // (1024 * 1024)} MB upload limit",
+        }
+    try:
+        submission = parse_service.prepare_upload(folder, version, filename, content)
+        item = {
+            "filename": filename,
+            "success": True,
+            "uploaded": submission.uploaded,
+            "no_op": submission.no_op,
+            "parse_status": submission.parse_status.value,
+        }
+        if submission.should_parse:
+            item["task_id"] = _schedule_document_parse(
+                parse_service, folder, version, filename
+            )
+            item["message"] = "Uploaded; parsing started"
+        elif submission.no_op:
+            item["message"] = "Already uploaded and parsed"
+        elif submission.parse_status is ParseStatus.READY:
+            item["message"] = "Uploaded and ready"
+        else:
+            item["message"] = submission.error or "Document parsing failed"
+        return item
+    except Exception as exc:
+        return {
+            "filename": filename,
+            "success": False,
+            "message": "Failed to upload file",
+            "detail": str(exc),
+        }
+
+
+def _document_batch_response(
+    results: List[Dict[str, Any]], verb: str
+) -> Dict[str, Any]:
+    """Summarise per-file results the way the Knowledge Store UI expects."""
+    succeeded = sum(1 for r in results if r["success"])
+    msg = f"{succeeded}/{len(results)} file(s) {verb}"
+    if succeeded < len(results):
+        first_err = next((r["message"] for r in results if not r["success"]), "")
+        if first_err:
+            msg = f"{msg}. {first_err}"
+    return {"success": succeeded > 0, "message": msg, "results": results}
+
+
 @router.post("/documents/upload")
 async def upload_documents(
     request: Request,
@@ -1081,9 +1148,6 @@ async def upload_documents(
         if not uploaded_files:
             raise ValidationError("No files provided")
 
-        max_bytes = DocumentParseService.MAX_UPLOAD_BYTES
-        max_mb = max_bytes // (1024 * 1024)
-
         results: List[Dict[str, Any]] = []
         for upload in uploaded_files:
             raw_name = (upload.filename or "").strip() or "upload.bin"
@@ -1097,69 +1161,121 @@ async def upload_documents(
                     }
                 )
                 continue
-
             content = await upload.read()
-            if len(content) > max_bytes:
-                results.append(
-                    {
-                        "filename": filename,
-                        "success": False,
-                        "parse_status": ParseStatus.FAILED.value,
-                        "message": f"File exceeds the {max_mb} MB upload limit",
-                    }
-                )
-                continue
-
-            try:
-                submission = parse_service.prepare_upload(
-                    folder, version, filename, content
-                )
-                item = {
-                    "filename": filename,
-                    "success": True,
-                    "uploaded": submission.uploaded,
-                    "no_op": submission.no_op,
-                    "parse_status": submission.parse_status.value,
-                }
-                if submission.should_parse:
-                    item["task_id"] = _schedule_document_parse(
-                        parse_service, folder, version, filename
-                    )
-                    item["message"] = "Uploaded; parsing started"
-                elif submission.no_op:
-                    item["message"] = "Already uploaded and parsed"
-                elif submission.parse_status is ParseStatus.READY:
-                    item["message"] = "Uploaded and ready"
-                else:
-                    item["message"] = submission.error or "Document parsing failed"
-                results.append(item)
-            except Exception as exc:
-                results.append(
-                    {
-                        "filename": filename,
-                        "success": False,
-                        "message": "Failed to upload file",
-                        "detail": str(exc),
-                    }
-                )
-
-        succeeded = sum(1 for r in results if r["success"])
-        msg = f"{succeeded}/{len(results)} file(s) uploaded"
-        if succeeded < len(results):
-            first_err = next((r["message"] for r in results if not r["success"]), "")
-            if first_err:
-                msg = f"{msg}. {first_err}"
-        return {
-            "success": succeeded > 0,
-            "message": msg,
-            "results": results,
-        }
+            results.append(
+                _submit_document(parse_service, folder, version, filename, content)
+            )
+        return _document_batch_response(results, "uploaded")
 
     except (ValidationError, InfrastructureError, NotFoundError):
         raise
     except Exception as e:
         logger.exception("Upload documents failed: %s", e)
         raise InfrastructureError("Upload documents failed", detail=str(e))
+
+
+def _make_volume_document_source(
+    domain: Any, settings: Settings
+) -> VolumeDocumentSource:
+    """Bind a UC Volume reader to the caller's identity.
+
+    In App mode ``get_data_plane_client`` carries the forwarded user token
+    and fails closed (403) when it is missing, so a volume file is never read
+    with the app service principal. Local / PAT / CLI mode uses the
+    developer's own credentials.
+    """
+    client = get_data_plane_client(domain, settings)
+    if client is None:
+        raise ValidationError("Databricks not configured")
+    return VolumeDocumentSource(client.volumes)
+
+
+async def _import_volume_document(
+    source: VolumeDocumentSource,
+    parse_service: DocumentParseService,
+    folder: str,
+    version: str,
+    doc: VolumeDocument,
+) -> Dict[str, Any]:
+    """Download one planned volume file and hand it to the shared pipeline."""
+    failed = {
+        "filename": doc.filename,
+        "source_path": doc.path,
+        "success": False,
+        "parse_status": ParseStatus.FAILED.value,
+    }
+    if doc.error:
+        return {**failed, "message": doc.error}
+    try:
+        content = await run_blocking(source.read, doc)
+    except OntoBricksError as exc:
+        return {**failed, "message": exc.message}
+    except Exception as exc:  # noqa: BLE001 - reported per file
+        logger.warning("Volume read failed for %s: %s", doc.path, type(exc).__name__)
+        return {**failed, "message": "Could not read the file from the volume"}
+    item = _submit_document(parse_service, folder, version, doc.filename, content)
+    logger.info("Knowledge Store import of %s from %s", doc.filename, doc.path)
+    return {**item, "source_path": doc.path}
+
+
+@router.get("/documents/volume/browse")
+async def browse_document_volume(
+    path: str = Query(..., description="/Volumes/<catalog>/<schema>/<volume>[/dir]"),
+    session_mgr: SessionManager = Depends(get_session_manager),
+    settings: Settings = Depends(get_settings),
+):
+    """List one UC Volume folder as the caller, flagging importable files."""
+    try:
+        domain = get_domain(session_mgr)
+        folder, _version = _resolve_document_scope(domain)
+        if not folder:
+            raise ValidationError("Domain not saved to the registry")
+        source = _make_volume_document_source(domain, settings)
+        return {"success": True, **await run_blocking(source.browse, path)}
+    except OntoBricksError:
+        raise
+    except Exception as e:
+        logger.exception("Browse volume failed: %s", e)
+        raise InfrastructureError("Failed to browse the volume", detail=str(e))
+
+
+@router.post("/documents/import-volume")
+async def import_volume_documents(
+    request: Request,
+    session_mgr: SessionManager = Depends(get_session_manager),
+    settings: Settings = Depends(get_settings),
+):
+    """Import ``/Volumes/...`` files or folders into the Knowledge Store.
+
+    Body: ``{"paths": [...]}``. Each file is read with the caller's identity
+    and then goes through the same parse-once pipeline as a local upload.
+    """
+    try:
+        data = await request.json()
+        domain = get_domain(session_mgr)
+        folder, version = _resolve_document_scope(domain)
+        if not folder:
+            raise ValidationError("Domain not saved to the registry")
+        source = _make_volume_document_source(domain, settings)
+        parse_service = _make_document_parse_service(domain, settings)
+        docs, truncated = await run_blocking(source.plan, data.get("paths"))
+        results = [
+            await _import_volume_document(source, parse_service, folder, version, doc)
+            for doc in docs
+        ]
+        response = _document_batch_response(results, "imported")
+        if truncated:
+            response["truncated"] = True
+            response["message"] += (
+                f". Only the first {VolumeDocumentSource.MAX_IMPORT_FILES} "
+                "supported files were imported"
+            )
+        return response
+    except OntoBricksError:
+        raise
+    except Exception as e:
+        logger.exception("Import volume documents failed: %s", e)
+        raise InfrastructureError("Import from volume failed", detail=str(e))
 
 
 @router.post("/documents/retry-parse")
