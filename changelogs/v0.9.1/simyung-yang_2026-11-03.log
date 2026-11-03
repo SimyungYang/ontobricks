@@ -495,3 +495,37 @@ Modified files:
 Tests: `uv run --frozen pytest -q tests/units/agents/test_agent_dtwin_chat_engine.py
 tests/units/agents/test_agent_dtwin_chat.py` → 80 passed. Prompt-only change;
 no eval delta recorded yet (demo verification pending redeploy).
+
+
+## Graph Chat: prefer GraphQL for known ids, describe_entity only when needed
+
+Context: In the LG Chem demo a 4-LOT comparison question produced 13 tool
+calls, several of them `describe_entity` at ~3 s each. `describe_entity`
+text-matches every URI/label containing the search term (24 seeds for one
+LOT id) and walks raw triples, while a GraphQL single lookup for the same LOT
+takes 0.1-0.3 s. The system prompt's route C told the model to call
+`describe_entity(search)` for any single-entity profile.
+
+Changes:
+1. src/agents/agent_dtwin_chat/engine.py — route C now says: for an id or
+   name whose type is in the schema digest, use ONE query_graphql single /
+   filtered-list call (aliases for several entities in the same query);
+   describe_entity only when the type is unknown or inferred triples matter.
+   The describe_entity tool description marks it as slow/broad and asks for
+   entity_type whenever the digest gives the type.
+2. src/agents/agent_dtwin_chat/tools.py — describe_entity tool schema:
+   description points to query_graphql <single>(id) for known types;
+   entity_type parameter asks to always pass it when known.
+
+Modified files:
+- src/agents/agent_dtwin_chat/engine.py
+- src/agents/agent_dtwin_chat/tools.py
+- changelogs/v0.9.1/simyung-yang_2026-11-03.log
+
+Tests: `uv run --frozen pytest -q -m "not scenario"` → 9,981 passed, 338 skipped;
+5 failures unrelated to this change (2 × test_deploy_instance_id from the local
+deploy.config.sh instance id, 3 × prompt-wording tests fixed before commit —
+re-run of tests/units/agents/test_agent_dtwin_chat*.py: 80 passed).
+tests/units/api/test_routes.py::test_readiness_route_returns_checks hangs in
+this environment (network readiness probe) and was excluded. Prompt-only
+change; eval delta pending.

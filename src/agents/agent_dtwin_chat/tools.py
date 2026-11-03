@@ -676,8 +676,10 @@ _DESCRIBE_ENTITY_DEF = {
         "description": (
             "Profile of entities matching a text and/or type over the raw "
             "triple store (attributes + direct relationships, incl. inferred "
-            "triples). For 'what did X buy / X's history' or filtered lists, "
-            "use query_graphql with filters instead."
+            "triples). Slow (seconds) and broad: the text matches every URI/"
+            "label containing it. Prefer query_graphql <single>(id) for an "
+            "entity whose type you know; for 'what did X buy / X's history' "
+            "or filtered lists, use query_graphql with filters instead."
         ),
         "parameters": {
             "type": "object",
@@ -690,7 +692,8 @@ _DESCRIBE_ENTITY_DEF = {
                     "type": "string",
                     "description": (
                         "Entity type local name (case-insensitive) e.g. "
-                        "'Customer'. Omit it when unsure of the type."
+                        "'Customer'. Always pass it when the schema digest "
+                        "gives the type; omit it only when unsure."
                     ),
                 },
                 "depth": {

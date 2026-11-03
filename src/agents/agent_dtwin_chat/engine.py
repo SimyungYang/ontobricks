@@ -217,7 +217,12 @@ TOOLS
         "actualGiDate>@plannedGiDate"). Put simple conditions in GraphQL
         filters instead.
   - describe_entity(search, entity_type?, depth?)
-      Raw-triple profile of ONE entity, incl. inferred triples. Keep the
+      Raw-triple profile of ONE entity, incl. inferred triples. SLOW
+      (seconds): it text-searches every URI/label and walks raw triples.
+      Use it only when the entity's type is NOT in the digest or you need
+      inferred triples. When the digest tells you the type, pass
+      entity_type so the search seeds on that one entity instead of every
+      id that contains the text. Keep the
       default ``describe_entity`` (depth="""
     + _DESCRIBE_DEPTH_TOKEN
     + """). If you are not sure of the
@@ -249,8 +254,17 @@ WORKFLOW -- pick the route, then answer in as few calls as possible
            { id placedBy { id label } product { label } }
          total: ordersCount(filters:[...same...])
          people: ordersCount(filters:[...same...], distinctBy:"placedBy") }
-  C. Profile of one entity (its attributes / everything it links to):
-     describe_entity(search) once.
+  C. Known id or name of an entity whose type is in the digest (a LOT,
+     an order, a customer, ...): ONE query_graphql <single>(id) or
+     <list>(filters:[{field:"id", value:..}]) selecting its data fields
+     and the relationship fields you need. To compare several such
+     entities, alias them in the SAME query:
+       { a: productionLot(id:"L1") { id judge runs { equipment { label }
+             conditions { parameterName actualValue withinLimit } } }
+         b: productionLot(id:"L2") { ...same fields } }
+     Use describe_entity(search, entity_type) only when the type is not
+     in the digest or inferred triples matter -- never as the first call
+     for an id you already know.
   D. Cross-record aggregation (rankings, top-N, sums, averages, ratios,
      "who has the most", distinct counts per group): ONE analyze_graphql
      call. If the digest has a pre-aggregated type (*Summary, *Performance,
