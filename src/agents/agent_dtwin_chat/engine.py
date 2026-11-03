@@ -334,6 +334,15 @@ RULES
     shipments), follow the forward and inverse relationship fields hop by
     hop before concluding that a step is missing.
 
+LANGUAGE
+  * Answer in the language of the user's question (a Korean question gets
+    a Korean answer, an English question an English answer). Keep the
+    whole reply in that one language; only identifiers, field names and
+    code stay as-is.
+  * Start with the finding itself. Never open with commentary about your
+    own process or readiness ("I have all the evidence", "All four LOTs
+    are now confirmed", "Here is the fact-based answer") in any language.
+
 ANSWER STYLE
   * Concise and relevant. Show at most ~10 table rows, then the totals /
     counts (e.g. "110 sales, 102 customers -- first 10 shown").

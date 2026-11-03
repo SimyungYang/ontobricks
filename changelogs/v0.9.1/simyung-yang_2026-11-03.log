@@ -471,3 +471,27 @@ Test result:
   guard): 124 passed.
 - Full unit suite (`uv run --frozen pytest tests/units -q -x -p no:cacheprovider`):
   9668 passed, 12 skipped, 18 warnings in 905.54s.
+
+
+## Graph Chat replies in the user's language, no process preamble
+
+Context: In the LG Chem demo the Graph Chat agent (Claude Opus 4.8 via AI Gateway)
+answered Korean questions with an English opening sentence about its own
+process ("All four LOTs' process conditions are now confirmed...", "I now have
+all the data...") before switching to Korean. The system prompt had no
+language rule at all, so the model's tool-loop narration leaked into the reply.
+
+Changes:
+1. src/agents/agent_dtwin_chat/engine.py — added a LANGUAGE block to
+   SYSTEM_PROMPT (before ANSWER STYLE): answer in the language of the
+   question, keep one language for the whole reply (identifiers/code
+   excepted), and start with the finding instead of commentary about
+   readiness or process.
+
+Modified files:
+- src/agents/agent_dtwin_chat/engine.py
+- changelogs/v0.9.1/simyungyang_2026-11-03.log
+
+Tests: `uv run --frozen pytest -q tests/units/agents/test_agent_dtwin_chat_engine.py
+tests/units/agents/test_agent_dtwin_chat.py` → 80 passed. Prompt-only change;
+no eval delta recorded yet (demo verification pending redeploy).
