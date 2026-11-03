@@ -210,6 +210,12 @@ class TestAppPermissionsInBundle:
             scopes = set(apps[key].get("user_api_scopes") or [])
             assert needed <= scopes, f"{key} missing user_api_scopes {needed - scopes}"
 
+    def test_ui_app_can_read_volume_files_as_the_user(self):
+        # Knowledge Store "Import from Unity Catalog Volume" reads files OBO.
+        data = yaml.safe_load((REPO_ROOT / "databricks.yml").read_text())
+        scopes = data["resources"]["apps"]["ontobricks_dev_app"]["user_api_scopes"]
+        assert "files.files" in scopes
+
 
 class TestAnalyticsJobPermissionBootstrap:
     """The app SP must get CAN_MANAGE_RUN on the analytics job at deploy time.
