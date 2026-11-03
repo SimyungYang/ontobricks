@@ -412,3 +412,62 @@ Test result:
 - New module: 10 passed. tests/units/front (incl. i18n): 1842 passed.
 - Full unit suite (`uv run --frozen pytest tests/units -q -x -p no:cacheprovider`):
   9665 passed, 12 skipped, 18 warnings in 888.61s.
+
+## Bundle deploy rejected `iam.current-user:read` as an invalid user API scope
+
+Context:
+`databricks.yml` (issue #208, plus the Volume import scope) declared
+`user_api_scopes: [sql, iam.current-user:read, iam.access-control:read,
+files.files]` on the UI app and `[sql, iam.current-user:read,
+iam.access-control:read]` on the MCP app. Bundle deploy failed on the lgekr
+and dbc-3e4bef8a workspaces with `cannot update resources.apps.<app>: The
+specified scope iam.current-user:read is not a valid scope ... (400
+INVALID_PARAMETER_VALUE)` on `POST /api/2.0/apps/<app>/update`.
+The Databricks Apps docs list these two identity scopes as the default set
+(https://docs.databricks.com/aws/en/dev-tools/databricks-apps/auth). Deployed
+apps confirm they are added on top of the declared scopes: an app declaring
+only `[ai-gateway]` reports `effective_user_api_scopes: [ai-gateway,
+iam.access-control:read, iam.current-user:read]`. The same page lists
+`files.files` as deprecated in favour of `files`.
+
+Changes:
+1. databricks.yml
+   - UI app `user_api_scopes`: `[sql, files]`. MCP app: `[sql]`.
+   - Comments say the identity scopes are Apps defaults and must not be
+     listed, and that `files.files` is the deprecated name of `files`.
+2. app.yaml.template
+   - Removed the `authorization.user.scopes` block that listed the two
+     default scopes (the platform ignored it: deployed apps report no declared
+     scopes). The comment points to `databricks.yml`.
+3. src/back/core/databricks/document/VolumeDocumentSource.py
+   - `SCOPE_HINT` names the `files` scope instead of `files.files`.
+4. docs/deployment.md, docs/user-guide.md
+   - Scope lists updated; deployment guide warns not to list the identity
+     scopes.
+5. tests/units/settings/test_bundle_job_resource.py
+   - Exact scope lists per app (`[sql, files]`, `[sql]`), no Apps default
+     identity scope and no `files.files` in either app, and no default
+     identity scope in `app.yaml.template` outside comments.
+6. tests/units/core/test_volume_document_source.py
+   - The 403 hint names the `files` scope.
+
+Notes:
+- Users re-consent once on their next visit because the declared scope set
+  changes (`files.files` -> `files`).
+- Workspace admins who restrict user authorization scopes must allow `sql`
+  and `files`.
+
+Modified files:
+- databricks.yml
+- app.yaml.template
+- src/back/core/databricks/document/VolumeDocumentSource.py
+- docs/deployment.md
+- docs/user-guide.md
+- tests/units/settings/test_bundle_job_resource.py
+- tests/units/core/test_volume_document_source.py
+
+Test result:
+- Related modules (bundle resources, Volume source, app.yaml template, rename
+  guard): 124 passed.
+- Full unit suite (`uv run --frozen pytest tests/units -q -x -p no:cacheprovider`):
+  9668 passed, 12 skipped, 18 warnings in 905.54s.

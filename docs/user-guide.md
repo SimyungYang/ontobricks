@@ -149,7 +149,7 @@ The original file name is kept.
 | Sign-in expiry | The job uses the sign-in you had when you clicked Import. If it expires mid-job, the job stops and lists the remaining files. Reload the page and import them again; files that are already Ready are not imported twice. |
 | Read-only versions | Import is disabled wherever upload is disabled (older versions, Viewers, locked versions). |
 
-> **Deployment note** — the app needs the `files.files` user authorization
+> **Deployment note** — the app needs the `files` user authorization
 > scope (declared in `databricks.yml`). After the scope is added, each user is
 > asked to consent once on their next visit. Without it, import reports a
 > permission error instead of falling back to the app service principal.

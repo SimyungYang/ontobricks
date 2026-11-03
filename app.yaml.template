@@ -175,19 +175,10 @@ env:
   # or above the node count makes them exact instead of estimated.
   - name: ONTOBRICKS_ANALYTICS_JOB_PIVOTS
     value: "64"
-# User authorization scopes — declares which Databricks APIs the app is
-# allowed to access on behalf of the logged-in user via the
-# x-forwarded-access-token header injected by the Apps platform.
-# The app uses the user token exclusively for permission checks
-# (SCIM user-group lookup + App ACL read) — all data queries go through
-# the app's service principal (M2M OAuth). These two scopes are the
-# minimum required; they are also the platform defaults when no scopes
-# are declared, but explicit declaration is required for Public Preview.
-authorization:
-  user:
-    scopes:
-      - iam.current-user:read
-      - iam.access-control:read
+# User authorization scopes are declared in databricks.yml
+# (``resources.apps.*.user_api_scopes``), not here. The identity scopes
+# ``iam.current-user:read`` and ``iam.access-control:read`` are Apps defaults
+# that are always granted; listing them is rejected on some workspaces.
 
 # Resources that this app uses.
 # Configure these resources in the Databricks Apps UI after deployment.

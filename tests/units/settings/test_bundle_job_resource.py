@@ -202,19 +202,37 @@ class TestAppPermissionsInBundle:
             assert "CAN_USE" in levels, f"{key} missing CAN_USE"
             assert any(p.get("group_name") == "users" for p in perms)
 
-    def test_each_app_declares_user_api_scopes_for_obo(self):
-        data = yaml.safe_load((REPO_ROOT / "databricks.yml").read_text())
-        apps = data["resources"]["apps"]
-        needed = {"sql", "iam.current-user:read", "iam.access-control:read"}
-        for key in ("ontobricks_dev_app", "mcp_ontobricks_app"):
-            scopes = set(apps[key].get("user_api_scopes") or [])
-            assert needed <= scopes, f"{key} missing user_api_scopes {needed - scopes}"
+    # Apps grants these on top of the declared scopes; some workspaces reject
+    # them in ``user_api_scopes`` ("is not a valid scope", 400) and fail deploy.
+    APPS_DEFAULT_SCOPES = {"iam.current-user:read", "iam.access-control:read"}
 
-    def test_ui_app_can_read_volume_files_as_the_user(self):
-        # Knowledge Store "Import from Unity Catalog Volume" reads files OBO.
+    def _scopes(self, key):
         data = yaml.safe_load((REPO_ROOT / "databricks.yml").read_text())
-        scopes = data["resources"]["apps"]["ontobricks_dev_app"]["user_api_scopes"]
-        assert "files.files" in scopes
+        return data["resources"]["apps"][key].get("user_api_scopes") or []
+
+    def test_ui_app_declares_only_non_default_scopes(self):
+        # sql: UC OBO + admin checks; files: Knowledge Store Volume import.
+        assert self._scopes("ontobricks_dev_app") == ["sql", "files"]
+
+    def test_mcp_app_declares_only_sql(self):
+        assert self._scopes("mcp_ontobricks_app") == ["sql"]
+
+    def test_apps_do_not_declare_default_identity_scopes(self):
+        for key in ("ontobricks_dev_app", "mcp_ontobricks_app"):
+            listed = self.APPS_DEFAULT_SCOPES & set(self._scopes(key))
+            assert not listed, f"{key} lists Apps default scopes {listed}"
+
+    def test_apps_do_not_declare_deprecated_files_scope(self):
+        for key in ("ontobricks_dev_app", "mcp_ontobricks_app"):
+            assert "files.files" not in self._scopes(key)
+
+    def test_app_yaml_template_does_not_list_default_identity_scopes(self):
+        text = (REPO_ROOT / "app.yaml.template").read_text()
+        body = "\n".join(
+            line for line in text.splitlines() if not line.lstrip().startswith("#")
+        )
+        for scope in self.APPS_DEFAULT_SCOPES:
+            assert scope not in body
 
 
 class TestAnalyticsJobPermissionBootstrap:

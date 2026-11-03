@@ -43,7 +43,7 @@ class VolumeDocumentSource:
     MAX_FOLDER_SCAN = 10 * MAX_IMPORT_FILES
     SCOPE_HINT = (
         "If you can open it in Databricks, the app may be missing the "
-        "'files.files' user authorization scope."
+        "'files' user authorization scope."
     )
 
     def __init__(

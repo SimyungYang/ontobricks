@@ -158,7 +158,7 @@ class TestPlanFiles:
         path = f"{ROOT}/secret.md"
         docs = VolumeDocumentSource(_FakeFiles(status={path: 403})).plan([path]).docs
         assert "permission" in docs[0].error
-        assert "files.files" in docs[0].error
+        assert "'files' user authorization scope" in docs[0].error
 
     def test_requires_a_non_empty_list(self):
         with pytest.raises(ValidationError):

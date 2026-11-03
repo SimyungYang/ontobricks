@@ -233,16 +233,19 @@ resources:
       name: "${var.app_name}"
       description: "OntoBricks (development sandbox app)"
       source_code_path: .
-      # User authorization so Apps injects x-forwarded-access-token with
-      # SQL + identity scopes (MCP OBO + admin group checks). Issue #208.
-      # ``files.files`` lets the Knowledge Store list and read UC Volume files
-      # as the signed-in user (Import from Unity Catalog Volume). Adding a
-      # scope makes each user re-consent on their next visit.
+      # User authorization so Apps injects x-forwarded-access-token with the
+      # ``sql`` scope (UC OBO for MCP + admin group checks). Issue #208.
+      # ``files`` lets the Knowledge Store list and read UC Volume files as
+      # the signed-in user (Import from Unity Catalog Volume); ``files.files``
+      # is its deprecated name. Adding a scope makes each user re-consent on
+      # their next visit.
+      # The identity scopes ``iam.current-user:read`` and
+      # ``iam.access-control:read`` are Apps defaults, granted on top of the
+      # declared ones. Do NOT list them: some workspaces reject them with
+      # "is not a valid scope" (400) and the bundle deploy fails.
       user_api_scopes:
         - sql
-        - iam.current-user:read
-        - iam.access-control:read
-        - files.files
+        - files
       # App ACL (not top-level bundle permissions — those reject CAN_USE; see #134).
       permissions:
         - level: CAN_MANAGE
@@ -268,11 +271,11 @@ resources:
       description: "OntoBricks MCP companion server (FastMCP)"
       source_code_path: ./src/mcp-server
       # Inbound MCP requests need a real user token to forward as acting
-      # identity (sql for UC OBO). Default Apps scopes are identity-only.
+      # identity (sql for UC OBO). The identity scopes
+      # (``iam.current-user:read`` / ``iam.access-control:read``) are Apps
+      # defaults and must not be listed — see ontobricks_dev_app above.
       user_api_scopes:
         - sql
-        - iam.current-user:read
-        - iam.access-control:read
       # App ACL (not top-level bundle permissions — those reject CAN_USE; see #134).
       permissions:
         - level: CAN_MANAGE
