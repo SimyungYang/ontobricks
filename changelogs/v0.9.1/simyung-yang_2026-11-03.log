@@ -194,3 +194,46 @@ Test result:
   9625 passed, 12 skipped, 18 warnings in 895.30s. The folder-detection
   fallback in `VolumeDocumentSource._resolve` landed during that run; its
   modules were re-run afterwards (60 passed).
+
+## Pin English as the default UI language
+
+Context:
+Among the registered UI languages (English, Korean), English must be the
+default whenever the user has not picked one. The resolution order was
+already cookie `ob_lang` -> deploy default `ONTOBRICKS_UI_LANG` -> `en` on
+the server, and cookie -> `<html lang>` -> `en` on the client, with no
+browser-locale detection. Korean showed up only where a deploy config set
+`APP_UI_LANG=ko`. This change locks that contract with tests (a Korean
+browser locale alone must not switch the UI to Korean; an explicit choice in
+the language selector always wins) and documents it. No behaviour change.
+
+Changes:
+1. src/front/static/global/js/i18n.js
+   - Docstring on `resolveLang()` stating the order and that
+     `navigator.language` is deliberately ignored.
+   - `resolveLang` exposed on `window.OB_I18N_CORE` so unit tests can run it.
+2. src/front/fastapi/dependencies.py
+   - `resolve_ui_lang()` docstring: `Accept-Language` is deliberately not
+     consulted.
+3. tests/units/front/test_i18n.py
+   - Rendered page: `Accept-Language: ko-KR` with no cookie -> `<html lang="en">`
+     and no Korean dictionary; `ob_lang=en` overrides a Korean deploy default.
+   - Client resolution (node harness with a Korean `navigator` stub): no
+     stored choice -> en, stored ko -> ko, stored en -> en (also over a
+     Korean `<html lang>`), unsupported stored value -> en, Korean browser
+     locale alone -> en.
+4. docs/user-guide.md, docs/deployment.md
+   - Note that the browser's language setting is not used.
+
+Modified files:
+- src/front/static/global/js/i18n.js
+- src/front/fastapi/dependencies.py
+- tests/units/front/test_i18n.py
+- docs/user-guide.md
+- docs/deployment.md
+
+Test result:
+- Targeted (i18n, entity panel sections, documents UI, architecture):
+  191 passed.
+- Full unit suite (`uv run --frozen pytest tests/units -q -x -p no:cacheprovider`):
+  9635 passed, 12 skipped, 18 warnings in 890.24s.

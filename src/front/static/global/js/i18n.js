@@ -48,6 +48,12 @@
         return m ? decodeURIComponent(m[1]) : null;
     }
 
+    /**
+     * Language for this page: the stored ``ob_lang`` choice, else the server's
+     * ``<html lang>`` (the deploy default), else English. The browser locale
+     * (``navigator.language``) is deliberately ignored so English stays the
+     * default until the user picks a language.
+     */
     function resolveLang() {
         var fromCookie = readCookie(COOKIE);
         if (SUPPORTED.indexOf(fromCookie) >= 0) return fromCookie;
@@ -253,12 +259,13 @@
         document.documentElement.classList.add('ob-i18n-ready');
     }
 
-    // Exposed for unit tests (no DOM required).
+    // Exposed for unit tests (resolveLang only reads document.cookie and <html lang>).
     window.OB_I18N_CORE = {
         normalize: normalize,
         translateWith: translateWith,
         keepPadding: keepPadding,
-        createTranslator: createTranslator
+        createTranslator: createTranslator,
+        resolveLang: resolveLang
     };
 
     if (typeof document !== 'undefined' && document.body) {

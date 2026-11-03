@@ -155,7 +155,11 @@ def default_ui_lang() -> str:
 
 
 def resolve_ui_lang(cookie_value) -> str:
-    """Return the UI language for a cookie value, falling back to the deploy default."""
+    """Return the UI language for a cookie value, falling back to the deploy default.
+
+    The browser's ``Accept-Language`` header is deliberately not consulted:
+    English stays the default until the user picks a language.
+    """
     if cookie_value in SUPPORTED_UI_LANGS:
         return cookie_value
     return default_ui_lang()

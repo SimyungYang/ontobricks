@@ -541,7 +541,7 @@ Edit the workspace-specific defaults in `scripts/deploy.config.sh`:
 | `DEFAULT_LAKEBASE_MIN_CU` / `DEFAULT_LAKEBASE_MAX_CU` / `DEFAULT_LAKEBASE_SUSPEND_TIMEOUT` | `scripts/bootstrap/lakebase-compute.sh` on every deploy | Compute of the branch's read-write endpoint: autoscaling range in CU (default `4`–`16`; max − min ≤ 16) and idle time before scale-to-zero (default `3600s`). Only differing fields are updated; set a value to `""` to leave it unmanaged. |
 | `DEFAULT_APP_TRIPLESTORE_TABLE` | `app.yaml > DATABRICKS_TRIPLESTORE_TABLE` | Fully-qualified `catalog.schema.table` fallback for MCP/session-less paths. |
 | `DEFAULT_APP_MLFLOW_TRACKING_URI` | `app.yaml > MLFLOW_TRACKING_URI` | `databricks` (persists traces to the workspace) or empty for local-only. |
-| `APP_UI_LANG` | `app.yaml > ONTOBRICKS_UI_LANG` | Default interface language for browsers that have not picked one: `en` (default) or `ko`. Any other value falls back to `en`. Users can still switch per browser from the navbar user menu (stored in the `ob_lang` cookie). |
+| `APP_UI_LANG` | `app.yaml > ONTOBRICKS_UI_LANG` | Default interface language for browsers that have not picked one: `en` (default) or `ko`. Any other value falls back to `en`. The browser locale is not used. Users can still switch per browser from the navbar user menu (stored in the `ob_lang` cookie). |
 
 Each `DEFAULT_*` is consumed via `export FOO="${FOO:-$DEFAULT_FOO}"`,
 so you can override any value for a single run without editing the

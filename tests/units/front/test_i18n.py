@@ -273,6 +273,67 @@ def test_deploy_default_applies_when_no_cookie_is_set(client, monkeypatch):
     assert "global/js/i18n-ko.js" in html
 
 
+def test_korean_browser_locale_without_cookie_renders_english(client, monkeypatch):
+    monkeypatch.delenv("ONTOBRICKS_UI_LANG", raising=False)
+    client.cookies.clear()
+    html = client.get("/", headers={"accept": "text/html", "accept-language": "ko-KR,ko;q=0.9"}).text
+    assert '<html lang="en"' in html
+    assert "global/js/i18n-ko.js" not in html
+
+
+def test_explicit_english_cookie_overrides_korean_deploy_default(client, monkeypatch):
+    html = _home_html(client, monkeypatch, cookie="en", env="ko")
+    assert '<html lang="en"' in html
+    assert "global/js/i18n-ko.js" not in html
+
+
+# ---------------------------------------------------------------- client-side language resolution
+
+# Runs i18n.js resolveLang() with a stubbed cookie jar, <html lang> and a
+# Korean browser locale (navigator.language / languages).
+_RESOLVE_HARNESS = """
+const fs = require('fs');
+global.window = {};
+global.navigator = { language: 'ko-KR', languages: ['ko-KR', 'ko'], userLanguage: 'ko-KR' };
+global.document = {
+    cookie: __COOKIE__,
+    documentElement: { getAttribute() { return __HTML_LANG__; } },
+    addEventListener() {}
+};
+eval(fs.readFileSync(__SOURCE__, 'utf8'));
+process.stdout.write(JSON.stringify(window.OB_I18N_CORE.resolveLang()));
+"""
+
+
+def _resolve_client_lang(cookie: str, html_lang) -> str:
+    return _run_node(
+        _RESOLVE_HARNESS.replace("__SOURCE__", json.dumps(str(I18N_JS)))
+        .replace("__COOKIE__", json.dumps(cookie))
+        .replace("__HTML_LANG__", json.dumps(html_lang))
+    )
+
+
+@needs_node
+@pytest.mark.parametrize(
+    "cookie,html_lang,expected",
+    [
+        ("", "en", "en"),  # no stored choice, server rendered the English default
+        ("", None, "en"),  # no stored choice, no <html lang> at all
+        ("ob_lang=ko", "en", "ko"),  # stored Korean choice wins
+        ("ob_lang=en", "ko", "en"),  # stored English choice wins over a Korean deploy default
+        ("other=1; ob_lang=ko", "en", "ko"),
+        ("ob_lang=fr", "en", "en"),  # unsupported stored value is ignored
+    ],
+)
+def test_client_lang_resolution(cookie, html_lang, expected):
+    assert _resolve_client_lang(cookie, html_lang) == expected
+
+
+@needs_node
+def test_korean_browser_locale_alone_does_not_switch_to_korean():
+    assert _resolve_client_lang("", "") == "en"
+
+
 # ---------------------------------------------------------------- translation core
 
 

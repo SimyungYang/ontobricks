@@ -1893,6 +1893,9 @@ Explorer search duration is documented in [Get Started](getting-started.md#sql-w
   `ONTOBRICKS_UI_LANG` (set through `APP_UI_LANG` in
   `scripts/deploy.config.sh`; `en` when unset). See
   [Deployment](deployment.md).
+- The browser's own language setting is not used: a browser set to Korean
+  still opens in English until the user picks **한국어** (or the deployer
+  sets `APP_UI_LANG=ko`).
 - Only the application chrome is translated: menus, buttons, labels, help
   text and notifications. Ontology, mapping, graph and registry content —
   entity, attribute and domain names, descriptions, query results, comments,
