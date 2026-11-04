@@ -238,7 +238,16 @@
         div.appendChild(avatar);
         div.appendChild(body);
         container.appendChild(div);
-        container.scrollTop = container.scrollHeight;
+    }
+
+    /**
+     * Bring the message the user just sent into view. This is the chat's
+     * only programmatic scroll: replies, step updates, tool results and
+     * restored history never move the reader's scroll position.
+     */
+    function revealSentMessage() {
+        const container = messagesEl();
+        if (container) container.scrollTop = container.scrollHeight;
     }
 
     function buildToolTrace(tools) {
@@ -453,7 +462,6 @@
         div.appendChild(avatar);
         div.appendChild(body);
         container.appendChild(div);
-        container.scrollTop = container.scrollHeight;
     }
 
     /**
@@ -473,7 +481,6 @@
         div.appendChild(icon);
         div.appendChild(span);
         container.appendChild(div);
-        container.scrollTop = container.scrollHeight;
     }
 
     /**
@@ -489,24 +496,6 @@
         if (typeof window.showNotification === 'function') {
             try { window.showNotification(msg, 'warning'); } catch (_) { /* best effort */ }
         }
-    }
-
-    function showThinking() {
-        const container = messagesEl();
-        if (!container) return;
-        const div = document.createElement('div');
-        div.className = 'assistant-thinking';
-        div.id = 'chatThinking';
-        div.innerHTML =
-            '<div class="assistant-thinking-dots"><span></span><span></span><span></span></div>' +
-            '<span>Thinking…</span>';
-        container.appendChild(div);
-        container.scrollTop = container.scrollHeight;
-    }
-
-    function hideThinking() {
-        const t = el('chatThinking');
-        if (t) t.remove();
     }
 
     // =====================================================
@@ -544,7 +533,6 @@
         div.appendChild(avatar);
         div.appendChild(body);
         container.appendChild(div);
-        container.scrollTop = container.scrollHeight;
 
         return { div, stepsEl, bodyEl: body };
     }
@@ -556,7 +544,6 @@
         if (!bubble) return;
         const { stepsEl } = bubble;
         if (!stepsEl) return;
-        const container = messagesEl();
 
         const statusEl = stepsEl.querySelector('.graph-chat-stream-status');
         if (event.step_type === 'tool_call') {
@@ -564,7 +551,6 @@
         } else if (event.step_type === 'tool_result') {
             if (statusEl) statusEl.textContent = (event.tool_name || 'tool') + ' done (' + (event.duration_ms || 0) + ' ms)';
         }
-        if (container) container.scrollTop = container.scrollHeight;
     }
 
     /**
@@ -595,8 +581,6 @@
             if (card) bodyEl.appendChild(card);
         }
 
-        const container = messagesEl();
-        if (container) container.scrollTop = container.scrollHeight;
         return reply;
     }
 
@@ -676,6 +660,7 @@
         const priorHistory = conversationHistory.slice(-(MAX_HISTORY * 2));
 
         appendMessage('user', text);
+        revealSentMessage();
         conversationHistory.push({ role: 'user', content: text });
 
         const bubble = createStreamingBubble();

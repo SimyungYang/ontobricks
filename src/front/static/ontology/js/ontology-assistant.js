@@ -167,7 +167,16 @@
         div.appendChild(avatar);
         div.appendChild(body);
         container.appendChild(div);
-        container.scrollTop = container.scrollHeight;
+    }
+
+    /**
+     * Bring the message the user just sent into view. This is the
+     * assistant's only programmatic scroll: replies, errors and the
+     * thinking indicator never move the reader's scroll position.
+     */
+    function revealSentMessage() {
+        const container = messagesEl();
+        if (container) container.scrollTop = container.scrollHeight;
     }
 
     function appendError(text) {
@@ -190,7 +199,6 @@
         div.appendChild(avatar);
         div.appendChild(body);
         container.appendChild(div);
-        container.scrollTop = container.scrollHeight;
     }
 
     function showThinking() {
@@ -203,7 +211,6 @@
             '<div class="assistant-thinking-dots"><span></span><span></span><span></span></div>' +
             '<span>Thinking…</span>';
         container.appendChild(div);
-        container.scrollTop = container.scrollHeight;
     }
 
     function hideThinking() {
@@ -224,6 +231,7 @@
         if (inp) inp.disabled = true;
 
         appendMessage('user', text);
+        revealSentMessage();
         conversationHistory.push({ role: 'user', content: text });
 
         showThinking();

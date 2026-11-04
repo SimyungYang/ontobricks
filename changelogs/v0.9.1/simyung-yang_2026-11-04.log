@@ -1,0 +1,65 @@
+## In-app chats no longer force the scroll position
+
+Context:
+Graph Chat (Digital Twin) and the Ontology Studio floating assistant pinned
+the messages pane to the bottom (`scrollTop = scrollHeight`) on every
+rendered element: each streamed step update, the streaming bubble, the final
+reply, tool traces, pending-action cards, errors, the resource advisory, the
+thinking indicator, every restored-history message and answers pushed from
+Analytics "interpret". A user who scrolled up to read an earlier answer was
+pulled back down on each update. The only programmatic scroll left is the
+natural one: when the user sends a message, their own message is brought
+into view once. No "jump to latest" button existed, so none was added.
+
+Changes:
+1. src/front/static/query/js/query-chat.js
+   - Removed the forced scroll from `appendMessage`, `appendError`,
+     `appendResourceAdvisory`, `createStreamingBubble`,
+     `updateStreamingBubble` and `finalizeStreamingBubble`. History restore,
+     confirm-action results and `appendChatAssistantMessage` therefore no
+     longer move the pane either.
+   - New `revealSentMessage()`, called once from `sendMessage` right after
+     the user's message is appended (before the streaming bubble).
+   - Deleted `showThinking` / `hideThinking`: already unused (the streaming
+     bubble replaced them) and they carried a forced scroll.
+2. src/front/static/query/css/query-chat.css
+   - Removed the `.graph-chat-messages .assistant-thinking` rule that only
+     the deleted `showThinking` used; the thinking-dots rules stay (the
+     streaming bubble uses them).
+3. src/front/static/ontology/js/ontology-assistant.js
+   - Removed the forced scroll from `appendMessage`, `appendError` and
+     `showThinking`.
+   - New `revealSentMessage()`, called once from `sendMessage` right after
+     the user's message is appended.
+4. tests/units/front/test_chat_no_forced_scroll.py (new)
+   - Node harness runs both modules against a stubbed DOM whose messages
+     pane records every `scrollTop` write. Graph Chat: a streamed run (tool
+     steps, final reply with tool trace, pending action and resource
+     advisory), HTTP error, network error, history restore and an Analytics
+     push. Ontology assistant: reply, server error, network error. Sending
+     writes `scrollTop` exactly once, before the response, and a reader who
+     scrolled up during the response stays where they are.
+   - Static guard: neither chat module has `scrollTop =`, `scrollIntoView`,
+     `scrollTo(` or `scrollBy(` outside `revealSentMessage`, and the helper
+     is called only from `sendMessage`.
+
+Notes:
+- Restored history now opens at the top of the pane (oldest message first)
+  instead of jumping to the newest one.
+- Out of scope (not AI chats): the comments offcanvas and the review-history
+  modal still scroll to the newest comment when they render, and task
+  activity logs (task overlay, SHACL facets, Data Quality, settings logs)
+  still follow the latest log line.
+
+Modified files:
+- src/front/static/query/js/query-chat.js
+- src/front/static/query/css/query-chat.css
+- src/front/static/ontology/js/ontology-assistant.js
+- tests/units/front/test_chat_no_forced_scroll.py
+- changelogs/v0.9.1/simyung-yang_2026-11-04.log
+
+Test result:
+- Related modules (new scroll tests, Graph Chat rendering and pending-action
+  contracts): 301 passed (17 new).
+- Full unit suite (`uv run --frozen pytest tests/units -q -x -p no:cacheprovider`):
+  9685 passed, 12 skipped, 18 warnings in 909.74s.

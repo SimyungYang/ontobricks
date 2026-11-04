@@ -280,23 +280,8 @@
 
 
 /* ---------------------------------------------------
-   Thinking indicator (shown while waiting for reply)
+   Thinking dots (shown in the streaming bubble while the agent runs)
 --------------------------------------------------- */
-
-.graph-chat-messages .assistant-thinking {
-    align-self: flex-start;
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    padding: 0.55rem 0.9rem;
-    background: #ffffff;
-    border: 1px solid var(--gc-bot-border);
-    border-radius: 14px;
-    border-bottom-left-radius: 4px;
-    box-shadow: var(--gc-shadow-sm);
-    color: var(--db-text-secondary);
-    font-size: 0.85rem;
-}
 
 .graph-chat-messages .assistant-thinking-dots {
     display: inline-flex;
