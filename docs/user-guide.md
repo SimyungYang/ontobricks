@@ -858,6 +858,66 @@ own column names. Tables the app cannot read (missing, or no `SELECT` grant) are
 skipped rather than reported as fully dropped; the Diagnostics permission section
 covers those.
 
+### UC 정의 동기화 (Metric Views · Pages) — UC definition sync
+
+The ontology can carry the business definitions that already live in Unity
+Catalog. OntoBricks stores only a **reference**; the **content** is read again
+from Unity Catalog at every Knowledge Graph build and every data-asset metadata
+refresh, so the ontology stays in step with UC instead of holding a one-time copy.
+
+**What is referenced**
+
+| Reference | Set on | How it is set | OWL annotation |
+|---|---|---|---|
+| Metric view column | Attribute | Automatically, when a mapping binds the attribute to a column of a UC metric view | `ontobricks:derivedFrom "catalog.schema.view#column"` |
+| UC Page (business glossary) | Entity or attribute | Manually, through the entity update API (`glossary_ref`, `attribute_glossary_refs`) | `ontobricks:glossaryRef` (+ `rdfs:seeAlso` for a URL) |
+
+- Removing the mapping binding removes `derivedFrom`; an empty value clears a
+  glossary reference. Mappings themselves are never modified.
+- `GET /ontology/definitions` lists every reference with its synced values and
+  the last drift report.
+
+**What is synced**
+
+- From a metric view: the column's `expr`, `comment` and `synonyms` (from the
+  view's YAML definition).
+- From a UC Page: the term definition and synonyms. A UC Page definition takes
+  precedence over the metric-view comment; synonyms from both are combined.
+- For a referenced item, `rdfs:comment` is set to the UC definition and
+  `skos:altLabel` to the UC synonyms. The metric expression is kept as
+  `ontobricks:metricExpression`; `ontobricks:syncedAt` and
+  `ontobricks:definitionSource` record when and from where it was pulled.
+
+**When it syncs**
+
+- **Knowledge Graph → Build**: before the OWL is regenerated. The build result
+  carries the drift report and the task message ends with
+  "N definitions updated, M warnings".
+- **Data assets → Update from UC**: the refresh task syncs the definitions and
+  they are saved together with the reviewed metadata when you apply it.
+- Sync only reads Unity Catalog. It never writes to UC.
+
+**Read-only rule**
+
+- Referenced items are read-only for description and synonyms: UC is the source
+  of truth, and a local edit is replaced by the UC value at the next sync (and
+  never reaches the OWL).
+- Items without a reference keep manual editing as before.
+
+**Drift warnings**
+
+Each sync produces a report entry per reference: `updated` (with the before /
+after expression or definition and the added / removed synonyms), `unchanged`,
+or `warning`. A warning means the metric view could not be read, the column or
+page no longer exists, or the UC Pages API is not available. In every warning
+case the **last synced value is kept** and flagged with
+`ontobricks:definitionWarning` — nothing is dropped silently.
+
+> **UC Pages availability.** The Databricks SDK used by OntoBricks does not
+> expose a UC Pages / business-glossary API yet. Page references can be stored
+> today; they are reported with a "UC Pages API not available" warning and keep
+> their last value until a Pages connector is enabled.
+
 ### R2RML Output
 
 The R2RML mapping output is available from **Mapping → Studio → Export** (top right) and in the **Domain** section under **R2RML**. Navigate to Domain → R2RML to:

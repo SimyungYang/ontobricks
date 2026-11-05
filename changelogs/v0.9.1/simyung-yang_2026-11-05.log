@@ -1,0 +1,143 @@
+## UC definition sync: metric-view and UC Page references stay in step with Unity Catalog
+
+Context:
+A UC metric view was recognised at load time (object_kind, per-column
+dimension/measure role, MEASURE() SQL) but then treated as a plain table: a
+measure became a numeric attribute and its definition (expression, comment,
+synonyms) was lost. OntoBricks had no link to UC Pages (business glossary).
+The ontology now stores only a reference (`ontobricks:derivedFrom`,
+`ontobricks:glossaryRef`) and re-reads the content from Unity Catalog at every
+Knowledge Graph build and every metadata refresh. Sync never writes to UC.
+References live in `ontology["definition_refs"]`, not on
+`classes[].dataProperties`, because the entity editor rebuilds attribute dicts
+from their names on every save.
+
+Changes:
+1. src/back/core/databricks/uc/MetricViewDefinition.py (new)
+   - Parses the metric-view YAML (`SHOW CREATE TABLE` body or bare YAML) into
+     per-column `role` / `expr` / `comment` / `synonyms` / `display_name`.
+     Malformed YAML soft-fails to `{}` with a warning.
+2. src/back/core/databricks/uc/UnityCatalog.py, src/back/core/databricks/DatabricksClient.py
+   - `_parse_measure_names` now delegates to `MetricViewDefinition` (one
+     parser instead of the regex). `_show_create_ddl` is shared by
+     `_metric_measure_names` and the new `get_metric_view_definition`, which
+     raises `InfrastructureError` when the view cannot be read.
+3. src/back/core/databricks/uc/GlossaryConnector.py, NotAvailableGlossaryConnector.py (new)
+   - Read-only glossary interface. databricks-sdk 0.82.0 has no Pages /
+     glossary endpoint, so the only implementation reports the API as
+     unavailable (info log); references keep their last value with a warning.
+4. src/back/objects/mapping/MetricViewBindings.py (new)
+   - Derives `derivedFrom` targets from entity mappings + metric-view
+     metadata (case-insensitive columns, excluded attributes skipped). A view
+     missing from the loaded metadata keeps its binding while the mapping
+     still reads it. Mappings are never modified.
+5. src/back/objects/ontology/definitions/ (new sub-package)
+   - `DefinitionReferences`: reference store, manual glossary refs, reconcile
+     (refresh derivedFrom, prune refs of deleted entities, mirror synced text
+     onto referenced classes), adopt synced content from a snapshot, API view.
+   - `DefinitionSyncService`: reads each referenced metric view once and the
+     glossary terms, stores the per-source synced content, and returns a drift
+     report (updated with before/after and added/removed synonyms, unchanged,
+     warning with `target_missing` / `source_unavailable`; last value kept).
+     A newly raised or cleared warning also counts as a change so the OWL
+     picks up `ontobricks:definitionWarning`.
+6. src/back/core/w3c/owl/OntologyDefinitionAnnotations.py (new), OntologyGenerator.py, src/back/objects/ontology/Owl.py
+   - Declares `ontobricks:derivedFrom`, `glossaryRef`, `syncedAt`,
+     `definitionSource`, `metricExpression`, `definitionWarning` as
+     `owl:AnnotationProperty` once; for synced items replaces `rdfs:comment`
+     / `skos:altLabel` with the UC values and adds `rdfs:seeAlso` for a URL
+     page reference. `Owl.generate_session_owl` reconciles references before
+     generating; `DomainSession.ensure_generated_content` uses it, so every
+     mapping save (which invalidates the OWL) refreshes `derivedFrom`.
+   - OntologyGenerator: base-URI normalisation, group annotation declarations
+     and a redundant comment compacted to keep the frozen class size.
+7. src/back/objects/digitaltwin/build/TwinGraphBuild.py, _build_pipeline.py
+   - The session build syncs definitions before the OWL is regenerated
+     (credentials are now validated first). The build result carries
+     `definition_sync` and the task message ends with
+     "N definitions updated, M warnings". Two log templates joined on one
+     line to keep the frozen class size.
+8. src/back/objects/domain/TableMetadataRefresh.py (new), Domain.py, _metadata_tasks.py
+   - Extract Class: the per-table refresh duplicated in
+     `Domain.update_metadata_tables` and `run_metadata_update_task` moved to
+     `TableMetadataRefresh.refresh`.
+   - Sync refresh runs the definition sync on the session and returns
+     `definition_sync`. The async task syncs on an ontology snapshot and
+     returns `definition_sync` + `definition_refs`; `save_metadata_tables`
+     adopts them on Apply (only for references with the same target; manual
+     glossary refs are never created from the payload).
+9. src/back/objects/ontology/Editor.py
+   - `/ontology/class/update` accepts `glossary_ref` and
+     `attribute_glossary_refs` (empty value clears; payload validated before
+     any change) and re-applies synced UC text (read-only rule).
+10. src/api/routers/internal/ontology.py, domain.py, src/front/static/domain/js/domain-metadata.js
+    - New `GET /ontology/definitions`. `/domain/metadata/save` accepts
+      `definition_refs`; the metadata refresh UI forwards it on Apply.
+11. tests/units/definitions/ (new), tests/units/architecture/baseline.json, tests/units/front/test_metadata_guard_ui.py
+    - Parser, bindings, sync service, OWL output, hooks, glossary API tests.
+      Baseline tightened by the ratchet. The metadata-guard static test now
+      expects the Apply body `{ tables, definition_refs }`.
+12. docs/user-guide.md
+    - New section "UC 정의 동기화 (Metric Views · Pages)".
+
+Notes:
+- `src/agents/` is unchanged: no eval delta needed. The Graph Chat schema
+  digest lists names only (no comments / synonyms), so synced definitions do
+  not reach the chat prompt yet; adding them is a prompt change that needs an
+  eval run.
+- Deferred: UI drift panel and glossary-ref field, a real UC Pages connector,
+  Pages write-back, OWL import of the definition annotations, sync on the
+  external v1 `/build`, and a chat tool for metric-view queries.
+- PyYAML is a transitive runtime dependency (mlflow); no lockfile change.
+
+Modified files:
+- src/back/core/databricks/uc/MetricViewDefinition.py (new)
+- src/back/core/databricks/uc/GlossaryConnector.py (new)
+- src/back/core/databricks/uc/NotAvailableGlossaryConnector.py (new)
+- src/back/core/databricks/uc/UnityCatalog.py
+- src/back/core/databricks/uc/__init__.py
+- src/back/core/databricks/DatabricksClient.py
+- src/back/core/w3c/owl/OntologyDefinitionAnnotations.py (new)
+- src/back/core/w3c/owl/OntologyGenerator.py
+- src/back/core/w3c/owl/__init__.py
+- src/back/objects/mapping/MetricViewBindings.py (new)
+- src/back/objects/mapping/__init__.py
+- src/back/objects/ontology/definitions/__init__.py (new)
+- src/back/objects/ontology/definitions/DefinitionReferences.py (new)
+- src/back/objects/ontology/definitions/DefinitionSyncService.py (new)
+- src/back/objects/ontology/Owl.py
+- src/back/objects/ontology/Editor.py
+- src/back/objects/session/DomainSession.py
+- src/back/objects/digitaltwin/build/TwinGraphBuild.py
+- src/back/objects/digitaltwin/build/_build_pipeline.py
+- src/back/objects/domain/TableMetadataRefresh.py (new)
+- src/back/objects/domain/Domain.py
+- src/back/objects/domain/_metadata_tasks.py
+- src/back/objects/domain/__init__.py
+- src/api/routers/internal/ontology.py
+- src/api/routers/internal/domain.py
+- src/front/static/domain/js/domain-metadata.js
+- tests/units/definitions/ (new: conftest + 6 test modules)
+- tests/units/front/test_metadata_guard_ui.py
+- tests/units/architecture/baseline.json
+- docs/user-guide.md
+- changelogs/v0.9.1/simyung-yang_2026-11-05.log
+
+Test result:
+- New tests (`tests/units/definitions`): 68 passed.
+- Architecture tests: 9 passed (baseline tightened).
+- Full unit suite (`uv run --frozen pytest tests/units -q -x -p no:cacheprovider`):
+  9752 passed, 12 skipped, 18 warnings. One test deselected:
+  `tests/units/api/test_routes.py::TestHealthRoutes::test_readiness_route_returns_checks`
+  opens a real SQL warehouse connection from the local Databricks config and
+  hangs in urllib3 retry backoff in this environment; it hangs identically on
+  the unmodified base commit 8db023fa.
+- mypy on the new modules: no issues.
+- Real Unity Catalog check (fevm workspace, read-only app code, scratch schema
+  created and dropped afterwards): `SHOW CREATE TABLE` of a v1.1 metric view
+  parsed into expr / comment / synonyms for every column; MEASURE() probe
+  returned the expected rows; first sync updated 2 definitions; changing the
+  measure in UC reported the expr and comment before/after plus added/removed
+  synonyms; dropping the view kept the last value with a
+  `source_unavailable` warning; recreating it cleared the warning and the
+  next sync was a no-op.
