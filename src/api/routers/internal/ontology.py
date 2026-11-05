@@ -22,6 +22,7 @@ from back.objects.session import SessionManager, get_session_manager
 from shared.config.settings import get_settings, Settings
 from back.objects.ontology import Ontology, Rules
 from back.objects.ontology.generate import GenerateWorkflow
+from back.objects.ontology.definitions import DefinitionReferences
 from back.objects.session import get_domain
 from back.core.task_manager import get_task_manager
 from back.core.helpers import (
@@ -149,6 +150,15 @@ async def delete_class(
     data = await request.json()
     domain = get_domain(session_mgr)
     return Ontology(domain).delete_class_by_uri(data.get("uri"))
+
+
+@router.get("/definitions")
+async def get_definition_references(
+    session_mgr: SessionManager = Depends(get_session_manager),
+):
+    """UC definition references (metric views, UC Pages) and the last drift report."""
+    domain = get_domain(session_mgr)
+    return {"success": True, **DefinitionReferences.describe(domain.ontology)}
 
 
 # ===========================================

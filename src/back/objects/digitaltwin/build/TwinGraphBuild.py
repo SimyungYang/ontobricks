@@ -10,9 +10,11 @@ from dataclasses import dataclass
 from datetime import datetime, timezone as tz
 from typing import Any, Callable, List
 
+from back.core.databricks import DatabricksClient
 from back.core.errors import ValidationError
 from back.core.logging import get_logger
 from back.objects.digitaltwin.models import DomainSnapshot
+from back.objects.ontology.definitions import DefinitionSyncService
 from shared.config.constants import DEFAULT_BASE_URI
 
 logger = get_logger(__name__)
@@ -97,14 +99,6 @@ class TwinGraphBuild:
                 "(configure in Domain / Triple Store tab)"
             )
 
-        domain.ensure_generated_content()
-        r2rml_content = domain.get_r2rml()
-        if not r2rml_content:
-            raise ValidationError(
-                "No R2RML mapping available. Please ensure ontology and "
-                "assignments are configured."
-            )
-
         host, token, warehouse_id = get_credentials(domain, settings)
         app_mode = is_databricks_app_fn()
         if not host and not app_mode:
@@ -113,6 +107,19 @@ class TwinGraphBuild:
             raise ValidationError("Databricks not configured")
         if not warehouse_id:
             raise ValidationError("No SQL warehouse configured")
+
+        # Pull referenced UC definitions before the OWL is (re)generated.
+        DefinitionSyncService.sync_session(
+            domain,
+            lambda: DatabricksClient(host=host, token=token, warehouse_id=warehouse_id),
+        )
+        domain.ensure_generated_content()
+        r2rml_content = domain.get_r2rml()
+        if not r2rml_content:
+            raise ValidationError(
+                "No R2RML mapping available. Please ensure ontology and "
+                "assignments are configured."
+            )
 
         domain.triplestore.pop("stats", None)
         domain.triplestore.pop("_ts_cache_timestamp", None)

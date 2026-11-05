@@ -66,6 +66,8 @@ from back.objects.session import (
     sanitize_domain_folder,
 )
 from back.core.task_manager import get_task_manager
+from back.objects.domain.TableMetadataRefresh import TableMetadataRefresh
+from back.objects.ontology.definitions import DefinitionReferences, DefinitionSyncService
 from back.objects.domain._metadata_tasks import (
     run_metadata_load_task,
     run_metadata_update_task,
@@ -2025,7 +2027,10 @@ class Domain:
         )
         return impact
 
-    def save_metadata_tables(self, tables: List[Dict[str, Any]]) -> Dict[str, Any]:
+    def save_metadata_tables(
+        self, tables: List[Dict[str, Any]], definition_refs: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
+        """Persist *tables*; adopt UC definitions synced by the async refresh task."""
         try:
             existing_metadata = self._s.catalog_metadata
             catalog, schema = get_catalog_schema_from_metadata(existing_metadata)
@@ -2053,6 +2058,8 @@ class Domain:
             ]
             self._s._data["domain"]["metadata"] = metadata
             impact = self._invalidate_on_removal(removed)
+            if DefinitionReferences.adopt_synced(self._s.ontology, definition_refs):
+                self._s.clear_generated_content()
             self._s.save()
             return {
                 "success": True,
@@ -2345,6 +2352,8 @@ class Domain:
                     tables_to_update,
                     existing_metadata,
                     existing_tables,
+                    copy.deepcopy(self._s.ontology),
+                    copy.deepcopy(self._s.get_entity_mappings()),
                 ),
                 daemon=True,
             )
@@ -2402,58 +2411,18 @@ class Domain:
             diff: Dict[str, Any] = {}
             for table_name in tables_to_update:
                 try:
-                    logger.debug("Metadata update: updating table: %s", table_name)
-                    old_table = existing_tables[table_name]
-                    kind = old_table.get("object_kind") or "table"
-                    if kind == "metric_view":
-                        new_columns = client.get_metric_view_columns_with_roles(
-                            catalog, schema, table_name
-                        )
-                    else:
-                        new_columns = client.get_table_columns(
-                            catalog, schema, table_name
-                        )
-                    logger.debug(
-                        "Metadata update: got %s columns for %s",
-                        len(new_columns) if new_columns else 0,
-                        table_name,
+                    table_diff = TableMetadataRefresh.refresh(
+                        client, catalog, schema, table_name, existing_tables[table_name]
                     )
-                    table_comment = client.get_table_comment(
-                        catalog, schema, table_name
-                    )
-                    logger.debug(
-                        "Metadata update: table comment from UC: %s", table_comment
-                    )
-                    select_probe = client.check_table_select_permission(
-                        catalog,
-                        schema,
-                        table_name,
-                        object_kind=kind,
-                        columns=new_columns,
-                    )
-                    # Snapshot before the merge — merge_table_metadata replaces
-                    # old_table["columns"] in place.
-                    table_diff = compute_column_diff(
-                        old_table.get("columns", []), new_columns
-                    )
-                    if has_column_changes(table_diff):
+                    if table_diff:
                         diff[table_name] = table_diff
-                    merge_table_metadata(
-                        old_table,
-                        new_columns,
-                        table_comment,
-                        catalog,
-                        schema,
-                        table_name,
-                        select_probe=select_probe,
-                    )
                     updated_count += 1
-                    logger.debug("Metadata update: successfully updated %s", table_name)
                 except Exception as e:
                     logger.exception(
                         "Metadata update: error updating table %s: %s", table_name, e
                     )
                     errors.append(f"{table_name}: {str(e)}")
+            definition_sync = DefinitionSyncService.sync_session(self._s, lambda: client)
             self._s._data["domain"]["metadata"] = existing_metadata
             self._s.save()
             message = f"Updated {updated_count} of {len(tables_to_update)} tables"
@@ -2469,6 +2438,7 @@ class Domain:
                 "errors": errors,
                 "metadata": existing_metadata,
                 "diff": diff,
+                "definition_sync": definition_sync,
             }
         except OntoBricksError:
             raise

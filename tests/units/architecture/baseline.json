@@ -62,19 +62,19 @@
     "back/core/graphdb/lakebase/LakebaseGraphProvisioner.py::LakebaseGraphProvisioner": 811,
     "back/core/graphdb/lakebase/SyncedTableManager.py::SyncedTableManager": 814,
     "back/core/sqlwizard/SQLWizardService.py::SQLWizardService": 882,
-    "back/core/w3c/owl/OntologyGenerator.py::OntologyGenerator": 1098,
+    "back/core/w3c/owl/OntologyGenerator.py::OntologyGenerator": 1097,
     "back/core/w3c/owl/OntologyParser.py::OntologyParser": 1113,
     "back/core/w3c/shacl/SHACLService.py::SHACLService": 1663,
-    "back/core/w3c/sparql/SparqlTranslator.py::SparqlTranslator": 2417,
+    "back/core/w3c/sparql/SparqlTranslator.py::SparqlTranslator": 2389,
     "back/objects/digitaltwin/build/_build_pipeline.py::_BuildPipeline": 1452,
-    "back/objects/domain/Domain.py::Domain": 2305,
+    "back/objects/domain/Domain.py::Domain": 2273,
     "back/objects/domain/settings/SettingsService.py::SettingsService": 1388,
     "back/objects/domain/settings/graphengine/GraphEngineLakebaseSettings.py::GraphEngineLakebaseSettings": 1117,
     "back/objects/domain/settings/graphengine/GraphEngineSettings.py::GraphEngineSettings": 935,
     "back/objects/mapping/Mapping.py::Mapping": 2709,
     "back/objects/registry/PermissionService.py::PermissionService": 895,
     "back/objects/registry/RegistryService.py::RegistryService": 1021,
-    "back/objects/session/DomainSession.py::DomainSession": 1393
+    "back/objects/session/DomainSession.py::DomainSession": 1385
   },
   "oversized_functions": {
     "agents/agent_auto_assignment/engine.py::run_agent": 338,
@@ -98,7 +98,7 @@
     "agents/agent_ontology_assistant/responses_agent.py::OntologyAssistantResponsesAgent.predict_stream": 117,
     "agents/agent_owl_generator/engine.py::run_agent": 613,
     "agents/agent_owl_generator/staged.py::_run_completion": 118,
-    "agents/agent_owl_generator/staged.py::detect_entities": 191,
+    "agents/agent_owl_generator/staged.py::detect_entities": 190,
     "agents/pge_eval/ontology_metrics.py::evaluate_ontology": 180,
     "agents/tools/evaluation.py::tool_submit_evaluation": 121,
     "agents/tools/mapping.py::tool_submit_entity_mapping": 155,
@@ -135,7 +135,7 @@
     "back/core/sqlwizard/SQLWizardService.py::SQLWizardService.generate_sql": 170,
     "back/core/sqlwizard/SQLWizardService.py::SQLWizardService.validate_sql_static": 104,
     "back/core/w3c/owl/OntologyGenerator.py::OntologyGenerator._add_axiom": 135,
-    "back/core/w3c/owl/OntologyGenerator.py::OntologyGenerator._add_class": 132,
+    "back/core/w3c/owl/OntologyGenerator.py::OntologyGenerator._add_class": 131,
     "back/core/w3c/owl/OntologyParser.py::OntologyParser._get_all_axiom_items": 186,
     "back/core/w3c/owl/OntologyParser.py::OntologyParser.get_classes": 180,
     "back/core/w3c/owl/OntologyParser.py::OntologyParser.get_constraints": 171,
@@ -170,7 +170,6 @@
     "back/objects/domain/Domain.py::Domain.save_domain_info": 156,
     "back/objects/domain/Domain.py::Domain.save_domain_to_uc": 117,
     "back/objects/domain/Domain.py::Domain.update_mappings_from_metadata": 115,
-    "back/objects/domain/Domain.py::Domain.update_metadata_tables": 117,
     "back/objects/domain/HomeService.py::HomeService.get_detailed_validation": 201,
     "back/objects/domain/settings/ObxSettings.py::ObxSettings.import_registry_obx_result": 149,
     "back/objects/domain/settings/RegistryDomainSettings.py::RegistryDomainSettings.set_registry_version_status_result": 109,
@@ -207,6 +206,6 @@
     "shared/fastapi/health.py::_check_lakebase_registry_tables": 110,
     "shared/fastapi/health.py::run_diagnostics_checks": 226,
     "shared/fastapi/health.py::run_readiness_checks": 107,
-    "shared/fastapi/main.py::PermissionMiddleware.dispatch": 186
+    "shared/fastapi/main.py::PermissionMiddleware.dispatch": 185
   }
 }

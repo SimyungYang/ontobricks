@@ -839,7 +839,9 @@ async def save_metadata(
     """
     data = await request.json()
     tables = data.get("tables", [])
-    return Domain(get_domain(session_mgr)).save_metadata_tables(tables)
+    return Domain(get_domain(session_mgr)).save_metadata_tables(
+        tables, definition_refs=data.get("definition_refs")
+    )
 
 
 @router.post("/metadata/removal-impact")

@@ -11,6 +11,7 @@ from back.core.errors import NotFoundError, ValidationError
 from back.core.logging import get_logger
 from back.objects.ontology.ClassModel import ClassModel
 from back.objects.ontology.Owl import Owl
+from back.objects.ontology.definitions import DefinitionReferences
 
 if TYPE_CHECKING:
     from back.objects.session.DomainSession import DomainSession
@@ -479,7 +480,10 @@ class Editor:
                         raise ValidationError("Class with this name already exists")
                 old_cls = dict(cls)
                 classes[i] = ClassModel.build_class_from_data(data, cls)
+                # UC Page references; referenced text stays UC-owned (read-only).
+                DefinitionReferences.apply_glossary_updates(s.ontology, classes[i], data)
                 s.ontology["classes"] = classes
+                DefinitionReferences.apply_to_classes(s.ontology)
                 s.clear_generated_content()
                 meta = s.diff_meta(old_cls, classes[i])
                 if meta:

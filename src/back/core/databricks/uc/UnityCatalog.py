@@ -21,6 +21,7 @@ from .identifiers import (
     validate_uc_identifier,
 )
 from .metric_sql import build_metric_view_base_sql
+from .MetricViewDefinition import MetricViewDefinition
 
 logger = get_logger(__name__)
 
@@ -64,47 +65,49 @@ class UnityCatalog:
 
     @staticmethod
     def _parse_measure_names(ddl: str) -> set:
-        """Extract measure names from a metric view's YAML definition.
+        """Extract measure names from a metric view's YAML definition."""
+        return MetricViewDefinition.measure_names(ddl)
 
-        The metric YAML has a top-level ``measures:`` block of ``- name: <n>``
-        entries (mirroring ``dimensions:``). Parse defensively: isolate the
-        ``measures:`` block and collect the ``name:`` keys under it, so a
-        dimension named identically is never mis-classified. Returns an empty
-        set when there is no ``measures:`` block.
-        """
-        import re
-
-        text = ddl or ""
-        # Isolate from ``measures:`` to the next top-level YAML key (a line that
-        # starts at column 0 with ``word:``) or the end of the definition.
-        block_match = re.search(
-            r"(?ims)^\s*measures:\s*$(.*?)(?=^\s*[A-Za-z_][\w-]*:\s*$|\Z)", text
-        )
-        if not block_match:
-            return set()
-        block = block_match.group(1)
-        return set(re.findall(r"name:\s*['\"]?([A-Za-z0-9_]+)", block))
+    def _show_create_ddl(self, catalog: str, schema: str, name: str) -> str:
+        """Return the ``SHOW CREATE TABLE`` text of *catalog*.*schema*.*name*."""
+        fqn = quote_uc_fqn(catalog, schema, name)
+        params = self._auth.get_sql_connection_params()
+        with sql.connect(**params) as conn:
+            with conn.cursor() as cur:
+                cur.execute(f"SHOW CREATE TABLE {fqn}")
+                row = cur.fetchone()
+        return (row[0] if row else "") or ""
 
     def _metric_measure_names(self, catalog: str, schema: str, name: str) -> set:
         """Return the set of measure column names for a metric view.
 
-        Reads the metric definition via ``SHOW CREATE TABLE`` and extracts the
-        ``measures:`` names. Soft-fails to an empty set (→ all columns treated
-        as dimensions) so a metadata load never crashes on an unreadable or
-        unexpected definition.
+        Soft-fails to an empty set (all columns treated as dimensions) so a
+        metadata load never crashes on an unreadable or unexpected definition.
         """
-        fqn = quote_uc_fqn(catalog, schema, name)
         try:
-            params = self._auth.get_sql_connection_params()
-            with sql.connect(**params) as conn:
-                with conn.cursor() as cur:
-                    cur.execute(f"SHOW CREATE TABLE {fqn}")
-                    row = cur.fetchone()
-            ddl = (row[0] if row else "") or ""
-            return self._parse_measure_names(ddl)
-        except Exception as exc:  # noqa: BLE001 — soft-fail is the contract
-            logger.warning("metric definition unreadable for %s: %s", fqn, exc)
+            return self._parse_measure_names(self._show_create_ddl(catalog, schema, name))
+        except Exception as exc:  # noqa: BLE001 - soft-fail is the contract
+            logger.warning(
+                "metric definition unreadable for %s.%s.%s: %s", catalog, schema, name, exc
+            )
             return set()
+
+    def get_metric_view_definition(
+        self, catalog: str, schema: str, name: str
+    ) -> Dict[str, Dict[str, Any]]:
+        """Return per-column ``expr`` / ``comment`` / ``synonyms`` of a metric view.
+
+        Raises:
+            InfrastructureError: the definition could not be read (view dropped,
+                no privilege, warehouse down) -- callers keep their last value.
+        """
+        try:
+            ddl = self._show_create_ddl(catalog, schema, name)
+        except Exception as exc:
+            raise InfrastructureError(
+                f"Could not read metric view {catalog}.{schema}.{name}", detail=str(exc)
+            ) from exc
+        return MetricViewDefinition.parse(ddl)
 
     def get_metric_view_columns_with_roles(
         self, catalog: str, schema: str, name: str

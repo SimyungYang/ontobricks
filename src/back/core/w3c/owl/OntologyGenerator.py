@@ -8,6 +8,7 @@ from rdflib.namespace import RDF, RDFS, OWL, SKOS, XSD
 from typing import List, Dict
 
 from back.core.logging import get_logger
+from back.core.w3c.owl.OntologyDefinitionAnnotations import OntologyDefinitionAnnotations
 from back.core.w3c.owl.OntologyRdfExtras import OntologyRdfExtras
 from back.core.w3c.owl.iri import serialize_turtle
 from shared.config.constants import ONTOBRICKS_NS
@@ -31,6 +32,7 @@ class OntologyGenerator:
         groups: List[Dict] = None,
         label_lang: str = None,
         rdf_extras: dict = None,
+        definition_annotations: List[Dict] = None,
     ):
         """Initialize the OWL generator.
 
@@ -46,12 +48,9 @@ class OntologyGenerator:
             groups: List of entity group definitions (name, label, color, icon, members)
             label_lang: Optional language tag for the ontology label
             rdf_extras: Unmodeled RDF namespace bindings and triples
+            definition_annotations: UC definition references (OntologyDefinitionAnnotations)
         """
-        self.base_uri = (
-            base_uri
-            if base_uri.endswith(("#", "/"))
-            else base_uri + "#"
-        )
+        self.base_uri = base_uri if base_uri.endswith(("#", "/")) else base_uri + "#"
         self.ontology_name = ontology_name
         self.label_lang = label_lang
         self.classes = classes or []
@@ -62,6 +61,7 @@ class OntologyGenerator:
         self.expressions = expressions or []
         self.groups = groups or []
         self.rdf_extras = rdf_extras or {}
+        self.definition_annotations = definition_annotations or []
 
         self.graph = Graph()
         self.ns = Namespace(self.base_uri)
@@ -110,6 +110,9 @@ class OntologyGenerator:
         # Add properties (object properties and explicit datatype properties)
         for prop in self.properties:
             self._add_property(prop)
+        OntologyDefinitionAnnotations(self.graph, self._resolve_uri).apply(
+            self.definition_annotations, self.classes
+        )
 
         # Add property constraints
         for constraint in self.constraints:
@@ -564,7 +567,6 @@ class OntologyGenerator:
 
         class_uri = self._effective_uri(class_name, str(cls.get("uri") or ""))
 
-        # Define as OWL Class
         self.graph.add((class_uri, RDF.type, OWL.Class))
 
         # Add label
@@ -1057,10 +1059,8 @@ class OntologyGenerator:
             return
 
         # Declare annotation properties once
-        is_group_prop = ONTOBRICKS_NS.isGroup
-        group_color_prop = ONTOBRICKS_NS.groupColor
-        self.graph.add((is_group_prop, RDF.type, OWL.AnnotationProperty))
-        self.graph.add((group_color_prop, RDF.type, OWL.AnnotationProperty))
+        for prop in (ONTOBRICKS_NS.isGroup, ONTOBRICKS_NS.groupColor):
+            self.graph.add((prop, RDF.type, OWL.AnnotationProperty))
 
         for group in self.groups:
             name = group.get("name", "").strip()

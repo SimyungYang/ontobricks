@@ -201,7 +201,7 @@ class TestSaveIsGatedOnTheDiff:
     def test_confirming_still_persists_via_the_save_endpoint(self):
         body = self._monitor()
         assert "/domain/metadata/save" in body
-        assert "JSON.stringify({ tables })" in body
+        assert "JSON.stringify({ tables, definition_refs })" in body
 
 
 # ── Shared dialog affordance ───────────────────────────────────────────────────

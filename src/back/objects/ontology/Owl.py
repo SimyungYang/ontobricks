@@ -9,6 +9,7 @@ from typing import Any, Dict
 
 from back.core.logging import get_logger
 from back.core.w3c import OntologyGenerator, OntologyParser
+from back.objects.ontology.definitions import DefinitionReferences
 from shared.config.constants import DEFAULT_BASE_URI
 
 logger = get_logger(__name__)
@@ -76,8 +77,28 @@ class Owl:
             expressions=expressions,
             groups=groups,
             rdf_extras=data.get("rdf_extras"),
+            definition_annotations=DefinitionReferences.owl_annotations(data),
         )
         return generator.generate()
+
+    @staticmethod
+    def generate_session_owl(session: Any) -> str:
+        """Generate OWL for a session domain, reconciling UC definition references first.
+
+        Every mapping save invalidates the generated OWL, so reconciling here is
+        what keeps ``derivedFrom`` in step with the current mappings.
+        """
+        DefinitionReferences.reconcile(
+            session.ontology, session.get_entity_mappings(), session.catalog_metadata
+        )
+        return Owl.generate_owl(
+            session.ontology,
+            session.constraints,
+            session.swrl_rules,
+            session.axioms,
+            session.expressions,
+            session.groups,
+        )
 
     @staticmethod
     def parse_owl(content, extract_advanced=True):

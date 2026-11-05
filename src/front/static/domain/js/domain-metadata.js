@@ -706,10 +706,12 @@ async function monitorMetadataTask(taskId, taskType, btn, progressDiv, statusSpa
                 if (task.result && task.result.metadata) {
                     try {
                         const tables = task.result.metadata.tables || [];
+                        // UC definitions synced by the refresh task (metric views / UC Pages)
+                        const definition_refs = task.result.definition_refs || undefined;
                         const saveResp = await fetch('/domain/metadata/save', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ tables }),
+                            body: JSON.stringify({ tables, definition_refs }),
                             credentials: 'same-origin'
                         });
                         const saveData = await saveResp.json();

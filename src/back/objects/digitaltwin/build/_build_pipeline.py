@@ -27,6 +27,7 @@ from back.core.errors import (
     OntoBricksError,
     OperationCancelledError,
 )
+from back.objects.ontology.definitions import DefinitionReferences
 
 
 def _raise_if_cancelled(cancel_check) -> None:
@@ -462,8 +463,7 @@ class _BuildPipeline:
 
     def _log_start(self) -> None:
         logger.info(
-            "[DT-BUILD %s] START kind=%s domain=%s view=%s graph=%s "
-            "warehouse=%s",
+            "[DT-BUILD %s] START kind=%s domain=%s view=%s graph=%s warehouse=%s",
             self.task_id,
             self.build_kind,
             self.domain_name,
@@ -1593,17 +1593,16 @@ class _BuildPipeline:
     def _complete_task(self) -> None:
         duration = time.time() - self.start_time
         logger.info(
-            "[DT-BUILD %s] DONE kind=%s domain=%s triples=%d "
-            "duration=%.2fs phases={%s}",
+            "[DT-BUILD %s] DONE kind=%s domain=%s triples=%d duration=%.2fs phases={%s}",
             self.task_id,
             self.build_kind,
             self.domain_name,
             self.triple_count,
             duration,
-            ", ".join(f"{k}={v:.2f}s" for k, v in self.phase_times.items())
-            or "n/a",
+            ", ".join(f"{k}={v:.2f}s" for k, v in self.phase_times.items()) or "n/a",
         )
 
+        definition_sync = DefinitionReferences.last_report(self.ontology_config)
         result_data: Dict[str, Any] = {
             "triple_count": self.triple_count,
             "view_table": self.view_table,
@@ -1613,8 +1612,10 @@ class _BuildPipeline:
         }
         if not self.is_api:
             result_data["phase_times"] = self.phase_times
-
         msg = f"Full rebuild: {self.triple_count} triples in {duration:.1f}s"
+        if definition_sync:
+            result_data["definition_sync"] = definition_sync
+            msg += f"; {definition_sync['message']}"
         self.tm.complete_task(self.task_id, result=result_data, message=msg)
         self._record_build_run("success", message=msg)
         self._persist_last_build_to_registry()

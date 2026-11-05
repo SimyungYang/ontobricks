@@ -72,7 +72,18 @@ def run_metadata_update_task(
     tables_to_update: List[str],
     existing_metadata: Dict[str, Any],
     existing_tables: Dict[str, Any],
+    ontology_snapshot: Optional[Dict[str, Any]] = None,
+    entity_mappings: Optional[List[Dict[str, Any]]] = None,
 ) -> None:
+    """Refresh *tables_to_update* on an isolated snapshot (applied by the browser).
+
+    UC definition references are synced on *ontology_snapshot*; the synced
+    store travels back in the result (``definition_refs``) and is adopted by
+    ``POST /domain/metadata/save`` together with the tables.
+    """
+    from back.objects.domain.TableMetadataRefresh import TableMetadataRefresh
+    from back.objects.ontology.definitions import DefinitionSyncService
+
     tm = get_task_manager()
     try:
         tm.start_task(task_id, "Connecting to Unity Catalog...")
@@ -81,47 +92,13 @@ def run_metadata_update_task(
         updated_count = 0
         errors: List[str] = []
         diff: Dict[str, Any] = {}
-        from back.objects.domain.Domain import (
-            compute_column_diff,
-            has_column_changes,
-            merge_table_metadata,
-        )
-
         for i, table_name in enumerate(tables_to_update):
             try:
-                old_table = existing_tables[table_name]
-                kind = old_table.get("object_kind") or "table"
-                if kind == "metric_view":
-                    new_columns = client.get_metric_view_columns_with_roles(
-                        catalog, schema, table_name
-                    )
-                else:
-                    new_columns = client.get_table_columns(catalog, schema, table_name)
-                table_comment = client.get_table_comment(catalog, schema, table_name)
-                select_probe = client.check_table_select_permission(
-                    catalog,
-                    schema,
-                    table_name,
-                    object_kind=kind,
-                    columns=new_columns,
+                table_diff = TableMetadataRefresh.refresh(
+                    client, catalog, schema, table_name, existing_tables[table_name]
                 )
-                # Snapshot before the merge — merge_table_metadata replaces
-                # old_table["columns"] in place, so the previous schema is
-                # unrecoverable afterwards.
-                table_diff = compute_column_diff(
-                    old_table.get("columns", []), new_columns
-                )
-                if has_column_changes(table_diff):
+                if table_diff:
                     diff[table_name] = table_diff
-                merge_table_metadata(
-                    old_table,
-                    new_columns,
-                    table_comment,
-                    catalog,
-                    schema,
-                    table_name,
-                    select_probe=select_probe,
-                )
                 updated_count += 1
             except Exception as e:
                 errors.append(f"{table_name}: {str(e)}")
@@ -132,9 +109,16 @@ def run_metadata_update_task(
                 f"Updated {updated_count}/{len(tables_to_update)} tables...",
             )
         tm.advance_step(task_id, "Finalizing...")
+        definition_sync: Dict[str, Any] = {}
+        if ontology_snapshot is not None:
+            definition_sync, _changed = DefinitionSyncService(client).sync(
+                ontology_snapshot, entity_mappings, existing_metadata
+            )
         message = f"Updated {updated_count} of {len(tables_to_update)} tables"
         if errors:
             message += f'. Errors: {"; ".join(errors[:3])}'
+        if definition_sync:
+            message += f"; {definition_sync['message']}"
         tm.complete_task(
             task_id,
             result={
@@ -144,6 +128,8 @@ def run_metadata_update_task(
                 "errors": errors,
                 "metadata": existing_metadata,
                 "diff": diff,
+                "definition_sync": definition_sync,
+                "definition_refs": (ontology_snapshot or {}).get("definition_refs"),
             },
             message=message,
         )

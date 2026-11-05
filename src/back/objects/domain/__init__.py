@@ -3,6 +3,7 @@
 from back.objects.domain.Domain import Domain
 from back.objects.domain.WorkspacePresence import WorkspacePresence
 from back.objects.domain.HomeService import HomeService
+from back.objects.domain.TableMetadataRefresh import TableMetadataRefresh
 from back.objects.domain.payload import (
     get_domain_info,
     resolve_domain_slice,
@@ -38,6 +39,7 @@ __all__ = [
     "RegistrySettings",
     "ScheduleSettings",
     "SettingsService",
+    "TableMetadataRefresh",
     "WarehouseSettings",
     "WorkspacePresence",
     "WorkspaceUiSettings",

@@ -1185,17 +1185,9 @@ class DomainSession:
         # Use self.generated property for lazy initialization
         if self.get_classes() and not self.generated.get("owl"):
             try:
-                from back.objects.ontology import Ontology
+                from back.objects.ontology import Owl
 
-                owl_content = Ontology.generate_owl(
-                    self.ontology,
-                    self.constraints,
-                    self.swrl_rules,
-                    self.axioms,
-                    self.expressions,
-                    self.groups,
-                )
-                self.generated["owl"] = owl_content
+                self.generated["owl"] = Owl.generate_session_owl(self)
                 result["owl"] = True
             except Exception as e:
                 logger.warning("Could not auto-generate OWL: %s", e)

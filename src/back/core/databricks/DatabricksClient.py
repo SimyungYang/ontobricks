@@ -132,6 +132,9 @@ class DatabricksClient:
     def get_metric_view_columns_with_roles(self, catalog, schema, name):
         return self.catalog.get_metric_view_columns_with_roles(catalog, schema, name)
 
+    def get_metric_view_definition(self, catalog, schema, name):
+        return self.catalog.get_metric_view_definition(catalog, schema, name)
+
     def get_table_columns(self, catalog, schema, table):
         return self.catalog.get_table_columns(catalog, schema, table)
 
