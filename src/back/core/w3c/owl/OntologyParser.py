@@ -191,8 +191,9 @@ class OntologyParser:
         are returned by :meth:`get_groups` instead).
 
         Returns:
-            List of dicts with 'uri', 'name', 'label', 'comment', 'emoji', 'parent', 'group', 'dashboard', 'dashboardParams', 'bridges', 'dataset', 'dataProperties'
+            List of dicts with 'uri', 'name', 'label', 'comment', 'emoji', 'parent', 'group', 'dashboard', 'dashboardParams', 'bridges', 'datasets', 'dataset', 'dataProperties'
         """
+        from back.objects.ontology.ClassModel import ClassModel  # lazy: import cycle
         classes = []
         group_uris = self._get_group_class_uris()
 
@@ -283,13 +284,11 @@ class OntologyParser:
                     pass
                 break
 
-            # Get linked Unity Catalog dataset from OntoBricks custom property
-            dataset = None
+            # Linked UC datasets (JSON array, or legacy singular object)
+            datasets: List[Dict] = []
             for ds in self.graph.objects(cls, ONTOBRICKS_NS.dataset):
-                try:
-                    dataset = json.loads(str(ds))
-                except (json.JSONDecodeError, ValueError):
-                    pass
+                try: datasets = ClassModel.normalize_datasets(json.loads(str(ds)))
+                except (json.JSONDecodeError, ValueError): pass
                 break
 
             # Get linked Unity Catalog function actions from OntoBricks property
@@ -354,7 +353,8 @@ class OntologyParser:
                     "dashboard": dashboard or "",
                     "dashboardParams": dashboard_params,
                     "bridges": bridges,
-                    "dataset": dataset,
+                    "datasets": datasets,
+                    "dataset": datasets[0] if datasets else None,
                     "actions": actions,
                     "business_rules": business_rules,
                     "virtualAttributes": virtual_attributes,

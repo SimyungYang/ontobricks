@@ -624,12 +624,12 @@ class OntologyGenerator:
                 (class_uri, ONTOBRICKS_NS.bridges, Literal(json.dumps(bridges)))
             )
 
-        # Add linked Unity Catalog dataset (table/view) as JSON string
-        dataset = cls.get("dataset")
-        if dataset:
-            self.graph.add(
-                (class_uri, ONTOBRICKS_NS.dataset, Literal(json.dumps(dataset)))
-            )
+        # Linked Unity Catalog datasets (tables/views/metric views) as JSON array
+        from back.objects.ontology.ClassModel import ClassModel  # lazy: import cycle
+
+        datasets = ClassModel.normalize_datasets(cls)
+        if datasets:
+            self.graph.add((class_uri, ONTOBRICKS_NS.dataset, Literal(json.dumps(datasets))))
 
         # Add linked Unity Catalog function actions as JSON string
         actions = cls.get("actions", [])

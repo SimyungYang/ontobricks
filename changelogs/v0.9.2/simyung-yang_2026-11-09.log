@@ -1,0 +1,75 @@
+## Merge upstream release v0.9.2 into integration-latest
+
+Context:
+Upstream OntoBricks v0.9.2 (tag c671fef2) adds multiple UC datasets per class
+(tables, views and metric views, #221), MCP end-user identity forwarding past
+the Apps proxy (#208), domain-scoped MCP tools without a sticky session
+(#209), typed SPARQL value FILTERs compiled to SQL (#210), the
+user_api_scopes cleanup, uv-provisioned CPython in setup, and refreshed
+dependency locks. #208/#209/#210 and the scope cleanup were already
+cherry-picked here, so most of the overlap resolved to upstream's version.
+
+Conflict resolutions:
+1. databricks.yml
+   - Upstream comments kept. UI app keeps `user_api_scopes: [sql, files]`
+     (Knowledge Store UC Volume import), MCP app `[sql]`. One key per app.
+2. app.yaml.template
+   - Kept the note that scopes live in databricks.yml; the `authorization`
+     block upstream re-adds is ignored by bundle deploys and listing only
+     `sql` there would contradict the UI app's `files` scope.
+3. docs/deployment.md
+   - Kept our paragraph (it also documents the `files` scope).
+4. src/mcp-server/server/session.py
+   - Took upstream (#209 final form plus the `datasets` list). The MCP
+     server tree is now identical to v0.9.2.
+   - Kept our src/agents/tools/loopback_http.py raw-bytes header handling
+     for non-ASCII display names (upstream has no equivalent).
+5. src/front/static/ontology/js/ontology-shared-panels.js
+   - Upstream multi-dataset picker ("Already linked" note) combined with our
+     `data-i18n-skip` on the asset name.
+6. tests/units/settings/test_bundle_job_resource.py
+   - Kept our exact-scope tests and added upstream's subset test.
+7. changelogs/v0.9.2/benoitcayladbx_2026-10-30.log (add/add)
+   - Upstream file as-is; our notes stay under changelogs/v0.9.1/.
+
+Adaptations:
+1. src/back/objects/mapping/MetricViewBindings.py
+   - `resolve()` takes an optional `linked` map (class URI -> linked dataset
+     names). The mapping remains the source of truth: a class-linked metric
+     view the mapping does not read never creates `derivedFrom`.
+   - When a mapping reads several metric views exposing the column, a view
+     linked to the class wins; otherwise the explicit table, then the SQL
+     sources in order. Duplicate sources are dropped.
+2. src/back/objects/ontology/definitions/DefinitionReferences.py
+   - New `linked_datasets()` reads `datasets` and the legacy `dataset` via
+     `ClassModel.normalize_datasets` and feeds it to `reconcile()`.
+3. src/back/core/w3c/owl/OntologyGenerator.py, OntologyParser.py
+   - Upstream's module-level `ClassModel` import made back.core.w3c import
+     back.objects at package load; importing agents.agent_dtwin_chat first
+     then failed with a circular import. The import is now local to the two
+     methods that use it (class sizes stay within the architecture baseline).
+4. src/front/static/global/js/i18n-ko.js
+   - Korean entries for the new dataset picker / panel / preview strings.
+5. tests/units/definitions/test_metric_view_bindings_multi_dataset.py (new)
+   - Linked-dataset extraction (list and legacy shape), table + metric view
+     on one class, linked view not read by the mapping, two-view tie-break,
+     reconcile end to end.
+
+Modified files (on top of the upstream merge):
+- app.yaml.template, databricks.yml, docs/deployment.md
+- changelogs/v0.9.2/simyung-yang_2026-11-09.log (new)
+- src/back/core/w3c/owl/OntologyGenerator.py
+- src/back/core/w3c/owl/OntologyParser.py
+- src/back/objects/mapping/MetricViewBindings.py
+- src/back/objects/ontology/definitions/DefinitionReferences.py
+- src/front/static/global/js/i18n-ko.js
+- src/front/static/ontology/js/ontology-shared-panels.js
+- src/mcp-server/server/session.py
+- tests/units/definitions/test_metric_view_bindings_multi_dataset.py (new)
+- tests/units/settings/test_bundle_job_resource.py
+
+Test result:
+- uv run --frozen pytest tests/units -q -x -p no:cacheprovider
+  --deselect tests/units/api/test_routes.py::TestHealthRoutes::test_readiness_route_returns_checks
+  -> 9775 passed, 12 skipped, 1 deselected (the deselected test calls a real
+  SQL warehouse and hangs offline).

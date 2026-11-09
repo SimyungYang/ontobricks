@@ -435,6 +435,21 @@ with no conditions applies to every instance, exactly as before.
 
 **Validation**: Shapes are executed in the Knowledge Graph → Data Quality section. Every check is compiled to SQL and run against the triple-store VIEW, which the build creates whatever graph engine the domain uses, so a rule gives the same answer on Lakebase, Delta and Neo4j domains. The VIEW carries the triples mapped from your source tables; triples added by reasoning live in the graph store and are deliberately outside the scope of data quality. A numeric-range rule also reports a value that is not a number at all, since SHACL treats a value it cannot compare as a violation. A rule that cannot be compiled to SQL is listed with an info icon and no pass rate rather than counted as passing.
 
+### Linked Datasets (Unity Catalog tables, views, and metric views)
+
+An entity type can link **one or more Unity Catalog datasets** (tables, views,
+or metric views) to provide underlying row context in the Knowledge Graph,
+MCP tools, and Graph Chat.
+
+1. Go to **Ontology** → **Entities** and select an entity type
+2. Open the **Links** tab and find the **Datasets** section
+3. Click **+ Add** to open the dataset picker:
+   - Select a catalog, schema, and table, view, or **metric view** (badged with `METRIC VIEW`)
+   - Select the **Key column** that matches the entity's identifier (for metric views, dimension columns are preferred)
+   - Add an optional description explaining what this dataset contributes
+4. Click **Apply** to link the dataset; repeat to link additional datasets for the same class
+5. In Graph Explorer, selecting an entity node surfaces all linked datasets as equal peers, with metric-aware aggregation queries automatically used for metric views
+
 ### Dashboard Mapping
 
 You can assign Databricks dashboards to entity types for embedded visualization in the Knowledge Graph:
@@ -458,9 +473,9 @@ When viewing an entity in the Knowledge Graph visualization, the dashboard will 
 
 ### Class Actions (Unity Catalog functions)
 
-Beyond the linked dataset, an entity type can expose **actions** — Unity Catalog
-functions that operate on a single entity and can be run from the Graph Explorer
-or from an MCP client.
+Beyond linked datasets (tables, views, or metric views), an entity type can expose
+**actions** — Unity Catalog functions that operate on a single entity and can be
+run from the Graph Explorer or from an MCP client.
 
 1. Go to **Ontology** → **Entities** and select an entity type
 2. Open the **Behaviour** tab and find the **Functions** section
@@ -559,19 +574,19 @@ each section does:
 | **Attrs.** | Mapped attributes (data properties), then **Virtual attributes** (computed when viewed) |
 | **Model** | Inherits from, inherited relationships, equivalent to, disjoint with, bridges to other domains |
 | **Behaviour** | What the Knowledge Graph can run on one entity, each section tagged with its effect: **Functions** (return a result), **Jobs** (run in background), **Inference rules (SWRL)** (write to the graph) |
-| **Links** | Dashboard and dataset |
+| **Links** | Dashboard and datasets |
 
 Every section inside a tab has the same layout:
 
 - a header with the section icon and title, a count of its items, an effect
   chip where relevant, and a **+ Add** button on the right (a small menu on
   **Mapped attributes**: *From data assets* or *Manually*; **Change** on
-  Dashboard and Dataset once one is linked);
+  Dashboard once linked; **+ Add** on Datasets to link multiple assets);
 - a one-line explanation, with the longer help behind the ⓘ button;
 - one row per item (icon, name, kind, full name, remove button), or a dashed
   empty state with a direct "Add …" link.
 
-Descriptions on functions, jobs, virtual attributes and the dataset are always
+Descriptions on functions, jobs, virtual attributes and datasets are always
 editable in place: the field shows its border only when hovered or focused.
 **Equivalent to** and **Disjoint with** show the chosen entities as chips;
 pick another entity from **+ Add entity…** and click a chip's × to remove it.
@@ -1470,7 +1485,7 @@ unrecoverable.
 
 | Attachment | What it covers |
 |------------|----------------|
-| **Datasets** | The Unity Catalog table or view linked to a class. |
+| **Datasets** | The Unity Catalog tables, views, or metric views linked to a class (one or more). |
 | **Bridges** | Cross-domain links declared between ontology classes. |
 | **Actions** | Unity Catalog functions declared on a class. |
 | **Virtual attributes** | Class attributes computed on demand by a Unity Catalog function instead of being mapped. |
@@ -1831,7 +1846,7 @@ OntoBricks includes an MCP server that exposes knowledge-graph tools to LLM clie
 | `get_design_status` | Ontology / metadata / assignment readiness for a domain |
 | `list_entity_types` | Overview of entity types, counts, and predicates |
 | `describe_entity` | Full-text description of an entity with BFS traversal |
-| `get_entity_context` | Linked dataset rows, cross-domain bridges, and class actions for a node |
+| `get_entity_context` | Linked dataset rows (all linked UC tables/views/metric views), cross-domain bridges, and class actions for a node |
 | `invoke_entity_action` | Run a class action: UC function (entity ID as the single argument) or Databricks Job (`job:<id>`) |
 | `run_entity_business_rule` | Run a SWRL business rule attached to the entity's class and materialise the inferred triples (Builder role) |
 | `check_entity_shacl_facets` | Check one entity against the SHACL shapes of its class, its ancestors and the whole graph (pass / fail / not applicable / not evaluated / error, with the values found) |

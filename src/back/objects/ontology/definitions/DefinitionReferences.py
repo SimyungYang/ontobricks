@@ -22,6 +22,7 @@ from typing import Any, Dict, List, Optional
 
 from back.core.errors import NotFoundError, ValidationError
 from back.core.logging import get_logger
+from back.objects.ontology.ClassModel import ClassModel
 
 logger = get_logger(__name__)
 
@@ -175,7 +176,9 @@ class DefinitionReferences:
         before = copy.deepcopy(ontology.get(STORE_KEY) or {})
         items = cls.items(ontology)
         previous = {k: i["derived_from"] for k, i in items.items() if i.get("derived_from")}
-        bindings = MetricViewBindings.resolve(entity_mappings or [], metadata, previous)
+        bindings = MetricViewBindings.resolve(
+            entity_mappings or [], metadata, previous, cls.linked_datasets(ontology)
+        )
         for key, item in list(items.items()):
             if item.get("attribute") and key not in bindings and item.pop("derived_from", None):
                 (item.get("synced") or {}).pop("metric_view", None)
@@ -191,6 +194,24 @@ class DefinitionReferences:
         if not items and not ontology[STORE_KEY].get("last_report"):
             ontology.pop(STORE_KEY, None)
         return classes_changed or before != (ontology.get(STORE_KEY) or {})
+
+    @staticmethod
+    def linked_datasets(ontology: Dict[str, Any]) -> Dict[str, List[str]]:
+        """``{class_uri: [catalog.schema.name, ...]}`` of every class-linked UC dataset.
+
+        Reads the ``datasets`` list and the legacy singular ``dataset``.
+        """
+        out: Dict[str, List[str]] = {}
+        for cls_dict in (ontology or {}).get("classes", []) or []:
+            names = [
+                ds.get("fullName")
+                or ".".join(p for p in (ds.get("catalog"), ds.get("schema"), ds.get("asset")) if p)
+                for ds in ClassModel.normalize_datasets(cls_dict)
+            ]
+            names = [n for n in names if n]
+            if cls_dict.get("uri") and names:
+                out[cls_dict["uri"]] = names
+        return out
 
     @classmethod
     def apply_to_classes(cls, ontology: Dict[str, Any]) -> bool:
